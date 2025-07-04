@@ -1,0 +1,4 @@
+Flask
+docling
+pypdf
+Flask-Cors
