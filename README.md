@@ -1,4 +1,4 @@
-# PDF to Markdown Converter
+# ExamTopics Data Labeler
 
 This project provides a web application to convert PDF files into Markdown format. It features a user-friendly interface where you can upload a PDF, view it page by page, and then convert the selected page (or the entire document if no page is selected) into Markdown.
 
