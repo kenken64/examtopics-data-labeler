@@ -154,7 +154,10 @@ export default function PdfViewer({
           <canvas ref={canvasRef} className="border mb-4 max-w-full max-h-full h-auto object-contain"></canvas>
           <div className="flex items-center space-x-2 mt-auto"> {/* mt-auto to push buttons to bottom */}
             <button
-              onClick={goToPreviousPage}
+              onClick={(e) => {
+                e.stopPropagation();
+                goToPreviousPage();
+              }}
               disabled={currentPage <= 1}
               className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 disabled:opacity-50"
             >
@@ -164,7 +167,10 @@ export default function PdfViewer({
               Page {currentPage} of {numPages}
             </span>
             <button
-              onClick={goToNextPage}
+              onClick={(e) => {
+                e.stopPropagation();
+                goToNextPage();
+              }}
               disabled={currentPage >= numPages}
               className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 disabled:opacity-50"
             >

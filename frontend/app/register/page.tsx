@@ -1,24 +1,24 @@
 "use client";
 
 import { useState } from 'react';
-import { get } from '@github/webauthn-json';
+import { create } from '@github/webauthn-json';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-export default function Login() {
+export default function Register() {
   const [username, setUsername] = useState('');
   const [message, setMessage] = useState('');
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
 
     try {
-      // 1. Get authentication options from the server
-      const resp = await fetch('/api/auth/passkey/login-challenge', {
+      // 1. Get registration options from the server
+      const resp = await fetch('/api/auth/passkey/register-challenge', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -26,25 +26,23 @@ export default function Login() {
         body: JSON.stringify({ username }),
       });
 
-      console.log('Login Challenge Response Status:', resp.status);
       const options = await resp.json();
-      console.log('Login Challenge Options:', options);
 
       if (options.error) {
         setMessage(options.error);
         return;
       }
 
-      // 2. Start authentication with the browser
-      const authResp = await get(options);
+      // 2. Start registration with the browser
+      const attResp = await create(options);
 
-      // 3. Send the authentication response to the server for verification
-      const verificationResp = await fetch('/api/auth/passkey/login', {
+      // 3. Send the registration response to the server for verification
+      const verificationResp = await fetch('/api/auth/passkey/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, authenticationResponse: authResp }),
+        body: JSON.stringify({ username, attestationResponse: attResp }),
       });
 
       const verificationJSON = await verificationResp.json();
@@ -52,20 +50,20 @@ export default function Login() {
       if (verificationJSON.error) {
         setMessage(verificationJSON.error);
       } else {
-        // Redirect to a protected page or dashboard
-        router.push('/home');
+        setMessage(verificationJSON.message);
+        router.push('/');
       }
     } catch (error: any) {
-      console.error('Login error:', error);
-      setMessage(error.message || 'An unknown error occurred during login');
+      console.error('Registration error:', error);
+      setMessage(error.message || 'An unknown error occurred during registration');
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-6 text-center">Login with Passkey</h2>
-        <form onSubmit={handleLogin}>
+        <h2 className="text-2xl font-bold mb-6 text-center">Register with Passkey</h2>
+        <form onSubmit={handleRegister}>
           <div className="grid gap-2 mb-4">
             <Label htmlFor="username">Username</Label>
             <Input
@@ -78,15 +76,15 @@ export default function Login() {
             />
           </div>
           <Button type="submit" className="w-full">
-            Login
+            Register
           </Button>
         </form>
         <Button
           variant="outline"
-          onClick={() => router.push('/register')}
+          onClick={() => router.push('/')}
           className="mt-4 w-full"
         >
-          Register
+          Back to Sign In
         </Button>
         {message && <p className="mt-4 text-center text-red-500">{message}</p>}
       </div>
