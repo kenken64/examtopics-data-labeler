@@ -156,6 +156,58 @@ Follow these steps to set up and run the project locally.
 -   **PDF Conversion API**: The `NEXT_PUBLIC_PDF_CONVERSION_API_URL` environment variable in the frontend points to your Python Flask backend. Ensure this URL is correct.
 -   **Data Transformation**: The application includes utilities (`frontend/app/utils/questionTransform.ts`) to handle transformations between different question data formats from the database to the frontend.
 
+## Documentation
+
+This project includes comprehensive technical documentation organized in the `frontend/specs/` folder. Below is a complete reference to all available documentation:
+
+| Document | Description | Category |
+|----------|-------------|----------|
+| [ACCESS_CODE_QUESTIONS_README.md](./frontend/specs/ACCESS_CODE_QUESTIONS_README.md) | Documentation for access code questions functionality | Features |
+| [AI_CACHING_COMPLETE.md](./frontend/specs/AI_CACHING_COMPLETE.md) | AI response caching implementation completion guide | AI Implementation |
+| [AI_CACHING_IMPLEMENTATION_SUMMARY.md](./frontend/specs/AI_CACHING_IMPLEMENTATION_SUMMARY.md) | Summary of AI caching implementation details | AI Implementation |
+| [AI_EXPLANATION_SETUP.md](./frontend/specs/AI_EXPLANATION_SETUP.md) | Setup guide for AI explanation features | AI Implementation |
+| [AI_IMPLEMENTATION_COMPLETE.md](./frontend/specs/AI_IMPLEMENTATION_COMPLETE.md) | Complete AI second opinion feature implementation guide | AI Implementation |
+| [AI_SETUP_COMPLETE.md](./frontend/specs/AI_SETUP_COMPLETE.md) | AI setup completion documentation | AI Implementation |
+| [APPLICATION_FLOW_DIAGRAM.md](./frontend/specs/APPLICATION_FLOW_DIAGRAM.md) | **Comprehensive application architecture and flow diagram** | **Architecture** |
+| [DATA_TRANSFORMATION_IMPLEMENTATION.md](./frontend/specs/DATA_TRANSFORMATION_IMPLEMENTATION.md) | Data transformation implementation details | Backend |
+| [IMPLEMENTATION_COMPLETE.md](./frontend/specs/IMPLEMENTATION_COMPLETE.md) | Overall project implementation completion status | Project Status |
+| [IMPLEMENTATION_SUCCESS.md](./frontend/specs/IMPLEMENTATION_SUCCESS.md) | Implementation success documentation | Project Status |
+| [JWT_AUTHENTICATION_COMPLETE.md](./frontend/specs/JWT_AUTHENTICATION_COMPLETE.md) | JWT authentication implementation guide | Authentication |
+| [JWT_AUTHENTICATION_FIX_SUMMARY.md](./frontend/specs/JWT_AUTHENTICATION_FIX_SUMMARY.md) | JWT authentication fixes and solutions | Authentication |
+| [LOCAL_DEVELOPMENT_FIX.md](./frontend/specs/LOCAL_DEVELOPMENT_FIX.md) | Local development environment fixes | Development |
+| [LOGIN_DEBUG_ANALYSIS.md](./frontend/specs/LOGIN_DEBUG_ANALYSIS.md) | Login functionality debug analysis | Authentication |
+| [LOGIN_NAVIGATION_FIX.md](./frontend/specs/LOGIN_NAVIGATION_FIX.md) | Login navigation fixes and improvements | Authentication |
+| [MARKDOWN_VISUAL_GUIDE.md](./frontend/specs/MARKDOWN_VISUAL_GUIDE.md) | Visual guide for markdown rendering | UI/UX |
+| [NAVIGATION_FIX_COMPLETE.md](./frontend/specs/NAVIGATION_FIX_COMPLETE.md) | Navigation system fixes completion | UI/UX |
+| [REACT_MARKDOWN_COMPLETE.md](./frontend/specs/REACT_MARKDOWN_COMPLETE.md) | React markdown implementation completion | UI/UX |
+| [REACT_MARKDOWN_IMPLEMENTATION.md](./frontend/specs/REACT_MARKDOWN_IMPLEMENTATION.md) | React markdown implementation details | UI/UX |
+| [SLIDING_MENU_LOGOUT_FIX.md](./frontend/specs/SLIDING_MENU_LOGOUT_FIX.md) | Sliding menu logout functionality fixes | UI/UX |
+| [TITLE_CONFIGURATION_FIX.md](./frontend/specs/TITLE_CONFIGURATION_FIX.md) | Title configuration fixes and updates | Configuration |
+| [VERCEL_AI_COMPLETE_SETUP.md](./frontend/specs/VERCEL_AI_COMPLETE_SETUP.md) | Complete Vercel AI setup guide | AI Implementation |
+| [VERCEL_AI_SETUP.md](./frontend/specs/VERCEL_AI_SETUP.md) | Vercel AI initial setup documentation | AI Implementation |
+| [VERCEL_API_KEY_SETUP.md](./frontend/specs/VERCEL_API_KEY_SETUP.md) | Vercel API key setup instructions | Configuration |
+
+### Documentation Categories
+
+- **Architecture**: Complete system architecture, flow diagrams, and technical specifications
+- **AI Implementation**: Documentation related to AI features, caching, and Vercel AI integration
+- **Authentication**: JWT authentication, login functionality, and security implementations
+- **UI/UX**: User interface components, navigation, and markdown rendering
+- **Configuration**: Environment setup, API keys, and configuration management
+- **Features**: Specific application features and functionality
+- **Backend**: Data transformation and backend implementation details
+- **Development**: Local development setup and debugging guides
+- **Project Status**: Overall implementation status and completion documentation
+
+### Quick Reference
+
+For developers new to the project, we recommend starting with these key documents:
+
+1. **[APPLICATION_FLOW_DIAGRAM.md](./frontend/specs/APPLICATION_FLOW_DIAGRAM.md)** - Complete system architecture overview
+2. **[JWT_AUTHENTICATION_FIX_SUMMARY.md](./frontend/specs/JWT_AUTHENTICATION_FIX_SUMMARY.md)** - Authentication implementation details
+3. **[AI_IMPLEMENTATION_COMPLETE.md](./frontend/specs/AI_IMPLEMENTATION_COMPLETE.md)** - AI features and setup guide
+4. **[LOCAL_DEVELOPMENT_FIX.md](./frontend/specs/LOCAL_DEVELOPMENT_FIX.md)** - Development environment troubleshooting
+
 ## Contributing
 
 Feel free to fork this repository, open issues, or submit pull requests.
