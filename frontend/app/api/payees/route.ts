@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MongoClient, ObjectId } from 'mongodb';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -10,7 +11,7 @@ async function connectToDatabase() {
 }
 
 // GET /api/payees - Get all payees with pagination and filtering
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -54,10 +55,10 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching payees:', error);
     return NextResponse.json({ error: 'Failed to fetch payees' }, { status: 500 });
   }
-}
+});
 
 // POST /api/payees - Create a new payee
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const body = await request.json();
     const { certificateId, payeeName, creditCardNumber, expiryDate, accessCode, amountPaid, status, email } = body;
@@ -107,9 +108,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       message: 'Payee created successfully',
       payeeId: result.insertedId 
-    }, { status: 201 });
+        }, { status: 201 });
   } catch (error) {
     console.error('Error creating payee:', error);
     return NextResponse.json({ error: 'Failed to create payee' }, { status: 500 });
   }
-}
+});

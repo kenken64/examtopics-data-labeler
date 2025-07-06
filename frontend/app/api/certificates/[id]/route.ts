@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 
 // MongoDB connection
 const connectDB = async () => {
@@ -34,10 +35,10 @@ const certificateSchema = new mongoose.Schema({
 const Certificate = mongoose.models.Certificate || mongoose.model('Certificate', certificateSchema);
 
 // GET - Fetch single certificate
-export async function GET(
-  request: NextRequest,
+export const GET = withAuth(async (
+  request: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
     await connectDB();
     const certificate = await Certificate.findById(params.id);
@@ -57,13 +58,13 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});
 
 // PUT - Update certificate
-export async function PUT(
-  request: NextRequest,
+export const PUT = withAuth(async (
+  request: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
     await connectDB();
     const body = await request.json();

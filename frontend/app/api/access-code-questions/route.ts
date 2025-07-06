@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MongoClient, ObjectId } from 'mongodb';
 import { transformQuestionsForFrontend } from '../../utils/questionTransform';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -11,7 +12,7 @@ async function connectToDatabase() {
 }
 
 // GET /api/access-code-questions - Get questions assigned to a generated access code
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const generatedAccessCode = searchParams.get('generatedAccessCode');
@@ -146,10 +147,10 @@ export async function GET(request: NextRequest) {
       message: 'Internal server error'
     }, { status: 500 });
   }
-}
+});
 
 // PUT /api/access-code-questions - Update question assignments (reorder, enable/disable)
-export async function PUT(request: NextRequest) {
+export const PUT = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const body = await request.json();
     const { generatedAccessCode, updates } = body;
@@ -224,10 +225,10 @@ export async function PUT(request: NextRequest) {
       message: error instanceof Error ? error.message : 'Internal server error'
     }, { status: 500 });
   }
-}
+});
 
 // POST /api/access-code-questions - Add new question assignments to a generated access code
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const body = await request.json();
     const { generatedAccessCode, questionIds } = body;
@@ -332,10 +333,10 @@ export async function POST(request: NextRequest) {
       message: error instanceof Error ? error.message : 'Internal server error'
     }, { status: 500 });
   }
-}
+});
 
 // DELETE /api/access-code-questions - Remove question assignments
-export async function DELETE(request: NextRequest) {
+export const DELETE = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const body = await request.json();
     const { generatedAccessCode, assignmentIds } = body;
@@ -367,4 +368,4 @@ export async function DELETE(request: NextRequest) {
       message: error instanceof Error ? error.message : 'Internal server error'
     }, { status: 500 });
   }
-}
+});

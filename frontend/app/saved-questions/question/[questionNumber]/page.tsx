@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, BookOpen, Loader2, CheckCircle, XCircle, Info } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2, CheckCircle, XCircle, Info, Brain } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { getQuestionOptions, getCorrectAnswer } from '../../../utils/questionTransform';
+import ReactMarkdown from 'react-markdown';
 
 interface Question {
   _id: string;
@@ -34,6 +35,9 @@ const QuestionDetailPage = () => {
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
   const [showAnswer, setShowAnswer] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [aiExplanation, setAiExplanation] = useState<string>('');
+  const [loadingAiExplanation, setLoadingAiExplanation] = useState(false);
+  const [showAiExplanation, setShowAiExplanation] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -103,6 +107,53 @@ const QuestionDetailPage = () => {
   const handleReset = () => {
     setSelectedAnswer('');
     setShowAnswer(false);
+    setShowAiExplanation(false);
+    setAiExplanation('');
+  };
+
+  const generateAiExplanation = async () => {
+    if (!question) return;
+
+    try {
+      setLoadingAiExplanation(true);
+      
+      const response = await fetch('/api/ai-explanation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: question.question,
+          options: getQuestionOptions(question),
+          correctAnswer: getCorrectAnswer(question),
+          explanation: question.explanation,
+          questionId: question._id
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to generate AI explanation');
+      }
+
+      const data = await response.json();
+      setAiExplanation(data.aiExplanation);
+      setShowAiExplanation(true);
+      
+      toast({
+        title: "AI Explanation Generated",
+        description: "AI has provided a second opinion on this question.",
+      });
+    } catch (error) {
+      console.error('Error generating AI explanation:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to generate AI explanation.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAiExplanation(false);
+    }
   };
 
   const getOptionLabel = (index: number) => {
@@ -310,6 +361,86 @@ const QuestionDetailPage = () => {
               <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
                 {question.explanation}
               </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* AI Second Opinion Section */}
+        {showAnswer && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Brain className="h-5 w-5 text-purple-600" />
+                AI Second Opinion
+              </CardTitle>
+              <CardDescription>
+                Get an AI-powered analysis and alternative perspective on this question
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!showAiExplanation ? (
+                <div className="text-center">
+                  <Button 
+                    onClick={generateAiExplanation}
+                    disabled={loadingAiExplanation}
+                    variant="outline"
+                    size="lg"
+                    className="border-purple-200 hover:bg-purple-50"
+                  >
+                    {loadingAiExplanation ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Generating AI Analysis...
+                      </>
+                    ) : (
+                      <>
+                        <Brain className="h-4 w-4 mr-2" />
+                        Get AI Second Opinion
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Brain className="h-4 w-4 text-purple-600" />
+                      <span className="text-sm font-medium text-purple-800">AI Analysis</span>
+                    </div>
+                    <div className="text-gray-800 leading-relaxed prose prose-sm max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => <h1 className="text-lg font-semibold text-gray-900 mb-2">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-semibold text-gray-900 mb-2">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-semibold text-gray-900 mb-1">{children}</h3>,
+                          ul: ({ children }) => <ul className="list-disc list-inside space-y-1 mb-3">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-3">{children}</ol>,
+                          li: ({ children }) => <li className="text-gray-800">{children}</li>,
+                          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                          strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                          code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                          blockquote: ({ children }) => <blockquote className="border-l-4 border-purple-300 pl-4 italic text-gray-700">{children}</blockquote>,
+                        }}
+                      >
+                        {aiExplanation}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <Button 
+                      onClick={() => {
+                        setShowAiExplanation(false);
+                        setAiExplanation('');
+                      }}
+                      variant="ghost"
+                      size="sm"
+                      className="text-purple-600 hover:text-purple-800"
+                    >
+                      Hide AI Opinion
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
 const RP_ID = process.env.RP_ID || 'localhost';
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
 
 export async function POST(req: NextRequest) {
   await dbConnect();
@@ -59,14 +59,25 @@ export async function POST(req: NextRequest) {
     // Generate JWT
     const token = jwt.sign({ userId: user._id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
 
-    const responseObj = NextResponse.json({ message: 'Login successful', token }, { status: 200 });
+    console.log('🔑 JWT generated successfully');
+    console.log('🔑 JWT_SECRET being used:', JWT_SECRET === 'your_super_secret_jwt_key' ? 'Default fallback' : 'Environment variable');
+    console.log('🔑 Token preview:', token.substring(0, 50) + '...');
+
+    const responseObj = NextResponse.json({ 
+      message: 'Login successful', 
+      success: true,
+      user: { id: user._id, username: user.username }
+    }, { status: 200 });
+    
     responseObj.cookies.set('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax', // Changed from 'strict' to allow redirects
       maxAge: 60 * 60, // 1 hour
       path: '/',
     });
+
+    console.log('🍪 Cookie set with token, maxAge: 1 hour, httpOnly: true, sameSite: lax');
 
     return responseObj;
   } catch (error) {

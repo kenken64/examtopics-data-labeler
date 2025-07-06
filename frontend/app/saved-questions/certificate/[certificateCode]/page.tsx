@@ -55,11 +55,18 @@ const CertificateQuestionsPage = () => {
       const data = await response.json();
       setQuestions(data.questions || []);
       
-      // Set certificate info
-      if (data.questions && data.questions.length > 0) {
+      // Set certificate info from API response
+      if (data.certificate) {
+        setCertificateInfo({
+          certificateCode: data.certificate.code,
+          certificateTitle: data.certificate.name,
+          totalQuestions: data.questions?.length || 0
+        });
+      } else if (data.questions && data.questions.length > 0) {
+        // Fallback if certificate info not available
         setCertificateInfo({
           certificateCode: certificateCode,
-          certificateTitle: `Certificate ${certificateCode}`, // This could be enhanced with actual certificate title
+          certificateTitle: `Certificate ${certificateCode}`,
           totalQuestions: data.questions.length
         });
       }

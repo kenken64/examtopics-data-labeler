@@ -1,10 +1,11 @@
 import { MongoClient } from 'mongodb';
 import { NextRequest, NextResponse } from 'next/server';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 
 const uri = process.env.MONGODB_URI || "mongodb+srv://user:password@cluster.mongodb.net/"; // Replace with your connection string
 const client = new MongoClient(uri);
 
-export async function POST(req: NextRequest) {
+export const POST = withAuth(async (req: AuthenticatedRequest) => {
   try {
     await client.connect();
     const db = client.db("awscert");
@@ -42,4 +43,4 @@ export async function POST(req: NextRequest) {
   } finally {
     await client.close();
   }
-}
+});

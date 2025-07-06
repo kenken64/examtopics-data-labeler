@@ -122,7 +122,9 @@ const SavedQuestionsPage = () => {
   };
 
   const handleQuestionClick = (questionNo: number) => {
-    router.push(`/saved-questions/question/${questionNo}?from=search&accessCode=${encodeURIComponent(searchTerm)}`);
+    // Use the trimmed search term that was actually used for the search
+    const actualAccessCode = searchTerm.trim();
+    router.push(`/saved-questions/question/${questionNo}?from=search&accessCode=${encodeURIComponent(actualAccessCode)}`);
   };
 
   const handleBackToBrowse = () => {

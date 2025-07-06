@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MongoClient, ObjectId } from 'mongodb';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -10,7 +11,7 @@ async function connectToDatabase() {
 }
 
 // GET /api/payees/[id] - Get a specific payee
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withAuth(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
   try {
     const { id } = params;
 
@@ -30,10 +31,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     console.error('Error fetching payee:', error);
     return NextResponse.json({ error: 'Failed to fetch payee' }, { status: 500 });
   }
-}
+});
 
 // PUT /api/payees/[id] - Update a specific payee
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
   try {
     const { id } = params;
 
@@ -128,10 +129,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     console.error('Error updating payee:', error);
     return NextResponse.json({ error: 'Failed to update payee' }, { status: 500 });
   }
-}
+});
 
 // DELETE /api/payees/[id] - Delete a specific payee
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withAuth(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
   try {
     const { id } = params;
 
@@ -151,4 +152,4 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     console.error('Error deleting payee:', error);
     return NextResponse.json({ error: 'Failed to delete payee' }, { status: 500 });
   }
-}
+});

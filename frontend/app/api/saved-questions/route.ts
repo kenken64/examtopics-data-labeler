@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MongoClient, ObjectId } from 'mongodb';
 import { transformQuestionsForFrontend } from '../../utils/questionTransform';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -11,7 +12,7 @@ async function connectToDatabase() {
 }
 
 // GET /api/saved-questions - Search questions by access code or list access codes with payee info
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const accessCode = searchParams.get('accessCode');
@@ -208,4 +209,4 @@ export async function GET(request: NextRequest) {
       message: 'Internal server error'
     }, { status: 500 });
   }
-}
+});

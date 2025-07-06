@@ -68,8 +68,8 @@ const SlidingMenu = () => {
           <span className="sr-only">Toggle menu</span>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-80 p-0 flex flex-col">
-        <SheetHeader className="p-6 pb-4">
+      <SheetContent side="left" className="w-80 p-0 flex flex-col h-full">
+        <SheetHeader className="p-6 pb-4 flex-shrink-0">
           <div className="flex items-center space-x-3">
             <Avatar className="h-12 w-12 ring-2 ring-primary/10">
               <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
@@ -90,9 +90,9 @@ const SlidingMenu = () => {
           </div>
         </SheetHeader>
         
-        <Separator />
+        <Separator className="flex-shrink-0" />
         
-        <div className="flex-1 p-6">
+        <div className="flex-1 overflow-y-auto p-6">
           <nav className="space-y-2">
             <Button 
               variant="ghost" 
@@ -162,7 +162,7 @@ const SlidingMenu = () => {
             <Button 
               variant="ghost" 
               className="w-full justify-start h-12 px-4 text-left font-normal hover:bg-accent hover:text-accent-foreground"
-              onClick={() => handleNavigation('#')}
+              onClick={() => handleNavigation('/settings')}
             >
               <Settings className="mr-3 h-5 w-5" />
               Settings
@@ -170,7 +170,7 @@ const SlidingMenu = () => {
           </nav>
         </div>
         
-        <div className="p-6 pt-0 mt-auto">
+        <div className="flex-shrink-0 p-6 pt-0 pb-8">
           <Separator className="mb-4" />
           <div className="space-y-2">
             <div className="text-xs text-muted-foreground px-4 mb-2">

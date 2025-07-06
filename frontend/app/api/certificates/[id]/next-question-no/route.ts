@@ -1,13 +1,14 @@
 import { MongoClient } from 'mongodb';
 import { NextRequest, NextResponse } from 'next/server';
+import { withAuth, AuthenticatedRequest } from '@/lib/auth';
 
 const uri = process.env.MONGODB_URI || "mongodb+srv://user:password@cluster.mongodb.net/";
 const client = new MongoClient(uri);
 
-export async function GET(
-  req: NextRequest,
+export const GET = withAuth(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
     await client.connect();
     const db = client.db("awscert");
@@ -32,4 +33,4 @@ export async function GET(
   } finally {
     await client.close();
   }
-}
+});

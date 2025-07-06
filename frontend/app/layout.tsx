@@ -1,10 +1,7 @@
-"use client";
-
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { usePathname } from 'next/navigation';
 import "./globals.css";
-import SlidingMenu from "@/components/SlidingMenu";
+import ClientLayout from "./ClientLayout";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,23 +13,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-
+export const metadata: Metadata = {
+  title: "AWS Certification Web App",
+  description: "Comprehensive AWS certification preparation and management platform featuring PDF data labeling, question management, and AI-powered explanations.",
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const pathname = usePathname();
-  const showSlidingMenu = pathname !== '/' && pathname !== '/register';
-
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {showSlidingMenu && <SlidingMenu />}
-        {children}
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

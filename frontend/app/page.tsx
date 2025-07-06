@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { get } from '@github/webauthn-json';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,12 +11,18 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [message, setMessage] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Get redirect URL from query params
+  const redirectTo = searchParams.get('redirect') || '/home';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
 
     try {
+      setMessage('Starting authentication...');
+      
       // 1. Get authentication options from the server
       const resp = await fetch('/api/auth/passkey/login-challenge', {
         method: 'POST',
@@ -35,8 +41,12 @@ export default function Login() {
         return;
       }
 
+      setMessage('Please use your passkey...');
+
       // 2. Start authentication with the browser
       const authResp = await get(options);
+
+      setMessage('Verifying credentials...');
 
       // 3. Send the authentication response to the server for verification
       const verificationResp = await fetch('/api/auth/passkey/login', {
@@ -47,13 +57,24 @@ export default function Login() {
         body: JSON.stringify({ username, authenticationResponse: authResp }),
       });
 
+      console.log('Verification Response Status:', verificationResp.status);
       const verificationJSON = await verificationResp.json();
+      console.log('Verification Response:', verificationJSON);
 
       if (verificationJSON.error) {
         setMessage(verificationJSON.error);
       } else {
-        // Redirect to a protected page or dashboard
-        router.push('/home');
+        setMessage('Login successful! Redirecting...');
+        
+        // Debug: Log all available information
+        console.log('🎯 Login successful, checking cookies...');
+        console.log('Response data:', verificationJSON);
+        
+        // Simple redirect with delay to ensure cookie is processed
+        setTimeout(() => {
+          console.log('🚀 Redirecting to:', redirectTo);
+          window.location.href = redirectTo;
+        }, 1500); // Longer delay to ensure cookie is fully processed
       }
     } catch (error: any) {
       console.error('Login error:', error);
@@ -88,7 +109,13 @@ export default function Login() {
         >
           Register
         </Button>
-        {message && <p className="mt-4 text-center text-red-500">{message}</p>}
+        {message && (
+          <p className={`mt-4 text-center ${
+            message.includes('successful') ? 'text-green-600' : 'text-red-500'
+          }`}>
+            {message}
+          </p>
+        )}
       </div>
     </div>
   );
