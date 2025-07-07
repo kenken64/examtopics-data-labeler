@@ -28,6 +28,21 @@ const certificateSchema = new mongoose.Schema({
     trim: true,
     unique: true,
   },
+  logoUrl: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  pdfFileUrl: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  pdfFileName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 }, {
   timestamps: true,
 });
@@ -54,7 +69,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
   try {
     await connectDB();
     const body = await request.json();
-    const { name, code } = body;
+    const { name, code, logoUrl, pdfFileUrl, pdfFileName } = body;
 
     if (!name || !code) {
       return NextResponse.json(
@@ -75,6 +90,9 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     const certificate = new Certificate({
       name: name.trim(),
       code: code.trim().toUpperCase(),
+      logoUrl: logoUrl?.trim() || '',
+      pdfFileUrl: pdfFileUrl?.trim() || '',
+      pdfFileName: pdfFileName?.trim() || '',
     });
 
     await certificate.save();
