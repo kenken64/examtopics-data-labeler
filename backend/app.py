@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import os
 import tempfile
 from docling.document_converter import DocumentConverter
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions
 from pypdf import PdfReader, PdfWriter
 from flask_cors import CORS # Import CORS
 
@@ -57,17 +59,47 @@ def convert_pdf():
                 print(f"Single page PDF saved to: {single_page_pdf_path}")
 
             print(f"Converting PDF from path: {pdf_to_convert_path}")
-            converter = DocumentConverter()
+            
+            # Try with OCR enabled for better text extraction from image-heavy PDFs
+            try:
+                # Initialize converter with OCR enabled
+                pipeline_options = PdfPipelineOptions()
+                pipeline_options.do_ocr = True
+                
+                converter = DocumentConverter(
+                    format_options={
+                        InputFormat.PDF: pipeline_options
+                    }
+                )
+                print("Using OCR-enabled converter for better text extraction...")
+            except Exception as ocr_error:
+                print(f"OCR setup failed, falling back to basic converter: {ocr_error}")
+                # Fallback to basic converter if OCR setup fails
+                converter = DocumentConverter()
+            
             result = converter.convert(pdf_to_convert_path)
             markdown_content = result.document.export_to_markdown()
-            print("PDF conversion successful.")
+            
+            # Log detailed information about the conversion
+            print(f"Document pages: {len(result.document.pages) if result.document.pages else 0}")
+            if result.document.body and result.document.body.children:
+                print(f"Document body elements: {len(result.document.body.children)}")
+            
+            print("PDF conversion completed.")
 
-            if markdown_content:
-                print(f"Markdown content generated (first 200 chars):\n{markdown_content[:200]}")
+            if markdown_content and len(markdown_content.strip()) > 20:  # More than just image comments
+                print(f"Markdown content generated ({len(markdown_content)} chars, first 200):\n{markdown_content[:200]}")
                 return jsonify({'markdown': markdown_content}), 200
             else:
-                print("No markdown content found after conversion.")
-                return jsonify({'error': 'No markdown content found.'}), 500
+                # If we only got image comments or very little text, provide more helpful error
+                if markdown_content and "<!-- image -->" in markdown_content:
+                    error_msg = "The PDF appears to contain mostly images with little extractable text. The PDF may be scan-based or image-heavy. Consider using a PDF with selectable text or enabling better OCR processing."
+                else:
+                    error_msg = "No markdown content found after conversion. The PDF may be corrupted, empty, or in an unsupported format."
+                
+                print(f"Conversion issue: {error_msg}")
+                print(f"Raw markdown content: {repr(markdown_content)}")
+                return jsonify({'error': error_msg}), 500
         except Exception as e:
             print(f"Error during PDF conversion: {e}")
             import traceback
