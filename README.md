@@ -12,7 +12,7 @@ This project has evolved into a comprehensive web application designed to assist
 
 ### Management Interfaces
 
-- **Certificate Management**: CRUD operations for AWS certification types (e.g., SAA-C03, DVA-C02).
+- **Certificate Management**: CRUD operations for AWS certification types (e.g., SAA-C03, DVA-C02) with support for logo URLs and PDF certificate uploads via Google Drive integration.
 - **Payee Management**: Manage customer payment records, including credit card details (masked), payment status, and associated certificates.
 - **Access Code Management**: Generate unique access codes for paid customers, linking them to specific certificates.
 - **Question Assignment Management**: Assign and reorder specific questions from quizzes to generated access codes, allowing for customized quiz experiences per customer. Questions can be enabled/disabled for an access code.

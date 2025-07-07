@@ -20,6 +20,9 @@ interface Certificate {
   _id: string;
   name: string;
   code: string;
+  logoUrl?: string;
+  pdfFileUrl?: string;
+  pdfFileName?: string;
   createdAt: string;
 }
 
@@ -34,12 +37,21 @@ export default function Certificates() {
   // Form state
   const [newCertificate, setNewCertificate] = useState({
     name: '',
-    code: ''
+    code: '',
+    logoUrl: '',
+    pdfFileUrl: '',
+    pdfFileName: ''
   });
   const [editCertificate, setEditCertificate] = useState({
     name: '',
-    code: ''
+    code: '',
+    logoUrl: '',
+    pdfFileUrl: '',
+    pdfFileName: ''
   });
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [editLogoPreview, setEditLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     const verifyAuth = async () => {
@@ -85,7 +97,7 @@ export default function Certificates() {
       });
 
       if (response.ok) {
-        setNewCertificate({ name: '', code: '' });
+        setNewCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
         setIsAddingNew(false);
         fetchCertificates();
         setError(null);
@@ -115,7 +127,7 @@ export default function Certificates() {
 
       if (response.ok) {
         setEditingId(null);
-        setEditCertificate({ name: '', code: '' });
+        setEditCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
         fetchCertificates();
         setError(null);
       } else {
@@ -153,18 +165,79 @@ export default function Certificates() {
     setEditingId(certificate._id);
     setEditCertificate({
       name: certificate.name,
-      code: certificate.code
+      code: certificate.code,
+      logoUrl: certificate.logoUrl || '',
+      pdfFileUrl: certificate.pdfFileUrl || '',
+      pdfFileName: certificate.pdfFileName || ''
     });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditCertificate({ name: '', code: '' });
+    setEditCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
   };
 
   const cancelAdd = () => {
     setIsAddingNew(false);
-    setNewCertificate({ name: '', code: '' });
+    setNewCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
+  };
+
+  // File upload function
+  const handleFileUpload = async (file: File, isEdit: boolean = false) => {
+    if (!file) return null;
+
+    if (file.type !== 'application/pdf') {
+      setError('Only PDF files are allowed');
+      return null;
+    }
+
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      setError('File size must be less than 10MB');
+      return null;
+    }
+
+    setUploadingFile(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload/google-drive', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        const updateData = {
+          pdfFileUrl: result.fileUrl,
+          pdfFileName: file.name
+        };
+
+        if (isEdit) {
+          setEditCertificate(prev => ({ ...prev, ...updateData }));
+        } else {
+          setNewCertificate(prev => ({ ...prev, ...updateData }));
+        }
+
+        // Show a message if this was a mock upload
+        if (result.mock) {
+          console.log('File uploaded in mock mode - configure Google Drive credentials for real uploads');
+        }
+
+        return result;
+      } else {
+        setError(result.error || 'Failed to upload file');
+        return null;
+      }
+    } catch (err) {
+      setError('Error uploading file');
+      return null;
+    } finally {
+      setUploadingFile(false);
+    }
   };
 
   return (
@@ -217,6 +290,37 @@ export default function Certificates() {
                 />
               </div>
             </div>
+            <div className="mb-4">
+              <Label htmlFor="new-logo">Certificate Logo (Optional)</Label>
+              <Input
+                id="new-logo"
+                type="text"
+                placeholder="Image URL"
+                value={newCertificate.logoUrl}
+                onChange={(e) => setNewCertificate(prev => ({ ...prev, logoUrl: e.target.value }))}
+              />
+            </div>
+            <div className="mb-4">
+              <Label htmlFor="new-pdf">Certificate PDF (Optional)</Label>
+              <Input
+                id="new-pdf"
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleFileUpload(file);
+                  }
+                }}
+                disabled={uploadingFile}
+              />
+              {uploadingFile && <p className="text-sm text-muted-foreground">Uploading file...</p>}
+              {newCertificate.pdfFileName && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  File ready: {newCertificate.pdfFileName}
+                </p>
+              )}
+            </div>
             <div className="flex space-x-2">
               <Button onClick={handleCreate} className="flex items-center space-x-2">
                 <Save className="h-4 w-4" />
@@ -252,37 +356,119 @@ export default function Certificates() {
                   <div key={certificate._id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                     {editingId === certificate._id ? (
                       // Edit mode
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor={`edit-name-${certificate._id}`}>Certificate Name</Label>
+                            <Input
+                              id={`edit-name-${certificate._id}`}
+                              type="text"
+                              value={editCertificate.name}
+                              onChange={(e) => setEditCertificate(prev => ({ ...prev, name: e.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor={`edit-code-${certificate._id}`}>Certificate Code</Label>
+                            <Input
+                              id={`edit-code-${certificate._id}`}
+                              type="text"
+                              value={editCertificate.code}
+                              onChange={(e) => setEditCertificate(prev => ({ ...prev, code: e.target.value }))}
+                            />
+                          </div>
+                        </div>
                         <div>
-                          <Label htmlFor={`edit-name-${certificate._id}`}>Certificate Name</Label>
+                          <Label htmlFor={`edit-logo-${certificate._id}`}>Certificate Logo URL (Optional)</Label>
                           <Input
-                            id={`edit-name-${certificate._id}`}
+                            id={`edit-logo-${certificate._id}`}
                             type="text"
-                            value={editCertificate.name}
-                            onChange={(e) => setEditCertificate(prev => ({ ...prev, name: e.target.value }))}
+                            placeholder="Image URL"
+                            value={editCertificate.logoUrl}
+                            onChange={(e) => setEditCertificate(prev => ({ ...prev, logoUrl: e.target.value }))}
                           />
                         </div>
                         <div>
-                          <Label htmlFor={`edit-code-${certificate._id}`}>Certificate Code</Label>
+                          <Label htmlFor={`edit-pdf-${certificate._id}`}>Certificate PDF (Optional)</Label>
                           <Input
-                            id={`edit-code-${certificate._id}`}
-                            type="text"
-                            value={editCertificate.code}
-                            onChange={(e) => setEditCertificate(prev => ({ ...prev, code: e.target.value }))}
+                            id={`edit-pdf-${certificate._id}`}
+                            type="file"
+                            accept="application/pdf"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleFileUpload(file, true);
+                              }
+                            }}
+                            disabled={uploadingFile}
                           />
+                          {uploadingFile && <p className="text-sm text-muted-foreground">Uploading file...</p>}
+                          {editCertificate.pdfFileName && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Current file: {editCertificate.pdfFileName}
+                            </p>
+                          )}
                         </div>
                       </div>
                     ) : (
                       // View mode
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center space-x-3 mb-2">
+                            {certificate.logoUrl ? (
+                              <div className="w-50 h-50 flex-shrink-0" style={{ width: '200px', height: '200px' }}>
+                                <img 
+                                  src={certificate.logoUrl} 
+                                  alt={`${certificate.name} logo`}
+                                  className="w-full h-full object-contain rounded"
+                                  onLoad={(e) => {
+                                    console.log(`Logo loaded successfully: ${certificate.logoUrl}`);
+                                  }}
+                                  onError={(e) => {
+                                    console.log(`Logo failed to load: ${certificate.logoUrl}`);
+                                    // Fallback to default logo if image fails to load
+                                    const target = e.currentTarget as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    target.parentElement!.innerHTML = `
+                                      <div class="bg-gradient-to-br from-blue-500 to-purple-600 rounded-md flex items-center justify-center" style="width: 200px; height: 200px;">
+                                        <svg class="text-white" style="width: 80px; height: 80px;" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                          <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M9.497 14.25v2.25M16.5 14.25v2.25" />
+                                        </svg>
+                                      </div>
+                                    `;
+                                  }}
+                                  style={{ 
+                                    maxWidth: '200px', 
+                                    maxHeight: '200px',
+                                    backgroundColor: '#f8f9fa'
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              // Default fallback logo when no URL is provided
+                              <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-md flex items-center justify-center flex-shrink-0" style={{ width: '200px', height: '200px' }}>
+                                <Award className="text-white" style={{ width: '80px', height: '80px' }} />
+                              </div>
+                            )}
                             <h3 className="text-lg font-medium">{certificate.name}</h3>
                             <Badge variant="outline">{certificate.code}</Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            Created: {new Date(certificate.createdAt).toLocaleDateString()}
-                          </p>
+                          <div className="space-y-1">
+                            <p className="text-sm text-muted-foreground">
+                              Created: {new Date(certificate.createdAt).toLocaleDateString()}
+                            </p>
+                            {certificate.pdfFileName && certificate.pdfFileUrl && (
+                              <p className="text-sm text-muted-foreground">
+                                📄 PDF: <a 
+                                  href={certificate.pdfFileUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  {certificate.pdfFileName}
+                                </a>
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}

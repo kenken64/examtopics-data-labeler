@@ -28,6 +28,21 @@ const certificateSchema = new mongoose.Schema({
     trim: true,
     unique: true,
   },
+  logoUrl: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  pdfFileUrl: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  pdfFileName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 }, {
   timestamps: true,
 });
@@ -68,7 +83,7 @@ export const PUT = withAuth(async (
   try {
     await connectDB();
     const body = await request.json();
-    const { name, code } = body;
+    const { name, code, logoUrl, pdfFileUrl, pdfFileName } = body;
 
     if (!name || !code) {
       return NextResponse.json(
@@ -95,6 +110,9 @@ export const PUT = withAuth(async (
       {
         name: name.trim(),
         code: code.trim().toUpperCase(),
+        logoUrl: logoUrl?.trim() || '',
+        pdfFileUrl: pdfFileUrl?.trim() || '',
+        pdfFileName: pdfFileName?.trim() || '',
       },
       { new: true }
     );
@@ -114,13 +132,13 @@ export const PUT = withAuth(async (
       { status: 500 }
     );
   }
-}
+});
 
 // DELETE - Delete certificate
-export async function DELETE(
-  request: NextRequest,
+export const DELETE = withAuth(async (
+  request: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
     await connectDB();
     const certificate = await Certificate.findByIdAndDelete(params.id);
@@ -140,4 +158,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});

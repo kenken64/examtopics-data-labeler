@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verify-google-drive": "node scripts/verify-google-drive.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
@@ -23,6 +24,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.0.1",
+    "googleapis": "^150.0.1",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.525.0",
     "mongoose": "^8.16.1",
