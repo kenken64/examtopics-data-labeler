@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { get } from '@github/webauthn-json';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Image from 'next/image';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -83,39 +83,94 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-6 text-center">Login with Passkey</h2>
-        <form onSubmit={handleLogin}>
-          <div className="grid gap-2 mb-4">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              type="text"
-              id="username"
-              placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
+    <div className="min-h-screen flex">
+      {/* Left side - Login Form */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-white">
+        <div className="w-full max-w-md space-y-8">
+          {/* Logo/Brand */}
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto mb-4 bg-black rounded-lg flex items-center justify-center">
+              <div className="w-6 h-6 bg-white rounded-sm"></div>
+            </div>
+            <h1 className="text-2xl font-semibold text-gray-900 mb-2">Sign in to Exam CertBot</h1>
           </div>
-          <Button type="submit" className="w-full">
-            Login
-          </Button>
-        </form>
-        <Button
-          variant="outline"
-          onClick={() => router.push('/register')}
-          className="mt-4 w-full"
-        >
-          Register
-        </Button>
-        {message && (
-          <p className={`mt-4 text-center ${
-            message.includes('successful') ? 'text-green-600' : 'text-red-500'
-          }`}>
-            {message}
-          </p>
-        )}
+
+          {/* Login Form */}
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                Email
+              </label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="capy@scrapybara.com"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 rounded-lg transition-colors"
+            >
+              Sign in with Passkey
+            </Button>
+          </form>
+
+          {/* Sign up link */}
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <button
+                onClick={() => router.push('/register')}
+                className="text-blue-500 hover:text-blue-600 font-medium"
+              >
+                Sign up
+              </button>
+            </p>
+          </div>
+
+          {/* Error/Success Message */}
+          {message && (
+            <div className={`text-center text-sm ${
+              message.includes('successful') ? 'text-green-600' : 'text-red-500'
+            }`}>
+              {message}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right side - Image */}
+      <div className="hidden lg:flex lg:flex-1 relative">
+        <div className="w-full h-full relative overflow-hidden bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500">
+          {/* Fallback gradient background if image is not available */}
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500 opacity-90"></div>
+          
+          {/* Try to load the image, fall back to gradient if not available */}
+          <Image
+            src="/auth-bg.png"
+            alt="Authentication background"
+            fill
+            className="object-cover"
+            priority
+            onError={(e) => {
+              // Hide image if it fails to load, keeping the gradient background
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+          
+          {/* Overlay content */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-white text-center">
+              <h2 className="text-3xl font-bold mb-2">Welcome to Exam CertBot</h2>
+              <p className="text-lg opacity-90">Your secure certification platform</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

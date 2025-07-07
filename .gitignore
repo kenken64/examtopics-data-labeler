@@ -34,3 +34,5 @@ logs/
 # Misc
 *.swp
 *.swo
+
+myenv
