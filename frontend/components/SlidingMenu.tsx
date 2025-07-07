@@ -62,7 +62,7 @@ const SlidingMenu = () => {
         <Button 
           variant="ghost" 
           size="icon" 
-          className="fixed top-4 left-4 z-50 h-10 w-10 sm:h-12 sm:w-12 bg-background/95 backdrop-blur-sm border shadow-lg hover:bg-accent hover:shadow-xl transition-all duration-200 hover:scale-105"
+          className="fixed top-4 left-4 z-50 h-10 w-10 sm:h-12 sm:w-12 bg-background/95 backdrop-blur-sm border hover:bg-accent transition-all duration-200 hover:scale-105"
         >
           <Menu className="h-4 w-4 sm:h-5 sm:w-5" />
           <span className="sr-only">Toggle menu</span>

@@ -74,8 +74,15 @@ export default function Register() {
         <div className="w-full max-w-md space-y-8">
           {/* Logo/Brand */}
           <div className="text-center">
-            <div className="w-12 h-12 mx-auto mb-4 bg-black rounded-lg flex items-center justify-center">
-              <div className="w-6 h-6 bg-white rounded-sm"></div>
+            <div className="mx-auto mb-6">
+              <Image
+                src="/Applogo.png"
+                alt="Exam CertBot Logo"
+                width={150}
+                height={150}
+                className="mx-auto"
+                priority
+              />
             </div>
             <h1 className="text-2xl font-semibold text-gray-900 mb-2">Create your Exam CertBot account</h1>
           </div>
@@ -148,11 +155,10 @@ export default function Register() {
             }}
           />
           
-          {/* Overlay content */}
+          {/* Overlay content - intentionally empty for clean design */}
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-white text-center">
-              <h2 className="text-3xl font-bold mb-2">Join Exam CertBot Today</h2>
-              <p className="text-lg opacity-90">Create your secure certification account</p>
+              {/* Clean design without text overlay */}
             </div>
           </div>
         </div>
