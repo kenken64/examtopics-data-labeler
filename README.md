@@ -1,4 +1,4 @@
-# AWS Certification Web Application
+# Exambot Data Labeler Web Application
 
 This project has evolved into a comprehensive web application designed to assist with AWS certification preparation and management. It features a PDF data labeler, robust user authentication, and various management interfaces for certificates, payees, and question assignments.
 
@@ -170,6 +170,7 @@ This project includes comprehensive technical documentation organized in the `fr
 | [AI_SETUP_COMPLETE.md](./frontend/specs/AI_SETUP_COMPLETE.md) | AI setup completion documentation | AI Implementation |
 | [APPLICATION_FLOW_DIAGRAM.md](./frontend/specs/APPLICATION_FLOW_DIAGRAM.md) | **Comprehensive application architecture and flow diagram** | **Architecture** |
 | [DATA_TRANSFORMATION_IMPLEMENTATION.md](./frontend/specs/DATA_TRANSFORMATION_IMPLEMENTATION.md) | Data transformation implementation details | Backend |
+| [GOOGLE_DRIVE_SETUP.md](./frontend/specs/GOOGLE_DRIVE_SETUP.md) | Google Drive integration setup guide for certificate PDF uploads | Configuration |
 | [IMPLEMENTATION_COMPLETE.md](./frontend/specs/IMPLEMENTATION_COMPLETE.md) | Overall project implementation completion status | Project Status |
 | [IMPLEMENTATION_SUCCESS.md](./frontend/specs/IMPLEMENTATION_SUCCESS.md) | Implementation success documentation | Project Status |
 | [JWT_AUTHENTICATION_COMPLETE.md](./frontend/specs/JWT_AUTHENTICATION_COMPLETE.md) | JWT authentication implementation guide | Authentication |
