@@ -1,4 +1,4 @@
-# Exambot Data Labeler Web Application
+# ExamBot Data Labeler Web Application
 
 This project has evolved into a comprehensive web application designed to assist with AWS certification preparation and management. It features a PDF data labeler, robust user authentication, and various management interfaces for certificates, payees, and question assignments.
 
