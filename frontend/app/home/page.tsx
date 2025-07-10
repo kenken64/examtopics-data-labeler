@@ -69,7 +69,6 @@ export default function Home() {
   const [markdownContent, setMarkdownContent] = useState<string | null>(null); // Will store HTML string
   const [originalMarkdownContent, setOriginalMarkdownContent] = useState<string | null>(null); // Store original content
   const [originalContentByPage, setOriginalContentByPage] = useState<{[page: number]: string}>({}); // Store original content per page
-  const [standardLoading, setStandardLoading] = useState<boolean>(false);
   const [ocrLoading, setOcrLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,60 +144,6 @@ export default function Home() {
 
   const handleNumPagesLoad = (numPages: number) => {
     setNumPages(numPages);
-  };
-
-  const convertToMarkdown = async () => {
-    if (!pdfFile) {
-      setError("Please upload a PDF file first.");
-      return;
-    }
-
-    setStandardLoading(true);
-    setError(null);
-
-    const formData = new FormData();
-    formData.append("pdfFile", pdfFile);
-    formData.append("pageNumber", currentPage.toString()); // Send current page number
-
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PDF_CONVERSION_API_URL || 'http://localhost:5000'}/convert-pdf`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Conversion failed.");
-      }
-
-      const data = await response.json();
-      
-      // Store original content without any highlights
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = data.markdown;
-      const originalContent = tempDiv.innerHTML;
-      setOriginalMarkdownContent(originalContent);
-      
-      // Store original content per page
-      setOriginalContentByPage(prev => ({
-        ...prev,
-        [currentPage]: originalContent
-      }));
-      
-      // Apply existing highlights for this page
-      const pageHighlights = highlights[currentPage] || [];
-      const contentWithHighlights = applyHighlightsToContent(originalContent, pageHighlights);
-      setMarkdownContent(contentWithHighlights);
-      
-      // Update highlighted text state
-      updateHighlightedTextFromAllPages();
-
-    } catch (err: any) {
-      console.error("Error converting to markdown:", err);
-      setError(err.message || "An unexpected error occurred during conversion.");
-    } finally {
-      setStandardLoading(false);
-    }
   };
 
   const convertToMarkdownOCR = async () => {
@@ -654,14 +599,8 @@ export default function Home() {
         
         {/* Conversion Method Buttons */}
         <Button
-          onClick={convertToMarkdown}
-          disabled={!pdfFile || standardLoading || ocrLoading}
-        >
-          {standardLoading ? "Converting..." : "Standard Conversion"}
-        </Button>
-        <Button
           onClick={convertToMarkdownOCR}
-          disabled={!pdfFile || standardLoading || ocrLoading}
+          disabled={!pdfFile || ocrLoading}
           variant="outline"
           className="bg-blue-50 hover:bg-blue-100"
         >
