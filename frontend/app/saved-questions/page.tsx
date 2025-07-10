@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, BookOpen, Users, ChevronRight, Loader2 } from 'lucide-react';
+import { Search, BookOpen, Users, ChevronRight, Loader2, Link, ExternalLink } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ interface AccessCodeInfo {
   payeeName: string;
   certificateCode: string;
   certificateTitle: string;
+  isLinkedToQuestions?: boolean; // New field to track if questions are linked
 }
 
 interface Question {
@@ -119,6 +120,51 @@ const SavedQuestionsPage = () => {
 
   const handleAccessCodeClick = (certificateCode: string) => {
     router.push(`/saved-questions/certificate/${certificateCode}`);
+  };
+
+  const handleLinkAccessCode = async (accessCode: AccessCodeInfo, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent card click
+
+    try {
+      // Find the payee ID by access code - this is a simplified approach
+      // In a real implementation, you might want to store the payee ID in AccessCodeInfo
+      const response = await fetch('/api/link-access-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          generatedAccessCode: accessCode.generatedAccessCode,
+          forceRelink: false
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to link access code');
+      }
+
+      const result = await response.json();
+
+      // Update local state
+      setAccessCodes(prev => prev.map(ac => 
+        ac._id === accessCode._id 
+          ? { ...ac, isLinkedToQuestions: true }
+          : ac
+      ));
+
+      toast({
+        title: "Success",
+        description: `Successfully linked ${result.linkedQuestions} questions to access code ${result.accessCode}`,
+      });
+
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleQuestionClick = (questionNo: number) => {
@@ -233,10 +279,33 @@ const SavedQuestionsPage = () => {
                           <Badge variant="outline" className="text-xs">
                             {accessCode.certificateCode}
                           </Badge>
-                          <Badge variant="default" className="text-xs">
-                            {accessCode.status}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="default" className="text-xs">
+                              {accessCode.status}
+                            </Badge>
+                            {accessCode.generatedAccessCode && (
+                              <Badge 
+                                variant={accessCode.isLinkedToQuestions ? "default" : "secondary"}
+                                className={`text-xs ${accessCode.isLinkedToQuestions ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
+                              >
+                                {accessCode.isLinkedToQuestions ? "Linked" : "Not Linked"}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
+                        {accessCode.generatedAccessCode && !accessCode.isLinkedToQuestions && (
+                          <div className="mt-2 pt-2 border-t">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => handleLinkAccessCode(accessCode, e)}
+                              className="w-full text-blue-600 hover:text-blue-700"
+                            >
+                              <Link className="h-4 w-4 mr-2" />
+                              Link to Questions
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

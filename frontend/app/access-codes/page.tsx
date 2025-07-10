@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Check, Copy, RefreshCw } from "lucide-react";
+import { Check, Copy, RefreshCw, Link, Unlink } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Certificate {
   _id: string;
@@ -28,6 +29,7 @@ interface Payee {
   email?: string; // Optional email field
   generatedAccessCode?: string;
   accessCodeGenerated?: boolean;
+  isLinkedToQuestions?: boolean; // New field to track if questions are linked
 }
 
 export default function AccessCodesPage() {
@@ -38,6 +40,8 @@ export default function AccessCodesPage() {
   const [error, setError] = useState<string | null>(null);
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [linkingFor, setLinkingFor] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     const verifyAuth = async () => {
@@ -60,7 +64,24 @@ export default function AccessCodesPage() {
           const payeesData = await payeesResponse.json();
           // Filter only paid payees
           const paidPayees = (payeesData.payees || payeesData).filter((payee: Payee) => payee.status === 'paid');
-          setPayees(paidPayees);
+          
+          // Check which payees have linked questions
+          const payeesWithLinkStatus = await Promise.all(
+            paidPayees.map(async (payee: Payee) => {
+              if (payee.generatedAccessCode) {
+                try {
+                  const linkCheckResponse = await fetch(`/api/access-code-questions?generatedAccessCode=${encodeURIComponent(payee.generatedAccessCode)}`);
+                  const isLinked = linkCheckResponse.ok;
+                  return { ...payee, isLinkedToQuestions: isLinked };
+                } catch {
+                  return { ...payee, isLinkedToQuestions: false };
+                }
+              }
+              return { ...payee, isLinkedToQuestions: false };
+            })
+          );
+          
+          setPayees(payeesWithLinkStatus);
         }
 
         if (certificatesResponse.ok) {
@@ -112,10 +133,107 @@ export default function AccessCodesPage() {
           : payee
       ));
 
+      toast({
+        title: "Success",
+        description: `Generated access code: ${randomCode}`,
+      });
+
     } catch (error: any) {
       setError(error.message);
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setGeneratingFor(null);
+    }
+  };
+
+  const linkAccessCodeToQuestions = async (payeeId: string, forceRelink = false) => {
+    try {
+      setLinkingFor(payeeId);
+      setError(null);
+
+      const response = await fetch('/api/link-access-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          payeeId,
+          forceRelink
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to link access code to questions');
+      }
+
+      const result = await response.json();
+
+      // Update the local state
+      setPayees(prev => prev.map(payee => 
+        payee._id === payeeId 
+          ? { ...payee, isLinkedToQuestions: true }
+          : payee
+      ));
+
+      toast({
+        title: "Success",
+        description: `Successfully linked ${result.linkedQuestions} questions to access code ${result.accessCode}`,
+      });
+
+    } catch (error: any) {
+      setError(error.message);
+      toast({
+        title: "Error", 
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLinkingFor(null);
+    }
+  };
+
+  const unlinkAccessCodeFromQuestions = async (payeeId: string) => {
+    try {
+      setLinkingFor(payeeId);
+      setError(null);
+
+      const response = await fetch(`/api/link-access-code?payeeId=${payeeId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to unlink access code from questions');
+      }
+
+      const result = await response.json();
+
+      // Update the local state
+      setPayees(prev => prev.map(payee => 
+        payee._id === payeeId 
+          ? { ...payee, isLinkedToQuestions: false }
+          : payee
+      ));
+
+      toast({
+        title: "Success",
+        description: `Successfully unlinked ${result.deletedCount} questions from access code ${result.accessCode}`,
+      });
+
+    } catch (error: any) {
+      setError(error.message);
+      toast({
+        title: "Error",
+        description: error.message, 
+        variant: "destructive",
+      });
+    } finally {
+      setLinkingFor(null);
     }
   };
 
@@ -198,6 +316,9 @@ export default function AccessCodesPage() {
                       Generated Access Code
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                      Questions Link Status
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
                       Actions
                     </th>
                   </tr>
@@ -255,6 +376,49 @@ export default function AccessCodesPage() {
                           <span className="text-sm text-gray-500">Not generated</span>
                         )}
                       </td>
+                      <td className="px-4 py-4">
+                        {payee.generatedAccessCode ? (
+                          <div className="flex items-center gap-2">
+                            <Badge 
+                              variant={payee.isLinkedToQuestions ? "default" : "secondary"}
+                              className={payee.isLinkedToQuestions ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}
+                            >
+                              {payee.isLinkedToQuestions ? "Linked" : "Not Linked"}
+                            </Badge>
+                            {payee.isLinkedToQuestions ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => unlinkAccessCodeFromQuestions(payee._id)}
+                                disabled={linkingFor === payee._id}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                {linkingFor === payee._id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Unlink className="h-4 w-4" />
+                                )}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => linkAccessCodeToQuestions(payee._id)}
+                                disabled={linkingFor === payee._id}
+                                className="text-blue-600 hover:text-blue-700"
+                              >
+                                {linkingFor === payee._id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Link className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-500">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <Button
                           onClick={() => generateAccessCode(payee._id)}
@@ -291,6 +455,9 @@ export default function AccessCodesPage() {
               <li>• Generated codes are unique system-generated access credentials</li>
               <li>• Once generated, codes cannot be regenerated for security purposes</li>
               <li>• Click the copy button to copy generated codes to clipboard</li>
+              <li>• <strong>Link Status:</strong> Shows if the access code is linked to certificate questions</li>
+              <li>• <strong>Link/Unlink:</strong> Manually associate or remove question assignments</li>
+              <li>• New questions added to certificates are automatically linked to existing access codes</li>
             </ul>
           </div>
         )}
