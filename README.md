@@ -1,4 +1,4 @@
-# Exambot Data Labeler Web Application
+# ExamBot Data Labeler Web Application
 
 This project has evolved into a comprehensive web application designed to assist with AWS certification preparation and management. It features a PDF data labeler, robust user authentication, and various management interfaces for certificates, payees, and question assignments.
 
@@ -162,6 +162,7 @@ This project includes comprehensive technical documentation organized in the `fr
 
 | Document | Description | Category |
 |----------|-------------|----------|
+| [ACCESS_CODE_QUESTIONS_LINKING.md](./frontend/specs/ACCESS_CODE_QUESTIONS_LINKING.md) | **Complete access code questions linking system documentation** | **Features** |
 | [ACCESS_CODE_QUESTIONS_README.md](./frontend/specs/ACCESS_CODE_QUESTIONS_README.md) | Documentation for access code questions functionality | Features |
 | [AI_CACHING_COMPLETE.md](./frontend/specs/AI_CACHING_COMPLETE.md) | AI response caching implementation completion guide | AI Implementation |
 | [AI_CACHING_IMPLEMENTATION_SUMMARY.md](./frontend/specs/AI_CACHING_IMPLEMENTATION_SUMMARY.md) | Summary of AI caching implementation details | AI Implementation |

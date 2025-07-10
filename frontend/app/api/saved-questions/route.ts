@@ -58,9 +58,22 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
 
       const accessCodes = await db.collection('payees').aggregate(pipeline).toArray();
       
+      // Check which access codes are linked to questions
+      const accessCodesWithLinkStatus = await Promise.all(
+        accessCodes.map(async (accessCode) => {
+          if (accessCode.generatedAccessCode) {
+            const linkCount = await db.collection('access-code-questions').countDocuments({
+              generatedAccessCode: accessCode.generatedAccessCode
+            });
+            return { ...accessCode, isLinkedToQuestions: linkCount > 0 };
+          }
+          return { ...accessCode, isLinkedToQuestions: false };
+        })
+      );
+      
       return NextResponse.json({
         success: true,
-        accessCodes
+        accessCodes: accessCodesWithLinkStatus
       });
     }
 

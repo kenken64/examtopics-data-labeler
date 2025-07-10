@@ -69,7 +69,7 @@ export default function Home() {
   const [markdownContent, setMarkdownContent] = useState<string | null>(null); // Will store HTML string
   const [originalMarkdownContent, setOriginalMarkdownContent] = useState<string | null>(null); // Store original content
   const [originalContentByPage, setOriginalContentByPage] = useState<{[page: number]: string}>({}); // Store original content per page
-  const [loading, setLoading] = useState<boolean>(false);
+  const [ocrLoading, setOcrLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
@@ -146,13 +146,13 @@ export default function Home() {
     setNumPages(numPages);
   };
 
-  const convertToMarkdown = async () => {
+  const convertToMarkdownOCR = async () => {
     if (!pdfFile) {
       setError("Please upload a PDF file first.");
       return;
     }
 
-    setLoading(true);
+    setOcrLoading(true);
     setError(null);
 
     const formData = new FormData();
@@ -160,14 +160,14 @@ export default function Home() {
     formData.append("pageNumber", currentPage.toString()); // Send current page number
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PDF_CONVERSION_API_URL || 'http://localhost:5000'}/convert-pdf`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_PDF_CONVERSION_API_URL || 'http://localhost:5000'}/convert-pdf-ocr`, {
         method: "POST",
         body: formData,
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Conversion failed.");
+        throw new Error(errorData.error || "OCR conversion failed.");
       }
 
       const data = await response.json();
@@ -193,10 +193,10 @@ export default function Home() {
       updateHighlightedTextFromAllPages();
 
     } catch (err: any) {
-      console.error("Error converting to markdown:", err);
-      setError(err.message || "An unexpected error occurred during conversion.");
+      console.error("Error converting to markdown with OCR:", err);
+      setError(err.message || "An unexpected error occurred during OCR conversion.");
     } finally {
-      setLoading(false);
+      setOcrLoading(false);
     }
   };
 
@@ -583,7 +583,8 @@ export default function Home() {
       <Toaster position="top-right" richColors />
       <h1 className="text-3xl font-bold mb-8">Exam Q Labeler</h1>
 
-      <div className="mb-8 flex items-center space-x-4">
+      {/* Main button row */}
+      <div className="mb-4 flex items-center space-x-4">
         <Button asChild>
           <label>
             Choose PDF File
@@ -595,82 +596,90 @@ export default function Home() {
             />
           </label>
         </Button>
+        
+        {/* Conversion Method Buttons */}
         <Button
-          onClick={convertToMarkdown}
-          disabled={!pdfFile || loading}
+          onClick={convertToMarkdownOCR}
+          disabled={!pdfFile || ocrLoading}
+          variant="outline"
+          className="bg-blue-50 hover:bg-blue-100"
         >
-          {loading ? "Converting..." : "Convert to Markdown"}
+          {ocrLoading ? "Converting..." : "AI OCR Conversion"}
         </Button>
 
         {/* Highlight Buttons with indicators */}
-        <div className="flex items-center space-x-2">
-          <Button
-            onClick={() => handleHighlightButtonClick("question")}
-            disabled={!pdfFile || !markdownContent}
-            variant={activeHighlightType === 'question' ? 'default' : 'outline'}
-            className="relative"
-          >
-            Question
-            {highlights[currentPage]?.some(h => h.type === 'question') && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
-                ✓
-              </span>
-            )}
-          </Button>
-          
-          <Button
-            onClick={() => handleHighlightButtonClick("list")}
-            disabled={!pdfFile || !markdownContent}
-            variant={activeHighlightType === 'list' ? 'default' : 'outline'}
-            className="relative"
-          >
-            List of Answer
-            {highlights[currentPage]?.some(h => h.type === 'list') && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
-                ✓
-              </span>
-            )}
-          </Button>
-          
-          <Button
-            onClick={() => handleHighlightButtonClick("answer")}
-            disabled={!pdfFile || !markdownContent}
-            variant={activeHighlightType === 'answer' ? 'default' : 'outline'}
-            className="relative"
-          >
-            Correct Answer
-            {highlights[currentPage]?.some(h => h.type === 'answer') && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
-                ✓
-              </span>
-            )}
-          </Button>
-          
-          <Button
-            onClick={() => handleHighlightButtonClick("explanation")}
-            disabled={!pdfFile || !markdownContent}
-            variant={activeHighlightType === 'explanation' ? 'default' : 'outline'}
-            className="relative"
-          >
-            Explanation
-            {highlights[currentPage]?.some(h => h.type === 'explanation') && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
-                ✓
-              </span>
-            )}
-          </Button>
+        <Button
+          onClick={() => handleHighlightButtonClick("question")}
+          disabled={!pdfFile || !markdownContent}
+          variant={activeHighlightType === 'question' ? 'default' : 'outline'}
+          className="relative"
+        >
+          Question
+          {highlights[currentPage]?.some(h => h.type === 'question') && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
+              ✓
+            </span>
+          )}
+        </Button>
+        
+        <Button
+          onClick={() => handleHighlightButtonClick("list")}
+          disabled={!pdfFile || !markdownContent}
+          variant={activeHighlightType === 'list' ? 'default' : 'outline'}
+          className="relative"
+        >
+          List of Answer
+          {highlights[currentPage]?.some(h => h.type === 'list') && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
+              ✓
+            </span>
+          )}
+        </Button>
+        
+        <Button
+          onClick={() => handleHighlightButtonClick("answer")}
+          disabled={!pdfFile || !markdownContent}
+          variant={activeHighlightType === 'answer' ? 'default' : 'outline'}
+          className="relative"
+        >
+          Correct Answer
+          {highlights[currentPage]?.some(h => h.type === 'answer') && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
+              ✓
+            </span>
+          )}
+        </Button>
+        
+        <Button
+          onClick={() => handleHighlightButtonClick("explanation")}
+          disabled={!pdfFile || !markdownContent}
+          variant={activeHighlightType === 'explanation' ? 'default' : 'outline'}
+          className="relative"
+        >
+          Explanation
+          {highlights[currentPage]?.some(h => h.type === 'explanation') && (
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 text-white text-xs rounded-full flex items-center justify-center">
+              ✓
+            </span>
+          )}
+        </Button>
 
-          {/* Clear All Highlights Button */}
-          <Button
-            onClick={clearAllHighlights}
-            disabled={!pdfFile || !markdownContent || Object.values(highlights).flat().length === 0}
-            variant="destructive"
-            size="sm"
-            className="ml-4"
-          >
-            Clear All Highlights
-          </Button>
-        </div>
+        {/* Clear All Highlights Button */}
+        <Button
+          onClick={clearAllHighlights}
+          disabled={!pdfFile || !markdownContent || Object.values(highlights).flat().length === 0}
+          variant="destructive"
+          size="sm"
+          className="ml-4"
+        >
+          Clear All Highlights
+        </Button>
+      </div>
+
+      {/* Explanatory text below buttons */}
+      <div className="mb-4 text-xs text-gray-600 text-center">
+        <p><strong>Standard:</strong> Fast document parsing (good for text-based PDFs)</p>
+        <p><strong>AI OCR:</strong> Advanced image recognition for scanned documents (requires OpenAI API)</p>
       </div>
 
       {/* Page Highlight Summary - Centered */}

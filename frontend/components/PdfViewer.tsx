@@ -29,6 +29,7 @@ export default function PdfViewer({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pdfDocumentRef = useRef<pdfjs.PDFDocumentProxy | null>(null); // To store the PDF document
   const renderTaskRef = useRef<pdfjs.RenderTask | null>(null); // To store the current render task
+  const currentPdfUrlRef = useRef<string | null>(null); // To track current PDF URL
 
   useEffect(() => {
     const renderPdf = async () => {
@@ -53,11 +54,12 @@ export default function PdfViewer({
       let pdf: pdfjs.PDFDocumentProxy;
 
       // If pdfUrl changes, or if pdfDocumentRef is null (first load), fetch the document
-      if (!pdfDocumentRef.current || pdfDocumentRef.current.loadingTask.url !== pdfUrl) {
+      if (!pdfDocumentRef.current || currentPdfUrlRef.current !== pdfUrl) {
         try {
           const loadingTask = pdfjs.getDocument(pdfUrl);
           pdf = await loadingTask.promise;
           pdfDocumentRef.current = pdf; // Store the document
+          currentPdfUrlRef.current = pdfUrl; // Store the current URL
           onNumPagesLoad(pdf.numPages); // Update parent with total pages
         } catch (err) {
           console.error("Error loading PDF document:", err);
@@ -120,7 +122,7 @@ export default function PdfViewer({
         renderTaskRef.current = null;
       }
     };
-  }, [pdfUrl, currentPage, setError, onNumPagesLoad, setCurrentPage]);
+  }, [pdfUrl, currentPage]);
 
   const popupWindowRef = useRef<Window | null>(null);
 

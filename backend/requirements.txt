@@ -2,3 +2,7 @@ Flask
 docling
 pypdf
 Flask-Cors
+pdf2image
+openai
+Pillow
+python-dotenv
