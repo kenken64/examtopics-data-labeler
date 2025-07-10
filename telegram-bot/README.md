@@ -48,6 +48,27 @@ A Telegram bot built with Grammy framework for AWS certification quiz practice.
 
 ## Bot Commands
 
+### Basic Commands
+- `/start` - Start a new quiz session and show available certificates
+- `/help` - Display comprehensive help guide with all commands and features
+
+### Quiz Management
+- `/bookmark <question_number>` - Save a specific question for later review
+- `/bookmarks` - View all your saved bookmarked questions  
+- `/revision` - Review questions you answered incorrectly
+
+### Interactive Features
+- **Certificate Selection** - Choose from available certificates using inline buttons
+- **Answer Selection** - Use A, B, C, D buttons to answer questions
+- **Question Navigation** - Use "Next Question" button to continue
+- **Quiz Restart** - Option to restart quiz after completion
+
+### Features
+- **Access Code System** - Enter generated access codes for personalized question sets
+- **Progress Tracking** - Automatic saving of answers and wrong responses
+- **Detailed Explanations** - Comprehensive explanations for each question
+- **Session Management** - Maintains quiz state throughout the session
+
 - `/start` - Start the bot and show certificate selection
 
 ## Quiz Flow
