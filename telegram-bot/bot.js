@@ -164,7 +164,7 @@ class CertificationBot {
       `   📱 Bot works best in private chats\n\n` +
       
       `🆘 <b>Need More Help?</b>\n` +
-      `   • Contact support if you encounter issues\n` +
+      `   • Contact support if you encounter issues: <code>bunnyppl@gmail.com</code>\n` +
       `   • Report bugs or suggest improvements\n` +
       `   • Check that you have a valid access code\n` +
       `   • Ensure stable internet connection for best experience\n\n` +
