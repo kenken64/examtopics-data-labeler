@@ -103,75 +103,75 @@ class CertificationBot {
 
   async handleHelp(ctx) {
     const helpMessage = 
-      `🤖 **AWS Certification Quiz Bot - Help Guide**\n\n` +
+      `🤖 <b>AWS Certification Quiz Bot - Help Guide</b>\n\n` +
       
-      `📚 **Available Commands:**\n\n` +
+      `📚 <b>Available Commands:</b>\n\n` +
       
-      `🚀 **/start**\n` +
+      `🚀 <b>/start</b>\n` +
       `   • Start a new quiz session\n` +
       `   • Shows available certificates to choose from\n` +
       `   • Clears any existing quiz session\n` +
       `   • Usage: Simply type /start\n\n` +
       
-      `❓ **/help**\n` +
+      `❓ <b>/help</b>\n` +
       `   • Show this help guide with all commands\n` +
       `   • Displays detailed instructions for each command\n` +
       `   • Usage: Simply type /help\n\n` +
       
-      `🔖 **/bookmark <question_number>**\n` +
+      `🔖 <b>/bookmark &lt;question_number&gt;</b>\n` +
       `   • Save a specific question for later review\n` +
       `   • Helps you mark important or difficult questions\n` +
       `   • Usage: /bookmark 15 (saves question number 15)\n` +
       `   • Example: /bookmark 42\n\n` +
       
-      `📑 **/bookmarks**\n` +
+      `📑 <b>/bookmarks</b>\n` +
       `   • View all your saved bookmarked questions\n` +
       `   • Shows questions organized by certificate\n` +
       `   • Allows you to quickly access saved questions\n` +
       `   • Usage: Simply type /bookmarks\n\n` +
       
-      `📖 **/revision**\n` +
+      `📖 <b>/revision</b>\n` +
       `   • Review questions you answered incorrectly\n` +
       `   • Shows wrong answers organized by certificate\n` +
       `   • Perfect for focused study on weak areas\n` +
       `   • Usage: Simply type /revision\n\n` +
       
-      `🎯 **Quiz Features:**\n\n` +
+      `🎯 <b>Quiz Features:</b>\n\n` +
       
-      `✅ **Question Navigation:**\n` +
+      `✅ <b>Question Navigation:</b>\n` +
       `   • Answer questions using the A, B, C, D buttons\n` +
       `   • Get immediate feedback on correct/incorrect answers\n` +
       `   • See detailed explanations for each question\n` +
       `   • Use "Next Question" button to continue\n\n` +
       
-      `🔐 **Access Code System:**\n` +
+      `🔐 <b>Access Code System:</b>\n` +
       `   • Enter your generated access code when prompted\n` +
       `   • Access codes link you to specific question sets\n` +
       `   • Each certificate requires a valid access code\n` +
-      `   • Contact support if you don't have an access code\n\n` +
+      `   • Contact support if you do not have an access code\n\n` +
       
-      `📊 **Progress Tracking:**\n` +
+      `📊 <b>Progress Tracking:</b>\n` +
       `   • Your answers are automatically saved\n` +
       `   • Wrong answers are stored for revision\n` +
       `   • Bookmarks are saved across sessions\n` +
       `   • Track your progress per certificate\n\n` +
       
-      `💡 **Tips for Best Experience:**\n\n` +
+      `💡 <b>Tips for Best Experience:</b>\n\n` +
       `   🎯 Use /bookmark for difficult questions\n` +
       `   📚 Regular /revision helps reinforce learning\n` +
       `   🔄 Start fresh sessions with /start\n` +
       `   💬 Read explanations carefully for better understanding\n` +
       `   📱 Bot works best in private chats\n\n` +
       
-      `🆘 **Need More Help?**\n` +
+      `🆘 <b>Need More Help?</b>\n` +
       `   • Contact support if you encounter issues\n` +
       `   • Report bugs or suggest improvements\n` +
       `   • Check that you have a valid access code\n` +
       `   • Ensure stable internet connection for best experience\n\n` +
       
-      `🚀 **Ready to Start?** Type /start to begin your certification journey!`;
+      `🚀 <b>Ready to Start?</b> Type /start to begin your certification journey!`;
 
-    await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+    await ctx.reply(helpMessage, { parse_mode: 'HTML' });
   }
 
   async showCertificates(ctx) {
