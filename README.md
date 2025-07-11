@@ -1,5 +1,17 @@
 # ExamBot Data Labeler Web Application
 
+## Screenshots
+
+<div align="center">
+  <img src="screen1.png" alt="ExamBot Web Application Interface" width="800">
+  <p><em>Web Application - PDF Data Labeler and Management Interface</em></p>
+  
+  <img src="screen2.png" alt="ExamBot Telegram Bot Interface" width="800">
+  <p><em>Telegram Bot - Interactive Quiz Session</em></p>
+</div>
+
+## Overview
+
 This project has evolved into a comprehensive AWS certification preparation and management ecosystem. It features a web-based PDF data labeler, robust user authentication, various management interfaces, and an interactive Telegram bot for quiz practice.
 
 ## Features
