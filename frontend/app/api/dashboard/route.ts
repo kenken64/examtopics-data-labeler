@@ -68,9 +68,9 @@ export async function GET() {
           _id: null,
           totalAttempts: { $sum: 1 },
           uniqueUsers: { $addToSet: '$userId' },
-          totalScore: { $sum: '$score' },
+          totalScore: { $sum: '$correctAnswers' },
           totalPossible: { $sum: '$totalQuestions' },
-          avgScore: { $avg: { $divide: ['$score', '$totalQuestions'] } }
+          avgScore: { $avg: { $divide: ['$correctAnswers', '$totalQuestions'] } }
         }
       },
       {
@@ -107,18 +107,18 @@ export async function GET() {
     const recentAttempts = await db.collection('quiz-attempts').aggregate([
       {
         $match: {
-          attemptDate: { $gte: thirtyDaysAgo }
+          createdAt: { $gte: thirtyDaysAgo }
         }
       },
       {
         $group: {
           _id: {
-            year: { $year: '$attemptDate' },
-            month: { $month: '$attemptDate' },
-            day: { $dayOfMonth: '$attemptDate' }
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
+            day: { $dayOfMonth: '$createdAt' }
           },
           attempts: { $sum: 1 },
-          avgScore: { $avg: { $divide: ['$score', '$totalQuestions'] } }
+          avgScore: { $avg: { $divide: ['$correctAnswers', '$totalQuestions'] } }
         }
       },
       {
@@ -133,10 +133,10 @@ export async function GET() {
     const userEngagement = await db.collection('quiz-attempts').aggregate([
       {
         $group: {
-          _id: '$generatedAccessCode',
+          _id: '$accessCode',
           uniqueUsers: { $addToSet: '$userId' },
           totalAttempts: { $sum: 1 },
-          avgScore: { $avg: { $divide: ['$score', '$totalQuestions'] } }
+          avgScore: { $avg: { $divide: ['$correctAnswers', '$totalQuestions'] } }
         }
       },
       {
