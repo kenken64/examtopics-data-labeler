@@ -22,6 +22,12 @@ import {
   RefreshCw
 } from "lucide-react";
 
+// Chart components
+import CertificateStatsChart from "@/components/charts/CertificateStatsChart";
+import QuizAttemptsChart from "@/components/charts/QuizAttemptsChart";
+import AccessCodeStatusChart from "@/components/charts/AccessCodeStatusChart";
+import UserEngagementChart from "@/components/charts/UserEngagementChart";
+
 interface DashboardData {
   certificates: Array<{
     _id: string;
@@ -236,6 +242,77 @@ export default function Dashboard() {
               </p>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Charts Section */}
+        <div className="space-y-6">
+          <h2 className="text-2xl font-bold tracking-tight">Analytics & Trends</h2>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Certificate Questions Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <BarChart3 className="mr-2 h-5 w-5" />
+                  Certificate Distribution
+                </CardTitle>
+                <CardDescription>
+                  Visual breakdown of questions per certificate type
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CertificateStatsChart data={data.certificates} />
+              </CardContent>
+            </Card>
+
+            {/* Access Code Status Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Activity className="mr-2 h-5 w-5" />
+                  Question Status
+                </CardTitle>
+                <CardDescription>
+                  Enabled vs disabled question distribution
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AccessCodeStatusChart data={data.accessCodes} />
+              </CardContent>
+            </Card>
+
+            {/* Quiz Attempts Trend */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <TrendingUp className="mr-2 h-5 w-5" />
+                  Quiz Performance Trends
+                </CardTitle>
+                <CardDescription>
+                  Daily quiz attempts and average scores over the last 30 days
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <QuizAttemptsChart data={data.recentActivity} />
+              </CardContent>
+            </Card>
+
+            {/* User Engagement Chart */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Users className="mr-2 h-5 w-5" />
+                  Access Code Engagement
+                </CardTitle>
+                <CardDescription>
+                  Top performing access codes by user count and attempts
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <UserEngagementChart data={data.userEngagement} />
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* Main Content Grid */}
