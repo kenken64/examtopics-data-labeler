@@ -192,21 +192,49 @@ const QuestionDetailPage = () => {
     return selectedAnswers.includes(optionLabel);
   };
 
+  const getCorrectAnswerDisplay = () => {
+    if (!question) return '';
+    
+    const correctAnswerValue = question.correctAnswer;
+    
+    if (typeof correctAnswerValue === 'string') {
+      // Already in letter format, use existing formatter
+      return formatAnswerForDisplay(correctAnswerValue);
+    } else {
+      // Numeric format - convert to letter labels
+      const correctIndices = getAllCorrectAnswers(question);
+      const correctLabels = correctIndices.map(index => getOptionLabel(index));
+      return correctLabels.join(', ');
+    }
+  };
+
   const isUserAnswerCorrect = () => {
     if (!question) return false;
     
-    const isMultiple = question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string);
+    // Get correct answer in consistent format
+    const correctAnswerValue = question.correctAnswer;
+    
+    // Check if it's multiple answer based on the original value
+    const isMultiple = question.isMultipleAnswer || 
+                      (typeof correctAnswerValue === 'string' && isMultipleAnswerQuestion(correctAnswerValue));
     
     if (isMultiple) {
-      // For multiple answer questions, selectedAnswers contains letter labels like ["B", "C"]
-      // Convert array to string like "BC" for validation
-      const selectedString = selectedAnswers.join('');
-      return validateMultipleAnswers(selectedString, question.correctAnswer as string);
+      // For multiple answer questions, convert to letter format for validation
+      if (typeof correctAnswerValue === 'string') {
+        // Already in letter format, validate directly
+        const selectedString = selectedAnswers.join('');
+        return validateMultipleAnswers(selectedString, correctAnswerValue);
+      } else {
+        // Numeric format - convert both to indices for comparison
+        const selectedIndices = selectedAnswers.map(letter => letter.charCodeAt(0) - 65).sort();
+        const correctIndices = getAllCorrectAnswers(question).sort();
+        return JSON.stringify(selectedIndices) === JSON.stringify(correctIndices);
+      }
     } else {
-      // Single answer: selectedAnswers contains letter label like ["B"]
+      // Single answer: compare using indices
       const correctIndex = getCorrectAnswer(question);
-      const correctLabel = getOptionLabel(correctIndex);
-      return selectedAnswers.length === 1 && selectedAnswers[0] === correctLabel;
+      const selectedIndex = selectedAnswers.length === 1 ? (selectedAnswers[0].charCodeAt(0) - 65) : -1;
+      return selectedIndex === correctIndex;
     }
   };
 
@@ -527,7 +555,7 @@ const QuestionDetailPage = () => {
                     <h3 className="text-xl font-semibold mb-2">Incorrect</h3>
                     <p className="text-gray-600">
                       You selected: <strong>{selectedAnswers.join(', ')}</strong><br />
-                      Correct answer{getAllCorrectAnswers(question).length > 1 ? 's' : ''}: <strong>{formatAnswerForDisplay(question.correctAnswer as string)}</strong>
+                      Correct answer{getAllCorrectAnswers(question).length > 1 ? 's' : ''}: <strong>{getCorrectAnswerDisplay()}</strong>
                     </p>
                   </div>
                 )}
