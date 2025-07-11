@@ -59,6 +59,10 @@ export default function PdfCanvasRenderer({
     width: 0,
     height: 0,
   });
+  const [canvasDimensions, setCanvasDimensions] = useState({
+    width: 0,
+    height: 0,
+  });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -178,6 +182,12 @@ export default function PdfCanvasRenderer({
           canvas.width = scaledViewport.width;
           canvas.height = scaledViewport.height;
 
+          // Update canvas dimensions state
+          setCanvasDimensions({
+            width: scaledViewport.width,
+            height: scaledViewport.height,
+          });
+
           // Clear again after resizing to ensure clean state
           context.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -223,9 +233,27 @@ export default function PdfCanvasRenderer({
     };
   }, [pdfUrl, currentPage, zoom, onNumPagesLoad, setError, setCurrentPage, containerDimensions]);
 
+  // Determine if canvas is larger than container (needs scrolling)
+  const isCanvasLarger = canvasDimensions.width > containerDimensions.width || 
+                        canvasDimensions.height > containerDimensions.height;
+
   return (
-    <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-auto">
-      <canvas ref={canvasRef} className="max-w-none max-h-none object-contain"></canvas>
+    <div ref={containerRef} className="w-full h-full overflow-auto">
+      <div 
+        className={`w-full h-full ${isCanvasLarger ? 'flex items-start justify-start' : 'flex items-center justify-center'}`}
+        style={{
+          minWidth: isCanvasLarger ? `${canvasDimensions.width}px` : '100%',
+          minHeight: isCanvasLarger ? `${canvasDimensions.height}px` : '100%',
+        }}
+      >
+        <canvas 
+          ref={canvasRef} 
+          className="max-w-none max-h-none object-contain"
+          style={{
+            display: 'block',
+          }}
+        />
+      </div>
     </div>
   );
 }
