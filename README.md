@@ -19,7 +19,7 @@ This project has evolved into a comprehensive AWS certification preparation and 
 ### Core Functionality
 
 - **PDF Data Labeler**: Upload PDF documents, view them page by page, convert content to Markdown, and label specific sections (questions, answers, explanations) for quiz creation.
-- **Analytics Dashboard**: Comprehensive dashboard with interactive charts and visual analytics showing certificate statistics, quiz performance trends, user engagement metrics, and access code distribution.
+- **Analytics Dashboard**: Comprehensive dashboard with interactive charts and visual analytics showing certificate statistics, quiz performance trends over the last 30 days, user engagement metrics, and access code distribution with real-time data from completed Telegram bot quiz sessions.
 - **User Authentication**: Secure user registration and login using Passkeys (WebAuthn) with JWT for session management.
 - **Role-Based Access**: Protected routes ensure only authenticated users can access certain parts of the application.
 - **Telegram Quiz Bot**: Interactive bot for AWS certification practice with real-time quiz sessions, progress tracking, and detailed explanations.

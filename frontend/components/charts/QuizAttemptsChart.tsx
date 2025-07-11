@@ -9,6 +9,10 @@ interface QuizAttemptsChartProps {
 }
 
 export default function QuizAttemptsChart({ data }: QuizAttemptsChartProps) {
+  // Debug logging
+  console.log('QuizAttemptsChart received data:', data);
+  console.log('Data length:', data?.length || 0);
+  
   // Sort data by date
   const sortedData = [...data].sort((a, b) => {
     const dateA = new Date(a._id.year, a._id.month - 1, a._id.day);
