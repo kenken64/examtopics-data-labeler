@@ -7,14 +7,15 @@ const client = new MongoClient(uri);
 
 export const GET = withAuth(async (
   req: AuthenticatedRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     await client.connect();
     const db = client.db("awscert");
     const collection = db.collection("quizzes");
 
-    const certificateId = params.id;
+    const { id } = await params;
+    const certificateId = id;
 
     // Find the highest question_no for the given certificateId
     const lastQuiz = await collection

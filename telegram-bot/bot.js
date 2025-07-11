@@ -143,7 +143,7 @@ class CertificationBot {
     });
 
     // Handle quiz answer selection
-    this.bot.callbackQuery(/^answer_([A-D])$/, async (ctx) => {
+    this.bot.callbackQuery(/^answer_([A-F])$/, async (ctx) => {
       const selectedAnswer = ctx.match[1];
       await this.handleQuizAnswer(ctx, selectedAnswer);
     });
@@ -433,9 +433,9 @@ class CertificationBot {
   }
 
   parseAnswersToOptions(answersString) {
-    if (!answersString) return { A: '', B: '', C: '', D: '' };
+    if (!answersString) return { A: '', B: '', C: '', D: '', E: '', F: '' };
     
-    const options = { A: '', B: '', C: '', D: '' };
+    const options = { A: '', B: '', C: '', D: '', E: '', F: '' };
     
     // Split by lines and process each line
     const lines = answersString.split('\n').filter(line => line.trim());
@@ -444,7 +444,7 @@ class CertificationBot {
       const trimmedLine = line.trim();
       
       // Match patterns like "- A. Option text" or "A. Option text"
-      const match = trimmedLine.match(/^[-\s]*([A-D])\.\s*(.+)$/);
+      const match = trimmedLine.match(/^[-\s]*([A-F])\.\s*(.+)$/);
       if (match) {
         const [, letter, text] = match;
         options[letter] = text.trim();
@@ -488,14 +488,25 @@ class CertificationBot {
     }
 
     // Format question text
+    let questionOptions = 
+      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+      `D. ${currentQuestion.options.D || 'Option D not available'}`;
+    
+    // Add E and F options if they exist
+    if (currentQuestion.options.E) {
+      questionOptions += `\nE. ${currentQuestion.options.E}`;
+    }
+    if (currentQuestion.options.F) {
+      questionOptions += `\nF. ${currentQuestion.options.F}`;
+    }
+    
     const questionText = 
       `📝 Question ${questionNumber}/${totalQuestions}\n` +
       `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
       `${currentQuestion.question}\n\n` +
-      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
-      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
-      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
-      `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+      questionOptions + `\n\n` +
       (isMultiple ? `⚠️ Multiple answers required: Select ${normalizeAnswer(currentQuestion.correctAnswer).length} options` : '💡 Select one answer');
 
     // Create answer keyboard
@@ -505,14 +516,38 @@ class CertificationBot {
       // Multiple answer layout with confirm/clear buttons
       keyboard
         .text('A', 'answer_A').text('B', 'answer_B').row()
-        .text('C', 'answer_C').text('D', 'answer_D').row()
+        .text('C', 'answer_C').text('D', 'answer_D').row();
+      
+      // Add E and F if they exist
+      if (currentQuestion.options.E || currentQuestion.options.F) {
+        if (currentQuestion.options.E && currentQuestion.options.F) {
+          keyboard.text('E', 'answer_E').text('F', 'answer_F').row();
+        } else if (currentQuestion.options.E) {
+          keyboard.text('E', 'answer_E').row();
+        } else if (currentQuestion.options.F) {
+          keyboard.text('F', 'answer_F').row();
+        }
+      }
+      
+      keyboard
         .text('✅ Confirm Selection', 'confirm_selection').row()
         .text('🔄 Clear All', 'clear_selection');
     } else {
       // Single answer layout
       keyboard
         .text('A', 'answer_A').text('B', 'answer_B').row()
-        .text('C', 'answer_C').text('D', 'answer_D');
+        .text('C', 'answer_C').text('D', 'answer_D').row();
+      
+      // Add E and F if they exist
+      if (currentQuestion.options.E || currentQuestion.options.F) {
+        if (currentQuestion.options.E && currentQuestion.options.F) {
+          keyboard.text('E', 'answer_E').text('F', 'answer_F').row();
+        } else if (currentQuestion.options.E) {
+          keyboard.text('E', 'answer_E').row();
+        } else if (currentQuestion.options.F) {
+          keyboard.text('F', 'answer_F').row();
+        }
+      }
     }
 
     await ctx.reply(questionText, {
@@ -552,25 +587,40 @@ class CertificationBot {
       const questionNumber = session.currentQuestionIndex + 1;
       const totalQuestions = session.questions.length;
       
+      let questionOptions = 
+        `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+        `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+        `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+        `D. ${currentQuestion.options.D || 'Option D not available'}`;
+      
+      // Add E and F options if they exist
+      if (currentQuestion.options.E) {
+        questionOptions += `\nE. ${currentQuestion.options.E}`;
+      }
+      if (currentQuestion.options.F) {
+        questionOptions += `\nF. ${currentQuestion.options.F}`;
+      }
+      
       const questionText = 
         `📝 Question ${questionNumber}/${totalQuestions}\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
         `${currentQuestion.question}\n\n` +
-        `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
-        `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
-        `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
-        `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+        questionOptions + `\n\n` +
         `⚠️ Multiple answers required: Select ${requiredCount} options\n` +
         `✅ Selected: ${userSelections.length > 0 ? userSelections.join(', ') : 'None'} (${selectedCount}/${requiredCount})`;
 
       // Create updated keyboard with selected indicators
       const keyboard = new InlineKeyboard();
       
-      ['A', 'B', 'C', 'D'].forEach((option, index) => {
+      const availableOptions = ['A', 'B', 'C', 'D'];
+      if (currentQuestion.options.E) availableOptions.push('E');
+      if (currentQuestion.options.F) availableOptions.push('F');
+      
+      availableOptions.forEach((option, index) => {
         const isSelected = userSelections.includes(option);
         const buttonText = isSelected ? `✅ ${option}` : option;
         keyboard.text(buttonText, `answer_${option}`);
-        if (index % 2 === 1) keyboard.row();
+        if (index % 2 === 1 || index === availableOptions.length - 1) keyboard.row();
       });
       
       keyboard.text('✅ Confirm Selection', 'confirm_selection').row();
@@ -764,14 +814,25 @@ class CertificationBot {
     const questionNumber = session.currentQuestionIndex + 1;
     const totalQuestions = session.questions.length;
     
+    let questionOptions = 
+      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+      `D. ${currentQuestion.options.D || 'Option D not available'}`;
+    
+    // Add E and F options if they exist
+    if (currentQuestion.options.E) {
+      questionOptions += `\nE. ${currentQuestion.options.E}`;
+    }
+    if (currentQuestion.options.F) {
+      questionOptions += `\nF. ${currentQuestion.options.F}`;
+    }
+    
     const questionText = 
       `📝 Question ${questionNumber}/${totalQuestions}\n` +
       `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
       `${currentQuestion.question}\n\n` +
-      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
-      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
-      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
-      `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+      questionOptions + `\n\n` +
       `⚠️ Multiple answers required: Select ${requiredCount} options\n` +
       `✅ Selected: None (0/${requiredCount})`;
 
@@ -779,7 +840,20 @@ class CertificationBot {
     const keyboard = new InlineKeyboard();
     keyboard
       .text('A', 'answer_A').text('B', 'answer_B').row()
-      .text('C', 'answer_C').text('D', 'answer_D').row()
+      .text('C', 'answer_C').text('D', 'answer_D').row();
+    
+    // Add E and F if they exist
+    if (currentQuestion.options.E || currentQuestion.options.F) {
+      if (currentQuestion.options.E && currentQuestion.options.F) {
+        keyboard.text('E', 'answer_E').text('F', 'answer_F').row();
+      } else if (currentQuestion.options.E) {
+        keyboard.text('E', 'answer_E').row();
+      } else if (currentQuestion.options.F) {
+        keyboard.text('F', 'answer_F').row();
+      }
+    }
+    
+    keyboard
       .text('✅ Confirm Selection', 'confirm_selection').row()
       .text('🔄 Clear All', 'clear_selection');
 
