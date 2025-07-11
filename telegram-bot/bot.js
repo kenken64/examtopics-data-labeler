@@ -116,6 +116,16 @@ class CertificationBot {
       await this.handleRevision(ctx);
     });
 
+    // Menu command - show interactive command menu
+    this.bot.command('menu', async (ctx) => {
+      await this.handleCommandMenu(ctx);
+    });
+
+    // Commands command - alias for menu
+    this.bot.command('commands', async (ctx) => {
+      await this.handleCommandMenu(ctx);
+    });
+
     // Handle certificate selection
     this.bot.callbackQuery(/^cert_(.+)$/, async (ctx) => {
       const certificateId = ctx.match[1];
@@ -157,6 +167,17 @@ class CertificationBot {
     this.bot.callbackQuery('restart_quiz', async (ctx) => {
       await this.handleStart(ctx);
     });
+
+    // Handle command menu actions
+    this.bot.callbackQuery(/^menu_(.+)$/, async (ctx) => {
+      const action = ctx.match[1];
+      await this.handleMenuAction(ctx, action);
+    });
+
+    // Handle quick action menu
+    this.bot.callbackQuery('quick_menu', async (ctx) => {
+      await this.handleQuickMenu(ctx);
+    });
   }
 
   async handleStart(ctx) {
@@ -171,10 +192,11 @@ class CertificationBot {
       `📚 Quick Commands Reference:\n` +
       `• /start - Start a new quiz\n` +
       `• /help - Show detailed help guide\n` +
+      `• /menu - Show interactive command menu\n` +
       `• /bookmark <number> - Save a question for later\n` +
       `• /bookmarks - View your saved bookmarks\n` +
       `• /revision - Review questions you answered incorrectly\n\n` +
-      `💡 Type /help for detailed instructions and tips!\n\n` +
+      `💡 Type /menu for an interactive command menu or /help for detailed instructions!\n\n` +
       `Let's get started by selecting a certificate:`
     );
 
@@ -197,6 +219,12 @@ class CertificationBot {
       `   • Show this help guide with all commands\n` +
       `   • Displays detailed instructions for each command\n` +
       `   • Usage: Simply type /help\n\n` +
+      
+      `🎯 <b>/menu</b> or <b>/commands</b>\n` +
+      `   • Show interactive command menu with buttons\n` +
+      `   • Quick access to all bot functions\n` +
+      `   • Context-aware quick actions\n` +
+      `   • Usage: Simply type /menu\n\n` +
       
       `🔖 <b>/bookmark &lt;question_number&gt;</b>\n` +
       `   • Save a specific question for later review\n` +
@@ -722,7 +750,7 @@ class CertificationBot {
 
     const currentQuestion = session.questions[session.currentQuestionIndex];
     
-    // Validate that this is a multi-answer question
+    // Validate that this is a multiple-answer question
     if (!isMultipleAnswerQuestion(currentQuestion.correctAnswer)) {
       await ctx.reply('❌ This is not a multiple-answer question.');
       return;
@@ -1174,6 +1202,180 @@ class CertificationBot {
       await this.mongoClient.close();
     }
     await this.bot.stop();
+  }
+
+  async handleCommandMenu(ctx) {
+    const menuMessage = 
+      `🤖 <b>AWS Certification Bot - Command Menu</b>\n\n` +
+      `Choose a command to execute:\n\n` +
+      `📋 <b>Quiz Commands</b>\n` +
+      `🚀 Start New Quiz - Begin a fresh quiz session\n` +
+      `📚 Show Help Guide - Detailed instructions and tips\n\n` +
+      `🔖 <b>Bookmark Commands</b>\n` +
+      `💾 Add Bookmark - Save a specific question by number\n` +
+      `📑 View Bookmarks - See all your saved questions\n\n` +
+      `📖 <b>Study Commands</b>\n` +
+      `🔄 Revision Mode - Review questions you got wrong\n\n` +
+      `⚡ <b>Quick Actions</b>\n` +
+      `🎯 Quick Menu - Fast access to common actions\n\n` +
+      `💡 <i>Tip: You can also type these commands directly:</i>\n` +
+      `<code>/start</code> • <code>/help</code> • <code>/bookmarks</code> • <code>/revision</code>`;
+
+    const keyboard = new InlineKeyboard()
+      .text('🚀 Start Quiz', 'menu_start').text('📚 Help Guide', 'menu_help').row()
+      .text('💾 Add Bookmark', 'menu_bookmark').text('📑 View Bookmarks', 'menu_bookmarks').row()
+      .text('🔄 Revision Mode', 'menu_revision').row()
+      .text('⚡ Quick Menu', 'quick_menu').row()
+      .text('❌ Close Menu', 'menu_close');
+
+    await ctx.reply(menuMessage, {
+      reply_markup: keyboard,
+      parse_mode: 'HTML'
+    });
+  }
+
+  async handleMenuAction(ctx, action) {
+    try {
+      switch (action) {
+        case 'start':
+          await ctx.editMessageText('🚀 Starting new quiz...');
+          setTimeout(async () => {
+            await this.handleStart(ctx);
+          }, 1000);
+          break;
+
+        case 'help':
+          await ctx.editMessageText('📚 Loading help guide...');
+          setTimeout(async () => {
+            await this.handleHelp(ctx);
+          }, 1000);
+          break;
+
+        case 'bookmark':
+          await ctx.editMessageText(
+            `💾 <b>Add Bookmark</b>\n\n` +
+            `To bookmark a question, type:\n` +
+            `<code>/bookmark [question_number]</code>\n\n` +
+            `Example: <code>/bookmark 15</code>\n\n` +
+            `This will save question #15 for later review.`,
+            { parse_mode: 'HTML' }
+          );
+          break;
+
+        case 'bookmarks':
+          await ctx.editMessageText('📑 Loading your bookmarks...');
+          setTimeout(async () => {
+            await this.handleShowBookmarks(ctx);
+          }, 1000);
+          break;
+
+        case 'revision':
+          await ctx.editMessageText('🔄 Loading revision mode...');
+          setTimeout(async () => {
+            await this.handleRevision(ctx);
+          }, 1000);
+          break;
+
+        case 'close':
+          await ctx.editMessageText('✅ Menu closed. Type /menu to open it again.');
+          break;
+
+        case 'current_question':
+          if (this.userSessions.has(ctx.from.id)) {
+            await ctx.editMessageText('📝 Loading current question...');
+            setTimeout(async () => {
+              await this.showCurrentQuestion(ctx);
+            }, 1000);
+          } else {
+            await ctx.editMessageText('❌ No active quiz session. Start a new quiz first.');
+          }
+          break;
+
+        case 'restart':
+          await ctx.editMessageText('🔄 Restarting quiz...');
+          setTimeout(async () => {
+            await this.handleStart(ctx);
+          }, 1000);
+          break;
+
+        case 'end_quiz':
+          const userId = ctx.from.id;
+          if (this.userSessions.has(userId)) {
+            this.userSessions.delete(userId);
+            this.userSelections.delete(userId);
+            await ctx.editMessageText('🏁 Quiz session ended. Type /start to begin a new quiz.');
+          } else {
+            await ctx.editMessageText('❌ No active quiz session to end.');
+          }
+          break;
+
+        case 'bookmark_current':
+          const session = this.userSessions.get(ctx.from.id);
+          if (session && session.questions) {
+            const currentQuestion = session.questions[session.currentQuestionIndex];
+            if (currentQuestion) {
+              await this.saveBookmark(ctx.from.id, session, currentQuestion);
+              await ctx.editMessageText(`💾 Current question #${currentQuestion.question_no} bookmarked successfully!`);
+            } else {
+              await ctx.editMessageText('❌ No current question to bookmark.');
+            }
+          } else {
+            await ctx.editMessageText('❌ No active quiz session. Start a quiz first.');
+          }
+          break;
+
+        default:
+          await ctx.editMessageText('❌ Unknown command. Type /menu to see available options.');
+      }
+    } catch (error) {
+      console.error('Error handling menu action:', error);
+      await ctx.reply('❌ An error occurred. Please try again.');
+    }
+  }
+
+  async handleQuickMenu(ctx) {
+    const userId = ctx.from.id;
+    const session = this.userSessions.get(userId);
+    
+    let menuMessage = `⚡ <b>Quick Actions Menu</b>\n\n`;
+    
+    if (session && session.questions) {
+      // User is in an active quiz
+      menuMessage += 
+        `🎯 <b>Active Quiz Session</b>\n` +
+        `Certificate: ${session.certificate.name}\n` +
+        `Progress: ${session.currentQuestionIndex + 1}/${session.questions.length}\n` +
+        `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}\n\n` +
+        `<b>Quick Actions:</b>\n`;
+      
+      const keyboard = new InlineKeyboard()
+        .text('📝 Current Question', 'menu_current_question').row()
+        .text('🔄 Restart Quiz', 'menu_restart').text('🏁 End Quiz', 'menu_end_quiz').row()
+        .text('💾 Bookmark Current', 'menu_bookmark_current').row()
+        .text('📑 View Bookmarks', 'menu_bookmarks').text('🔄 Revision Mode', 'menu_revision').row()
+        .text('📚 Help', 'menu_help').text('❌ Close', 'menu_close');
+      
+      await ctx.editMessageText(menuMessage, {
+        reply_markup: keyboard,
+        parse_mode: 'HTML'
+      });
+    } else {
+      // No active session
+      menuMessage += 
+        `🎯 <b>No Active Quiz Session</b>\n\n` +
+        `<b>Quick Actions:</b>\n`;
+      
+      const keyboard = new InlineKeyboard()
+        .text('🚀 Start New Quiz', 'menu_start').row()
+        .text('📑 View Bookmarks', 'menu_bookmarks').text('🔄 Revision Mode', 'menu_revision').row()
+        .text('📚 Help Guide', 'menu_help').row()
+        .text('❌ Close', 'menu_close');
+      
+      await ctx.editMessageText(menuMessage, {
+        reply_markup: keyboard,
+        parse_mode: 'HTML'
+      });
+    }
   }
 }
 
