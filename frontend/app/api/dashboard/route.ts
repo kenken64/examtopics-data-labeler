@@ -70,12 +70,7 @@ export async function GET() {
           uniqueUsers: { $addToSet: '$userId' },
           totalScore: { $sum: '$score' },
           totalPossible: { $sum: '$totalQuestions' },
-          avgScore: { 
-            $ifNull: [
-              { $avg: { $divide: ['$score', '$totalQuestions'] } },
-              0
-            ]
-          }
+          avgScore: { $avg: { $divide: ['$score', '$totalQuestions'] } }
         }
       },
       {
@@ -149,7 +144,13 @@ export async function GET() {
           accessCode: '$_id',
           userCount: { $size: '$uniqueUsers' },
           totalAttempts: 1,
-          avgScore: { $multiply: ['$avgScore', 100] }
+          avgScore: { 
+            $cond: {
+              if: { $eq: ['$avgScore', null] },
+              then: 0,
+              else: { $multiply: ['$avgScore', 100] }
+            }
+          }
         }
       },
       {
