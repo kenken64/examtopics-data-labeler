@@ -678,7 +678,6 @@ export default function Home() {
 
       {/* Explanatory text below buttons */}
       <div className="mb-4 text-xs text-gray-600 text-center">
-        <p><strong>Standard:</strong> Fast document parsing (good for text-based PDFs)</p>
         <p><strong>AI OCR:</strong> Advanced image recognition for scanned documents (requires OpenAI API)</p>
       </div>
 
