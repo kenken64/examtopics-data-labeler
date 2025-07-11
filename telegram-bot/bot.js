@@ -8,14 +8,18 @@ require('dotenv').config();
 
 /**
  * Normalizes answer format to consistent format without spaces
- * @param {string} answer - Answer in various formats like "B C", "BC", "A B C"
+ * @param {string|number|null|undefined} answer - Answer in various formats like "B C", "BC", "A B C"
  * @returns {string} Normalized answer like "BC", "ABC"
  */
 function normalizeAnswer(answer) {
-  if (!answer) return '';
+  // Handle non-string inputs
+  if (!answer && answer !== 0) return '';
+  
+  // Convert to string if it's a number
+  const answerStr = String(answer);
   
   // Remove spaces and convert to uppercase
-  const normalized = answer.replace(/\s+/g, '').toUpperCase();
+  const normalized = answerStr.replace(/\s+/g, '').toUpperCase();
   
   // Sort letters alphabetically for consistent comparison
   return normalized.split('').sort().join('');
@@ -23,11 +27,11 @@ function normalizeAnswer(answer) {
 
 /**
  * Checks if a question has multiple correct answers
- * @param {string} correctAnswer - The correct answer string
+ * @param {string|number|null|undefined} correctAnswer - The correct answer string
  * @returns {boolean} True if multiple answers are required
  */
 function isMultipleAnswerQuestion(correctAnswer) {
-  if (!correctAnswer) return false;
+  if (!correctAnswer && correctAnswer !== 0) return false;
   
   const normalized = normalizeAnswer(correctAnswer);
   return normalized.length > 1;
@@ -35,17 +39,18 @@ function isMultipleAnswerQuestion(correctAnswer) {
 
 /**
  * Validates if selected answers match the correct answer(s)
- * @param {string[]|string} selectedAnswers - Array of selected answer letters or string of answers
- * @param {string} correctAnswer - The correct answer string
+ * @param {string[]|string|null|undefined} selectedAnswers - Array of selected answer letters or string of answers
+ * @param {string|number|null|undefined} correctAnswer - The correct answer string
  * @returns {boolean} True if the selection is correct
  */
 function validateMultipleAnswers(selectedAnswers, correctAnswer) {
-  if (!correctAnswer) return false;
+  if (!correctAnswer && correctAnswer !== 0) return false;
+  if (!selectedAnswers) return false;
   
   // Convert selectedAnswers to string if it's an array
   const selectedString = Array.isArray(selectedAnswers) 
     ? selectedAnswers.join('') 
-    : selectedAnswers;
+    : String(selectedAnswers);
   
   // Normalize both for comparison
   const normalizedSelected = normalizeAnswer(selectedString);
@@ -56,11 +61,11 @@ function validateMultipleAnswers(selectedAnswers, correctAnswer) {
 
 /**
  * Formats answer for display (adds spaces between letters)
- * @param {string} answer - Answer string like "BC"
+ * @param {string|number|null|undefined} answer - Answer string like "BC"
  * @returns {string} Formatted string like "B, C"
  */
 function formatAnswerForDisplay(answer) {
-  if (!answer) return '';
+  if (!answer && answer !== 0) return '';
   
   const normalized = normalizeAnswer(answer);
   return normalized.split('').join(', ');

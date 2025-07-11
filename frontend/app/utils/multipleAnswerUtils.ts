@@ -14,11 +14,15 @@
  * @param answer - Answer in various formats like "B C", "BC", "A B C"
  * @returns Normalized answer like "BC", "ABC"
  */
-export function normalizeAnswer(answer: string): string {
-  if (!answer) return '';
+export function normalizeAnswer(answer: string | number | null | undefined): string {
+  // Handle non-string inputs
+  if (!answer && answer !== 0) return '';
+  
+  // Convert to string if it's a number
+  const answerStr = String(answer);
   
   // Remove spaces and convert to uppercase
-  const normalized = answer.replace(/\s+/g, '').toUpperCase();
+  const normalized = answerStr.replace(/\s+/g, '').toUpperCase();
   
   // Sort letters alphabetically for consistent comparison
   return normalized.split('').sort().join('');
@@ -29,8 +33,8 @@ export function normalizeAnswer(answer: string): string {
  * @param correctAnswer - The correct answer string
  * @returns True if multiple answers are required
  */
-export function isMultipleAnswerQuestion(correctAnswer: string): boolean {
-  if (!correctAnswer) return false;
+export function isMultipleAnswerQuestion(correctAnswer: string | number | null | undefined): boolean {
+  if (!correctAnswer && correctAnswer !== 0) return false;
   
   const normalized = normalizeAnswer(correctAnswer);
   return normalized.length > 1;
@@ -43,15 +47,16 @@ export function isMultipleAnswerQuestion(correctAnswer: string): boolean {
  * @returns True if the selection is correct
  */
 export function validateMultipleAnswers(
-  selectedAnswers: string[] | string, 
-  correctAnswer: string
+  selectedAnswers: string[] | string | null | undefined, 
+  correctAnswer: string | number | null | undefined
 ): boolean {
-  if (!correctAnswer) return false;
+  if (!correctAnswer && correctAnswer !== 0) return false;
+  if (!selectedAnswers) return false;
   
   // Convert selectedAnswers to string if it's an array
   const selectedString = Array.isArray(selectedAnswers) 
     ? selectedAnswers.join('') 
-    : selectedAnswers;
+    : String(selectedAnswers);
   
   // Normalize both for comparison
   const normalizedSelected = normalizeAnswer(selectedString);
@@ -65,10 +70,11 @@ export function validateMultipleAnswers(
  * @param answer - Answer string like "BC" or "B C"
  * @returns Array of individual letters like ["B", "C"]
  */
-export function answerToArray(answer: string): string[] {
-  if (!answer) return [];
+export function answerToArray(answer: string | number | null | undefined): string[] {
+  if (!answer && answer !== 0) return [];
   
-  return answer.replace(/\s+/g, '').toUpperCase().split('').sort();
+  const answerStr = String(answer);
+  return answerStr.replace(/\s+/g, '').toUpperCase().split('').sort();
 }
 
 /**
@@ -76,8 +82,8 @@ export function answerToArray(answer: string): string[] {
  * @param answer - Answer string like "BC"
  * @returns Formatted string like "B, C"
  */
-export function formatAnswerForDisplay(answer: string): string {
-  if (!answer) return '';
+export function formatAnswerForDisplay(answer: string | number | null | undefined): string {
+  if (!answer && answer !== 0) return '';
   
   const normalized = normalizeAnswer(answer);
   return normalized.split('').join(', ');
@@ -90,7 +96,7 @@ export function formatAnswerForDisplay(answer: string): string {
  * @param correctAnswer - The correct answer string
  * @returns Information about the correct combination
  */
-export function getAnswerInfo(availableOptions: string[], correctAnswer: string) {
+export function getAnswerInfo(availableOptions: string[], correctAnswer: string | number | null | undefined) {
   const isMultiple = isMultipleAnswerQuestion(correctAnswer);
   const correctLetters = answerToArray(correctAnswer);
   const requiredCount = correctLetters.length;
@@ -115,7 +121,7 @@ export function getAnswerInfo(availableOptions: string[], correctAnswer: string)
  */
 export function getSelectionState(
   selectedAnswers: string[],
-  correctAnswer: string,
+  correctAnswer: string | number | null | undefined,
   showCorrect: boolean = false
 ) {
   const correctLetters = answerToArray(correctAnswer);
