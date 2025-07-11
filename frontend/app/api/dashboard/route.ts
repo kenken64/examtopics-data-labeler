@@ -70,7 +70,12 @@ export async function GET() {
           uniqueUsers: { $addToSet: '$userId' },
           totalScore: { $sum: '$score' },
           totalPossible: { $sum: '$totalQuestions' },
-          avgScore: { $avg: { $divide: ['$score', '$totalQuestions'] } }
+          avgScore: { 
+            $ifNull: [
+              { $avg: { $divide: ['$score', '$totalQuestions'] } },
+              0
+            ]
+          }
         }
       },
       {
@@ -79,12 +84,22 @@ export async function GET() {
           uniqueUsers: { $size: '$uniqueUsers' },
           totalScore: 1,
           totalPossible: 1,
-          avgScore: { $multiply: ['$avgScore', 100] }, // Convert to percentage
-          overallAccuracy: { 
-            $multiply: [
-              { $divide: ['$totalScore', '$totalPossible'] }, 
-              100
+          avgScore: { 
+            $ifNull: [
+              { $multiply: ['$avgScore', 100] }, 
+              0
             ] 
+          }, // Convert to percentage with null check
+          overallAccuracy: { 
+            $ifNull: [
+              { 
+                $multiply: [
+                  { $divide: ['$totalScore', '$totalPossible'] }, 
+                  100
+                ] 
+              },
+              0
+            ]
           }
         }
       }

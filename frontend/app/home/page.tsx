@@ -217,9 +217,9 @@ export default function Dashboard() {
               <Award className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{data.quizAttempts.avgScore.toFixed(1)}%</div>
+              <div className="text-2xl font-bold">{(data.quizAttempts.avgScore || 0).toFixed(1)}%</div>
               <p className="text-xs text-muted-foreground">
-                {data.quizAttempts.overallAccuracy.toFixed(1)}% overall accuracy
+                {(data.quizAttempts.overallAccuracy || 0).toFixed(1)}% overall accuracy
               </p>
             </CardContent>
           </Card>
@@ -314,7 +314,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Avg per Access Code</span>
                   <Badge variant="outline">
-                    {data.accessCodes.avgQuestionsPerCode.toFixed(1)}
+                    {(data.accessCodes.avgQuestionsPerCode || 0).toFixed(1)}
                   </Badge>
                 </div>
               </div>
@@ -401,7 +401,7 @@ export default function Dashboard() {
                       <div className="text-right">
                         <div className="font-semibold">{engagement.userCount} users</div>
                         <div className="text-xs text-muted-foreground">
-                          {engagement.avgScore.toFixed(1)}% avg score
+                          {(engagement.avgScore || 0).toFixed(1)}% avg score
                         </div>
                       </div>
                     </div>

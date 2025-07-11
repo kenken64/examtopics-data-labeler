@@ -6,7 +6,7 @@
   <img src="screen1.png" alt="ExamBot Web Application Interface" width="800">
   <p><em>Web Application - PDF Data Labeler and Management Interface</em></p>
   
-  <img src="screen2.png" alt="ExamBot Telegram Bot Interface" width="800">
+  <img src="screen2.png" alt="ExamBot Telegram Bot Interface" width="400">
   <p><em>Telegram Bot - Interactive Quiz Session</em></p>
 </div>
 
