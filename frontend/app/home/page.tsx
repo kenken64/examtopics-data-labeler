@@ -27,6 +27,7 @@ import CertificateStatsChart from "@/components/charts/CertificateStatsChart";
 import QuizAttemptsChart from "@/components/charts/QuizAttemptsChart";
 import AccessCodeStatusChart from "@/components/charts/AccessCodeStatusChart";
 import UserEngagementChart from "@/components/charts/UserEngagementChart";
+import PayeeStatusChart from "@/components/charts/PayeeStatusChart";
 
 interface DashboardData {
   certificates: Array<{
@@ -69,7 +70,7 @@ interface DashboardData {
     uniqueUsers: number;
   };
   payees: Array<{
-    _id: string;
+    paymentStatus: string;
     count: number;
   }>;
   lastUpdated: string;
@@ -161,10 +162,6 @@ export default function Dashboard() {
 
   // Calculate totals for overview cards
   const totalQuestions = data.certificates.reduce((sum, cert) => sum + cert.questionCount, 0);
-  const payeesByStatus = data.payees.reduce((acc, payee) => {
-    acc[payee._id] = payee.count;
-    return acc;
-  }, {} as Record<string, number>);
 
   return (
     <div className="min-h-screen p-8 pl-14 sm:pl-16 lg:pl-20">
@@ -298,7 +295,7 @@ export default function Dashboard() {
             </Card>
 
             {/* User Engagement Chart */}
-            <Card className="lg:col-span-2">
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Users className="mr-2 h-5 w-5" />
@@ -312,6 +309,24 @@ export default function Dashboard() {
                 <UserEngagementChart data={data.userEngagement} />
               </CardContent>
             </Card>
+
+            {/* Payee Status Chart */}
+            {data.payees.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <CreditCard className="mr-2 h-5 w-5" />
+                    Payment Status
+                  </CardTitle>
+                  <CardDescription>
+                    Customer payment status distribution
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PayeeStatusChart data={data.payees} />
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
 
@@ -492,33 +507,6 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-
-          {/* Payee Statistics */}
-          {Object.keys(payeesByStatus).length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <CreditCard className="mr-2 h-5 w-5" />
-                  Payee Status
-                </CardTitle>
-                <CardDescription>
-                  Customer payment status distribution
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {Object.entries(payeesByStatus).map(([status, count]) => (
-                    <div key={status} className="flex items-center justify-between">
-                      <span className="text-sm font-medium capitalize">{status}</span>
-                      <Badge variant={status === 'paid' ? 'default' : 'secondary'}>
-                        {count}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Quick Actions */}

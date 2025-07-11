@@ -198,8 +198,17 @@ export async function GET() {
     const payeeStats = await db.collection('payees').aggregate([
       {
         $group: {
-          _id: '$paymentStatus',
+          _id: { 
+            $ifNull: ['$paymentStatus', 'Unknown'] 
+          },
           count: { $sum: 1 }
+        }
+      },
+      {
+        $project: {
+          paymentStatus: '$_id',
+          count: 1,
+          _id: 0
         }
       }
     ]).toArray();
