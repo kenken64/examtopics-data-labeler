@@ -9,6 +9,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 interface PdfCanvasRendererProps {
   pdfUrl: string;
   currentPage: number;
+  zoom?: number;
   onNumPagesLoad: (numPages: number) => void;
   setError: (error: string | null) => void;
   setCurrentPage: (page: number) => void;
@@ -17,15 +18,23 @@ interface PdfCanvasRendererProps {
 /**
  * PdfCanvasRenderer Component
  * 
- * This component renders PDF pages on an HTML5 canvas with proper scaling and error handling.
+ * This component renders PDF pages on an HTML5 canvas with proper scaling, zoom support, and error handling.
  * It addresses the common PDF.js issue of "Cannot use the same canvas during multiple render() operations"
  * by implementing proper render task cancellation and state management.
  * 
  * Key Features:
  * - Proper render task cancellation to prevent overlapping operations
  * - Responsive canvas sizing based on container dimensions
+ * - Mouse wheel zoom support with zoom factor control
  * - Robust error handling for PDF loading and rendering
  * - Prevention of memory leaks through proper cleanup
+ * - Smooth zooming with overflow scrolling support
+ * 
+ * Zoom Functionality:
+ * - Zoom prop controls the zoom factor (0.5x to 3.0x)
+ * - Base scale is calculated to fit the PDF to container
+ * - Final scale = base scale × zoom factor
+ * - Canvas allows scrolling when zoomed beyond container size
  * 
  * Fixes Applied:
  * - Added isRenderingRef flag to prevent overlapping render operations
@@ -36,6 +45,7 @@ interface PdfCanvasRendererProps {
 export default function PdfCanvasRenderer({
   pdfUrl,
   currentPage,
+  zoom = 1.0,
   onNumPagesLoad,
   setError,
   setCurrentPage,
@@ -151,11 +161,14 @@ export default function PdfCanvasRenderer({
 
           const scaleX = containerDimensions.width / viewport.width;
           const scaleY = containerDimensions.height / viewport.height;
-          const scale = Math.min(scaleX, scaleY); // Fit to container
+          const baseScale = Math.min(scaleX, scaleY); // Fit to container
+          const finalScale = baseScale * zoom; // Apply zoom factor
 
-          console.log("Calculated Scale:", scale);
+          console.log("Calculated Base Scale:", baseScale);
+          console.log("Zoom Factor:", zoom);
+          console.log("Final Scale:", finalScale);
 
-          const scaledViewport = page.getViewport({ scale: scale, rotation: page.rotate });
+          const scaledViewport = page.getViewport({ scale: finalScale, rotation: page.rotate });
 
           console.log("Scaled Viewport:", scaledViewport.width, scaledViewport.height);
 
@@ -208,11 +221,11 @@ export default function PdfCanvasRenderer({
       }
       isRenderingRef.current = false;
     };
-  }, [pdfUrl, currentPage, onNumPagesLoad, setError, setCurrentPage, containerDimensions]);
+  }, [pdfUrl, currentPage, zoom, onNumPagesLoad, setError, setCurrentPage, containerDimensions]);
 
   return (
-    <div ref={containerRef} className="w-full h-full flex items-center justify-center">
-      <canvas ref={canvasRef} className="max-w-full max-h-full h-auto object-contain"></canvas>
+    <div ref={containerRef} className="w-full h-full flex items-center justify-center overflow-auto">
+      <canvas ref={canvasRef} className="max-w-none max-h-none object-contain"></canvas>
     </div>
   );
 }
