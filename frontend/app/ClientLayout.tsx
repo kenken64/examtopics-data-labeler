@@ -11,7 +11,7 @@ interface ClientLayoutProps {
 
 export default function ClientLayout({ children }: ClientLayoutProps) {
   const pathname = usePathname();
-  const showSlidingMenu = pathname !== '/' && pathname !== '/register';
+  const showSlidingMenu = pathname !== '/' && pathname !== '/register' && pathname !== '/fullscreen-pdf';
 
   return (
     <ThemeProvider>

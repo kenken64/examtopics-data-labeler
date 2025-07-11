@@ -2,12 +2,82 @@ const { Bot, InlineKeyboard } = require('grammy');
 const { MongoClient, ObjectId } = require('mongodb');
 require('dotenv').config();
 
+/**
+ * Utility functions for handling multiple-choice questions with multiple correct answers
+ */
+
+/**
+ * Normalizes answer format to consistent format without spaces
+ * @param {string|number|null|undefined} answer - Answer in various formats like "B C", "BC", "A B C"
+ * @returns {string} Normalized answer like "BC", "ABC"
+ */
+function normalizeAnswer(answer) {
+  // Handle non-string inputs
+  if (!answer && answer !== 0) return '';
+  
+  // Convert to string if it's a number
+  const answerStr = String(answer);
+  
+  // Remove spaces and convert to uppercase
+  const normalized = answerStr.replace(/\s+/g, '').toUpperCase();
+  
+  // Sort letters alphabetically for consistent comparison
+  return normalized.split('').sort().join('');
+}
+
+/**
+ * Checks if a question has multiple correct answers
+ * @param {string|number|null|undefined} correctAnswer - The correct answer string
+ * @returns {boolean} True if multiple answers are required
+ */
+function isMultipleAnswerQuestion(correctAnswer) {
+  if (!correctAnswer && correctAnswer !== 0) return false;
+  
+  const normalized = normalizeAnswer(correctAnswer);
+  return normalized.length > 1;
+}
+
+/**
+ * Validates if selected answers match the correct answer(s)
+ * @param {string[]|string|null|undefined} selectedAnswers - Array of selected answer letters or string of answers
+ * @param {string|number|null|undefined} correctAnswer - The correct answer string
+ * @returns {boolean} True if the selection is correct
+ */
+function validateMultipleAnswers(selectedAnswers, correctAnswer) {
+  if (!correctAnswer && correctAnswer !== 0) return false;
+  if (!selectedAnswers) return false;
+  
+  // Convert selectedAnswers to string if it's an array
+  const selectedString = Array.isArray(selectedAnswers) 
+    ? selectedAnswers.join('') 
+    : String(selectedAnswers);
+  
+  // Normalize both for comparison
+  const normalizedSelected = normalizeAnswer(selectedString);
+  const normalizedCorrect = normalizeAnswer(correctAnswer);
+  
+  return normalizedSelected === normalizedCorrect;
+}
+
+/**
+ * Formats answer for display (adds spaces between letters)
+ * @param {string|number|null|undefined} answer - Answer string like "BC"
+ * @returns {string} Formatted string like "B, C"
+ */
+function formatAnswerForDisplay(answer) {
+  if (!answer && answer !== 0) return '';
+  
+  const normalized = normalizeAnswer(answer);
+  return normalized.split('').join(', ');
+}
+
 class CertificationBot {
   constructor() {
     this.bot = new Bot(process.env.BOT_TOKEN);
     this.mongoClient = new MongoClient(process.env.MONGODB_URI);
     this.db = null;
     this.userSessions = new Map(); // Store user quiz sessions
+    this.userSelections = new Map(); // Store user's current answer selections for multiple choice
     
     this.initializeBot();
   }
@@ -46,6 +116,16 @@ class CertificationBot {
       await this.handleRevision(ctx);
     });
 
+    // Menu command - show interactive command menu
+    this.bot.command('menu', async (ctx) => {
+      await this.handleCommandMenu(ctx);
+    });
+
+    // Commands command - alias for menu
+    this.bot.command('commands', async (ctx) => {
+      await this.handleCommandMenu(ctx);
+    });
+
     // Handle certificate selection
     this.bot.callbackQuery(/^cert_(.+)$/, async (ctx) => {
       const certificateId = ctx.match[1];
@@ -68,6 +148,16 @@ class CertificationBot {
       await this.handleQuizAnswer(ctx, selectedAnswer);
     });
 
+    // Handle confirm selection for multiple choice questions
+    this.bot.callbackQuery('confirm_selection', async (ctx) => {
+      await this.handleConfirmSelection(ctx);
+    });
+
+    // Handle clear selection for multiple choice questions
+    this.bot.callbackQuery('clear_selection', async (ctx) => {
+      await this.handleClearSelection(ctx);
+    });
+
     // Handle next question
     this.bot.callbackQuery('next_question', async (ctx) => {
       await this.handleNextQuestion(ctx);
@@ -76,6 +166,17 @@ class CertificationBot {
     // Handle quiz restart
     this.bot.callbackQuery('restart_quiz', async (ctx) => {
       await this.handleStart(ctx);
+    });
+
+    // Handle command menu actions
+    this.bot.callbackQuery(/^menu_(.+)$/, async (ctx) => {
+      const action = ctx.match[1];
+      await this.handleMenuAction(ctx, action);
+    });
+
+    // Handle quick action menu
+    this.bot.callbackQuery('quick_menu', async (ctx) => {
+      await this.handleQuickMenu(ctx);
     });
   }
 
@@ -91,10 +192,11 @@ class CertificationBot {
       `📚 Quick Commands Reference:\n` +
       `• /start - Start a new quiz\n` +
       `• /help - Show detailed help guide\n` +
+      `• /menu - Show interactive command menu\n` +
       `• /bookmark <number> - Save a question for later\n` +
       `• /bookmarks - View your saved bookmarks\n` +
       `• /revision - Review questions you answered incorrectly\n\n` +
-      `💡 Type /help for detailed instructions and tips!\n\n` +
+      `💡 Type /menu for an interactive command menu or /help for detailed instructions!\n\n` +
       `Let's get started by selecting a certificate:`
     );
 
@@ -117,6 +219,12 @@ class CertificationBot {
       `   • Show this help guide with all commands\n` +
       `   • Displays detailed instructions for each command\n` +
       `   • Usage: Simply type /help\n\n` +
+      
+      `🎯 <b>/menu</b> or <b>/commands</b>\n` +
+      `   • Show interactive command menu with buttons\n` +
+      `   • Quick access to all bot functions\n` +
+      `   • Context-aware quick actions\n` +
+      `   • Usage: Simply type /menu\n\n` +
       
       `🔖 <b>/bookmark &lt;question_number&gt;</b>\n` +
       `   • Save a specific question for later review\n` +
@@ -369,6 +477,16 @@ class CertificationBot {
       return;
     }
 
+    // Check if this is a multiple answer question
+    const isMultiple = isMultipleAnswerQuestion(currentQuestion.correctAnswer);
+    
+    // Clear any previous selections for this question
+    if (!this.userSelections.has(userId)) {
+      this.userSelections.set(userId, []);
+    } else {
+      this.userSelections.set(userId, []);
+    }
+
     // Format question text
     const questionText = 
       `📝 Question ${questionNumber}/${totalQuestions}\n` +
@@ -377,12 +495,25 @@ class CertificationBot {
       `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
       `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
       `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
-      `D. ${currentQuestion.options.D || 'Option D not available'}`;
+      `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+      (isMultiple ? `⚠️ Multiple answers required: Select ${normalizeAnswer(currentQuestion.correctAnswer).length} options` : '💡 Select one answer');
 
     // Create answer keyboard
-    const keyboard = new InlineKeyboard()
-      .text('A', 'answer_A').text('B', 'answer_B').row()
-      .text('C', 'answer_C').text('D', 'answer_D');
+    const keyboard = new InlineKeyboard();
+    
+    if (isMultiple) {
+      // Multiple answer layout with confirm/clear buttons
+      keyboard
+        .text('A', 'answer_A').text('B', 'answer_B').row()
+        .text('C', 'answer_C').text('D', 'answer_D').row()
+        .text('✅ Confirm Selection', 'confirm_selection').row()
+        .text('🔄 Clear All', 'clear_selection');
+    } else {
+      // Single answer layout
+      keyboard
+        .text('A', 'answer_A').text('B', 'answer_B').row()
+        .text('C', 'answer_C').text('D', 'answer_D');
+    }
 
     await ctx.reply(questionText, {
       reply_markup: keyboard
@@ -399,15 +530,167 @@ class CertificationBot {
     }
 
     const currentQuestion = session.questions[session.currentQuestionIndex];
-    const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
+    const isMultiple = isMultipleAnswerQuestion(currentQuestion.correctAnswer);
+    
+    if (isMultiple) {
+      // Handle multi-answer question selection
+      let userSelections = this.userSelections.get(userId) || [];
+      
+      // Toggle selection
+      if (userSelections.includes(selectedAnswer)) {
+        userSelections = userSelections.filter(ans => ans !== selectedAnswer);
+      } else {
+        userSelections.push(selectedAnswer);
+        userSelections.sort(); // Keep selections sorted
+      }
+      
+      this.userSelections.set(userId, userSelections);
+      
+      // Update the message to show current selections
+      const requiredCount = normalizeAnswer(currentQuestion.correctAnswer).length;
+      const selectedCount = userSelections.length;
+      const questionNumber = session.currentQuestionIndex + 1;
+      const totalQuestions = session.questions.length;
+      
+      const questionText = 
+        `📝 Question ${questionNumber}/${totalQuestions}\n` +
+        `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
+        `${currentQuestion.question}\n\n` +
+        `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+        `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+        `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+        `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+        `⚠️ Multiple answers required: Select ${requiredCount} options\n` +
+        `✅ Selected: ${userSelections.length > 0 ? userSelections.join(', ') : 'None'} (${selectedCount}/${requiredCount})`;
+
+      // Create updated keyboard with selected indicators
+      const keyboard = new InlineKeyboard();
+      
+      ['A', 'B', 'C', 'D'].forEach((option, index) => {
+        const isSelected = userSelections.includes(option);
+        const buttonText = isSelected ? `✅ ${option}` : option;
+        keyboard.text(buttonText, `answer_${option}`);
+        if (index % 2 === 1) keyboard.row();
+      });
+      
+      keyboard.text('✅ Confirm Selection', 'confirm_selection').row();
+      keyboard.text('🔄 Clear All', 'clear_selection');
+
+      await ctx.editMessageText(questionText, {
+        reply_markup: keyboard
+      });
+      
+    } else {
+      // Handle single-answer question (original logic)
+      const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
+      
+      // Store answer
+      session.answers.push({
+        questionId: currentQuestion._id,
+        selectedAnswer: selectedAnswer,
+        correctAnswer: currentQuestion.correctAnswer,
+        isCorrect: isCorrect
+      });
+
+      if (isCorrect) {
+        session.correctAnswers++;
+        
+        // Show correct answer message
+        await ctx.editMessageText(
+          `✅ Correct!\n\n` +
+          `Your answer: ${selectedAnswer}\n` +
+          `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`
+        );
+
+        // Move to next question or show results
+        if (session.currentQuestionIndex < session.questions.length - 1) {
+          session.currentQuestionIndex++;
+          
+          setTimeout(async () => {
+            await this.showCurrentQuestion(ctx);
+          }, 2000);
+        } else {
+          await this.showQuizResults(ctx);
+        }
+      } else {
+        // Save wrong answer to database
+        await this.saveWrongAnswer(userId, session, currentQuestion, selectedAnswer);
+        
+        // Show wrong answer with explanation
+        const explanation = currentQuestion.explanation || 'No explanation available.';
+        
+        const keyboard = new InlineKeyboard();
+        
+        if (session.currentQuestionIndex < session.questions.length - 1) {
+          keyboard.text('Next Question ➡️', 'next_question');
+        } else {
+          keyboard.text('Show Results 📊', 'next_question');
+        }
+
+        await ctx.editMessageText(
+          `❌ Wrong! Your answer: ${selectedAnswer}\n\n` +
+          `The correct answer was: ${currentQuestion.correctAnswer}\n\n` +
+          `📖 Explanation:\n${explanation}\n\n` +
+          `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`,
+          {
+            reply_markup: keyboard
+          }
+        );
+      }
+    }
+  }
+
+  async handleConfirmSelection(ctx) {
+    const userId = ctx.from.id;
+    const session = this.userSessions.get(userId);
+
+    if (!session || !session.questions) {
+      await ctx.reply('❌ Session error. Please use /start to begin again.');
+      return;
+    }
+
+    const currentQuestion = session.questions[session.currentQuestionIndex];
+    const userSelections = this.userSelections.get(userId) || [];
+    
+    // Validate that this is a multi-answer question
+    if (!isMultipleAnswerQuestion(currentQuestion.correctAnswer)) {
+      await ctx.reply('❌ This is not a multiple-answer question.');
+      return;
+    }
+
+    // Check if user has made any selections
+    if (userSelections.length === 0) {
+      await ctx.editMessageText(
+        '⚠️ Please select at least one answer before confirming.',
+        { reply_markup: ctx.msg.reply_markup }
+      );
+      return;
+    }
+
+    // Check if user has selected the correct number of answers
+    const requiredCount = normalizeAnswer(currentQuestion.correctAnswer).length;
+    if (userSelections.length !== requiredCount) {
+      await ctx.editMessageText(
+        `⚠️ Please select exactly ${requiredCount} answers. You have selected ${userSelections.length}.`,
+        { reply_markup: ctx.msg.reply_markup }
+      );
+      return;
+    }
+
+    // Validate the answer
+    const userAnswer = userSelections.join('');
+    const isCorrect = validateMultipleAnswers(userAnswer, currentQuestion.correctAnswer);
     
     // Store answer
     session.answers.push({
       questionId: currentQuestion._id,
-      selectedAnswer: selectedAnswer,
+      selectedAnswer: userAnswer,
       correctAnswer: currentQuestion.correctAnswer,
       isCorrect: isCorrect
     });
+
+    // Clear user selections for this question
+    this.userSelections.delete(userId);
 
     if (isCorrect) {
       session.correctAnswers++;
@@ -415,7 +698,7 @@ class CertificationBot {
       // Show correct answer message
       await ctx.editMessageText(
         `✅ Correct!\n\n` +
-        `Your answer: ${selectedAnswer}\n` +
+        `Your answer: ${formatAnswerForDisplay(userAnswer)}\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`
       );
 
@@ -431,7 +714,7 @@ class CertificationBot {
       }
     } else {
       // Save wrong answer to database
-      await this.saveWrongAnswer(userId, session, currentQuestion, selectedAnswer);
+      await this.saveWrongAnswer(userId, session, currentQuestion, userAnswer);
       
       // Show wrong answer with explanation
       const explanation = currentQuestion.explanation || 'No explanation available.';
@@ -445,8 +728,8 @@ class CertificationBot {
       }
 
       await ctx.editMessageText(
-        `❌ Wrong! Your answer: ${selectedAnswer}\n\n` +
-        `The correct answer was: ${currentQuestion.correctAnswer}\n\n` +
+        `❌ Wrong! Your answer: ${formatAnswerForDisplay(userAnswer)}\n\n` +
+        `The correct answer was: ${formatAnswerForDisplay(currentQuestion.correctAnswer)}\n\n` +
         `📖 Explanation:\n${explanation}\n\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`,
         {
@@ -454,6 +737,55 @@ class CertificationBot {
         }
       );
     }
+  }
+
+  async handleClearSelection(ctx) {
+    const userId = ctx.from.id;
+    const session = this.userSessions.get(userId);
+
+    if (!session || !session.questions) {
+      await ctx.reply('❌ Session error. Please use /start to begin again.');
+      return;
+    }
+
+    const currentQuestion = session.questions[session.currentQuestionIndex];
+    
+    // Validate that this is a multiple-answer question
+    if (!isMultipleAnswerQuestion(currentQuestion.correctAnswer)) {
+      await ctx.reply('❌ This is not a multiple-answer question.');
+      return;
+    }
+
+    // Clear all selections
+    this.userSelections.set(userId, []);
+    
+    // Recreate the question display
+    const requiredCount = normalizeAnswer(currentQuestion.correctAnswer).length;
+    const questionNumber = session.currentQuestionIndex + 1;
+    const totalQuestions = session.questions.length;
+    
+    const questionText = 
+      `📝 Question ${questionNumber}/${totalQuestions}\n` +
+      `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
+      `${currentQuestion.question}\n\n` +
+      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+      `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+      `⚠️ Multiple answers required: Select ${requiredCount} options\n` +
+      `✅ Selected: None (0/${requiredCount})`;
+
+    // Create fresh keyboard
+    const keyboard = new InlineKeyboard();
+    keyboard
+      .text('A', 'answer_A').text('B', 'answer_B').row()
+      .text('C', 'answer_C').text('D', 'answer_D').row()
+      .text('✅ Confirm Selection', 'confirm_selection').row()
+      .text('🔄 Clear All', 'clear_selection');
+
+    await ctx.editMessageText(questionText, {
+      reply_markup: keyboard
+    });
   }
 
   async handleNextQuestion(ctx) {
@@ -870,6 +1202,180 @@ class CertificationBot {
       await this.mongoClient.close();
     }
     await this.bot.stop();
+  }
+
+  async handleCommandMenu(ctx) {
+    const menuMessage = 
+      `🤖 <b>AWS Certification Bot - Command Menu</b>\n\n` +
+      `Choose a command to execute:\n\n` +
+      `📋 <b>Quiz Commands</b>\n` +
+      `🚀 Start New Quiz - Begin a fresh quiz session\n` +
+      `📚 Show Help Guide - Detailed instructions and tips\n\n` +
+      `🔖 <b>Bookmark Commands</b>\n` +
+      `💾 Add Bookmark - Save a specific question by number\n` +
+      `📑 View Bookmarks - See all your saved questions\n\n` +
+      `📖 <b>Study Commands</b>\n` +
+      `🔄 Revision Mode - Review questions you got wrong\n\n` +
+      `⚡ <b>Quick Actions</b>\n` +
+      `🎯 Quick Menu - Fast access to common actions\n\n` +
+      `💡 <i>Tip: You can also type these commands directly:</i>\n` +
+      `<code>/start</code> • <code>/help</code> • <code>/bookmarks</code> • <code>/revision</code>`;
+
+    const keyboard = new InlineKeyboard()
+      .text('🚀 Start Quiz', 'menu_start').text('📚 Help Guide', 'menu_help').row()
+      .text('💾 Add Bookmark', 'menu_bookmark').text('📑 View Bookmarks', 'menu_bookmarks').row()
+      .text('🔄 Revision Mode', 'menu_revision').row()
+      .text('⚡ Quick Menu', 'quick_menu').row()
+      .text('❌ Close Menu', 'menu_close');
+
+    await ctx.reply(menuMessage, {
+      reply_markup: keyboard,
+      parse_mode: 'HTML'
+    });
+  }
+
+  async handleMenuAction(ctx, action) {
+    try {
+      switch (action) {
+        case 'start':
+          await ctx.editMessageText('🚀 Starting new quiz...');
+          setTimeout(async () => {
+            await this.handleStart(ctx);
+          }, 1000);
+          break;
+
+        case 'help':
+          await ctx.editMessageText('📚 Loading help guide...');
+          setTimeout(async () => {
+            await this.handleHelp(ctx);
+          }, 1000);
+          break;
+
+        case 'bookmark':
+          await ctx.editMessageText(
+            `💾 <b>Add Bookmark</b>\n\n` +
+            `To bookmark a question, type:\n` +
+            `<code>/bookmark [question_number]</code>\n\n` +
+            `Example: <code>/bookmark 15</code>\n\n` +
+            `This will save question #15 for later review.`,
+            { parse_mode: 'HTML' }
+          );
+          break;
+
+        case 'bookmarks':
+          await ctx.editMessageText('📑 Loading your bookmarks...');
+          setTimeout(async () => {
+            await this.handleShowBookmarks(ctx);
+          }, 1000);
+          break;
+
+        case 'revision':
+          await ctx.editMessageText('🔄 Loading revision mode...');
+          setTimeout(async () => {
+            await this.handleRevision(ctx);
+          }, 1000);
+          break;
+
+        case 'close':
+          await ctx.editMessageText('✅ Menu closed. Type /menu to open it again.');
+          break;
+
+        case 'current_question':
+          if (this.userSessions.has(ctx.from.id)) {
+            await ctx.editMessageText('📝 Loading current question...');
+            setTimeout(async () => {
+              await this.showCurrentQuestion(ctx);
+            }, 1000);
+          } else {
+            await ctx.editMessageText('❌ No active quiz session. Start a new quiz first.');
+          }
+          break;
+
+        case 'restart':
+          await ctx.editMessageText('🔄 Restarting quiz...');
+          setTimeout(async () => {
+            await this.handleStart(ctx);
+          }, 1000);
+          break;
+
+        case 'end_quiz':
+          const userId = ctx.from.id;
+          if (this.userSessions.has(userId)) {
+            this.userSessions.delete(userId);
+            this.userSelections.delete(userId);
+            await ctx.editMessageText('🏁 Quiz session ended. Type /start to begin a new quiz.');
+          } else {
+            await ctx.editMessageText('❌ No active quiz session to end.');
+          }
+          break;
+
+        case 'bookmark_current':
+          const session = this.userSessions.get(ctx.from.id);
+          if (session && session.questions) {
+            const currentQuestion = session.questions[session.currentQuestionIndex];
+            if (currentQuestion) {
+              await this.saveBookmark(ctx.from.id, session, currentQuestion);
+              await ctx.editMessageText(`💾 Current question #${currentQuestion.question_no} bookmarked successfully!`);
+            } else {
+              await ctx.editMessageText('❌ No current question to bookmark.');
+            }
+          } else {
+            await ctx.editMessageText('❌ No active quiz session. Start a quiz first.');
+          }
+          break;
+
+        default:
+          await ctx.editMessageText('❌ Unknown command. Type /menu to see available options.');
+      }
+    } catch (error) {
+      console.error('Error handling menu action:', error);
+      await ctx.reply('❌ An error occurred. Please try again.');
+    }
+  }
+
+  async handleQuickMenu(ctx) {
+    const userId = ctx.from.id;
+    const session = this.userSessions.get(userId);
+    
+    let menuMessage = `⚡ <b>Quick Actions Menu</b>\n\n`;
+    
+    if (session && session.questions) {
+      // User is in an active quiz
+      menuMessage += 
+        `🎯 <b>Active Quiz Session</b>\n` +
+        `Certificate: ${session.certificate.name}\n` +
+        `Progress: ${session.currentQuestionIndex + 1}/${session.questions.length}\n` +
+        `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}\n\n` +
+        `<b>Quick Actions:</b>\n`;
+      
+      const keyboard = new InlineKeyboard()
+        .text('📝 Current Question', 'menu_current_question').row()
+        .text('🔄 Restart Quiz', 'menu_restart').text('🏁 End Quiz', 'menu_end_quiz').row()
+        .text('💾 Bookmark Current', 'menu_bookmark_current').row()
+        .text('📑 View Bookmarks', 'menu_bookmarks').text('🔄 Revision Mode', 'menu_revision').row()
+        .text('📚 Help', 'menu_help').text('❌ Close', 'menu_close');
+      
+      await ctx.editMessageText(menuMessage, {
+        reply_markup: keyboard,
+        parse_mode: 'HTML'
+      });
+    } else {
+      // No active session
+      menuMessage += 
+        `🎯 <b>No Active Quiz Session</b>\n\n` +
+        `<b>Quick Actions:</b>\n`;
+      
+      const keyboard = new InlineKeyboard()
+        .text('🚀 Start New Quiz', 'menu_start').row()
+        .text('📑 View Bookmarks', 'menu_bookmarks').text('🔄 Revision Mode', 'menu_revision').row()
+        .text('📚 Help Guide', 'menu_help').row()
+        .text('❌ Close', 'menu_close');
+      
+      await ctx.editMessageText(menuMessage, {
+        reply_markup: keyboard,
+        parse_mode: 'HTML'
+      });
+    }
   }
 }
 

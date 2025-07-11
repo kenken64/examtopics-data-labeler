@@ -1,6 +1,18 @@
 # ExamBot Data Labeler Web Application
 
-This project has evolved into a comprehensive web application designed to assist with AWS certification preparation and management. It features a PDF data labeler, robust user authentication, and various management interfaces for certificates, payees, and question assignments.
+## Screenshots
+
+<div align="center">
+  <img src="screen1.png" alt="ExamBot Web Application Interface" width="800">
+  <p><em>Web Application - PDF Data Labeler and Management Interface</em></p>
+  
+  <img src="screen2.png" alt="ExamBot Telegram Bot Interface" width="800">
+  <p><em>Telegram Bot - Interactive Quiz Session</em></p>
+</div>
+
+## Overview
+
+This project has evolved into a comprehensive AWS certification preparation and management ecosystem. It features a web-based PDF data labeler, robust user authentication, various management interfaces, and an interactive Telegram bot for quiz practice.
 
 ## Features
 
@@ -9,6 +21,7 @@ This project has evolved into a comprehensive web application designed to assist
 - **PDF Data Labeler**: Upload PDF documents, view them page by page, convert content to Markdown, and label specific sections (questions, answers, explanations) for quiz creation.
 - **User Authentication**: Secure user registration and login using Passkeys (WebAuthn) with JWT for session management.
 - **Role-Based Access**: Protected routes ensure only authenticated users can access certain parts of the application.
+- **Telegram Quiz Bot**: Interactive bot for AWS certification practice with real-time quiz sessions, progress tracking, and detailed explanations.
 
 ### Management Interfaces
 
@@ -17,6 +30,17 @@ This project has evolved into a comprehensive web application designed to assist
 - **Access Code Management**: Generate unique access codes for paid customers, linking them to specific certificates.
 - **Question Assignment Management**: Assign and reorder specific questions from quizzes to generated access codes, allowing for customized quiz experiences per customer. Questions can be enabled/disabled for an access code.
 - **Saved Questions Viewer**: Browse questions by certificate code or search by access code (original or generated) to view question details, options, and explanations.
+
+### Telegram Bot Features
+
+- **Interactive Quiz Sessions**: Real-time multiple-choice questions with A, B, C, D options
+- **Certificate Selection**: Choose from available AWS certification types
+- **Access Code Integration**: Validate generated access codes to access personalized quizzes
+- **Instant Feedback**: Immediate results with detailed explanations for wrong answers
+- **Progress Tracking**: Complete quiz statistics and performance monitoring
+- **Bookmark System**: Save questions for later review with `/bookmark` command
+- **Revision Mode**: Review previously answered questions to reinforce learning
+- **Help System**: Comprehensive `/help` command with usage instructions
 
 ## Technologies Used
 
@@ -37,6 +61,12 @@ This project has evolved into a comprehensive web application designed to assist
 - **shadcn/ui**: A collection of re-usable components built using Radix UI and Tailwind CSS for a modern UI.
 - **Tailwind CSS**: A utility-first CSS framework.
 - **pdfjs-dist**: A PDF rendering library from Mozilla.
+
+### Telegram Bot (Node.js - Quiz Bot Service)
+
+- **Grammy**: Modern Telegram bot framework for Node.js.
+- **MongoDB**: Database integration for quiz data and progress tracking.
+- **dotenv**: Environment configuration management.
 
 ## Setup and Installation
 
@@ -137,7 +167,34 @@ Follow these steps to set up and run the project locally.
     ```
     The frontend application will be accessible at `http://localhost:3000`.
 
+### 3. Telegram Bot Setup (Quiz Bot Service)
+
+1.  Navigate to the `telegram-bot` directory:
+    ```bash
+    cd telegram-bot
+    ```
+
+2.  **Environment Variables**: Create a `.env` file in the `telegram-bot` directory and add the following:
+    ```
+    BOT_TOKEN=your_telegram_bot_token_from_botfather
+    MONGODB_URI=your_mongodb_connection_string
+    ```
+    *Get your bot token from [@BotFather](https://t.me/botfather) on Telegram.*
+
+3.  Install Node.js dependencies:
+    ```bash
+    npm install
+    ```
+
+4.  Run the Telegram bot:
+    ```bash
+    node bot.js
+    ```
+    The bot will start and be available on Telegram.
+
 ## Usage
+
+### Web Application
 
 1.  Ensure both the backend (Flask) and frontend (Next.js) servers are running.
 2.  Open your web browser and go to `http://localhost:3000`.
@@ -149,6 +206,18 @@ Follow these steps to set up and run the project locally.
     -   **Access Codes**: Generate and view access codes for paid customers.
     -   **Manage Questions**: Assign and reorder questions for specific generated access codes.
     -   **Saved Questions**: Search and view questions by access code or certificate.
+
+### Telegram Bot
+
+1.  Ensure the bot is running (`node bot.js` in the `telegram-bot` directory).
+2.  Find your bot on Telegram using the username you set with BotFather.
+3.  **Start a Quiz Session**: Send `/start` to begin
+4.  **Available Commands**:
+    -   `/start` - Start new quiz session
+    -   `/help` - Show comprehensive help guide
+    -   `/bookmark <number>` - Save question for later review
+    -   `/bookmarks` - View saved bookmarks
+    -   `/revision` - Review previously answered questions
 
 ## Important Notes
 
@@ -164,6 +233,10 @@ This project includes comprehensive technical documentation organized in the `fr
 |----------|-------------|----------|
 | [ACCESS_CODE_QUESTIONS_LINKING.md](./frontend/specs/ACCESS_CODE_QUESTIONS_LINKING.md) | **Complete access code questions linking system documentation** | **Features** |
 | [ACCESS_CODE_QUESTIONS_README.md](./frontend/specs/ACCESS_CODE_QUESTIONS_README.md) | Documentation for access code questions functionality | Features |
+| [HELP_COMMAND_IMPLEMENTATION.md](./telegram-bot/HELP_COMMAND_IMPLEMENTATION.md) | Telegram bot help command implementation guide | Telegram Bot |
+| [OCR_FEATURE_README.md](./frontend/specs/OCR_FEATURE_README.md) | **PDF-to-Markdown OCR conversion feature using OpenAI's vision API** | **Features** |
+| [QUESTION_STRUCTURE_ANALYSIS.md](./telegram-bot/QUESTION_STRUCTURE_ANALYSIS.md) | Analysis of question data structure and bot compatibility issues | Telegram Bot |
+| [TELEGRAM_BOT_README.md](./telegram-bot/README.md) | **Telegram bot setup, features, and implementation guide** | **Telegram Bot** |
 | [AI_CACHING_COMPLETE.md](./frontend/specs/AI_CACHING_COMPLETE.md) | AI response caching implementation completion guide | AI Implementation |
 | [AI_CACHING_IMPLEMENTATION_SUMMARY.md](./frontend/specs/AI_CACHING_IMPLEMENTATION_SUMMARY.md) | Summary of AI caching implementation details | AI Implementation |
 | [AI_EXPLANATION_SETUP.md](./frontend/specs/AI_EXPLANATION_SETUP.md) | Setup guide for AI explanation features | AI Implementation |
@@ -200,15 +273,18 @@ This project includes comprehensive technical documentation organized in the `fr
 - **Backend**: Data transformation and backend implementation details
 - **Development**: Local development setup and debugging guides
 - **Project Status**: Overall implementation status and completion documentation
+- **Telegram Bot**: Telegram bot implementation, commands, and data structure analysis
 
 ### Quick Reference
 
 For developers new to the project, we recommend starting with these key documents:
 
 1. **[APPLICATION_FLOW_DIAGRAM.md](./frontend/specs/APPLICATION_FLOW_DIAGRAM.md)** - Complete system architecture overview
-2. **[JWT_AUTHENTICATION_FIX_SUMMARY.md](./frontend/specs/JWT_AUTHENTICATION_FIX_SUMMARY.md)** - Authentication implementation details
-3. **[AI_IMPLEMENTATION_COMPLETE.md](./frontend/specs/AI_IMPLEMENTATION_COMPLETE.md)** - AI features and setup guide
-4. **[LOCAL_DEVELOPMENT_FIX.md](./frontend/specs/LOCAL_DEVELOPMENT_FIX.md)** - Development environment troubleshooting
+2. **[TELEGRAM_BOT_README.md](./telegram-bot/README.md)** - Telegram bot setup and features guide
+3. **[JWT_AUTHENTICATION_FIX_SUMMARY.md](./frontend/specs/JWT_AUTHENTICATION_FIX_SUMMARY.md)** - Authentication implementation details
+4. **[AI_IMPLEMENTATION_COMPLETE.md](./frontend/specs/AI_IMPLEMENTATION_COMPLETE.md)** - AI features and setup guide
+5. **[OCR_FEATURE_README.md](./frontend/specs/OCR_FEATURE_README.md)** - PDF-to-Markdown OCR conversion using OpenAI
+6. **[LOCAL_DEVELOPMENT_FIX.md](./frontend/specs/LOCAL_DEVELOPMENT_FIX.md)** - Development environment troubleshooting
 
 ## Contributing
 
