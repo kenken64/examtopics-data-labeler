@@ -164,6 +164,10 @@ This project includes comprehensive technical documentation organized in the `fr
 |----------|-------------|----------|
 | [ACCESS_CODE_QUESTIONS_LINKING.md](./frontend/specs/ACCESS_CODE_QUESTIONS_LINKING.md) | **Complete access code questions linking system documentation** | **Features** |
 | [ACCESS_CODE_QUESTIONS_README.md](./frontend/specs/ACCESS_CODE_QUESTIONS_README.md) | Documentation for access code questions functionality | Features |
+| [HELP_COMMAND_IMPLEMENTATION.md](./telegram-bot/HELP_COMMAND_IMPLEMENTATION.md) | Telegram bot help command implementation guide | Telegram Bot |
+| [OCR_FEATURE_README.md](./frontend/specs/OCR_FEATURE_README.md) | **PDF-to-Markdown OCR conversion feature using OpenAI's vision API** | **Features** |
+| [QUESTION_STRUCTURE_ANALYSIS.md](./telegram-bot/QUESTION_STRUCTURE_ANALYSIS.md) | Analysis of question data structure and bot compatibility issues | Telegram Bot |
+| [TELEGRAM_BOT_README.md](./telegram-bot/README.md) | **Telegram bot setup, features, and implementation guide** | **Telegram Bot** |
 | [AI_CACHING_COMPLETE.md](./frontend/specs/AI_CACHING_COMPLETE.md) | AI response caching implementation completion guide | AI Implementation |
 | [AI_CACHING_IMPLEMENTATION_SUMMARY.md](./frontend/specs/AI_CACHING_IMPLEMENTATION_SUMMARY.md) | Summary of AI caching implementation details | AI Implementation |
 | [AI_EXPLANATION_SETUP.md](./frontend/specs/AI_EXPLANATION_SETUP.md) | Setup guide for AI explanation features | AI Implementation |
@@ -200,6 +204,7 @@ This project includes comprehensive technical documentation organized in the `fr
 - **Backend**: Data transformation and backend implementation details
 - **Development**: Local development setup and debugging guides
 - **Project Status**: Overall implementation status and completion documentation
+- **Telegram Bot**: Telegram bot implementation, commands, and data structure analysis
 
 ### Quick Reference
 
@@ -208,7 +213,8 @@ For developers new to the project, we recommend starting with these key document
 1. **[APPLICATION_FLOW_DIAGRAM.md](./frontend/specs/APPLICATION_FLOW_DIAGRAM.md)** - Complete system architecture overview
 2. **[JWT_AUTHENTICATION_FIX_SUMMARY.md](./frontend/specs/JWT_AUTHENTICATION_FIX_SUMMARY.md)** - Authentication implementation details
 3. **[AI_IMPLEMENTATION_COMPLETE.md](./frontend/specs/AI_IMPLEMENTATION_COMPLETE.md)** - AI features and setup guide
-4. **[LOCAL_DEVELOPMENT_FIX.md](./frontend/specs/LOCAL_DEVELOPMENT_FIX.md)** - Development environment troubleshooting
+4. **[OCR_FEATURE_README.md](./frontend/specs/OCR_FEATURE_README.md)** - PDF-to-Markdown OCR conversion using OpenAI
+5. **[LOCAL_DEVELOPMENT_FIX.md](./frontend/specs/LOCAL_DEVELOPMENT_FIX.md)** - Development environment troubleshooting
 
 ## Contributing
 
