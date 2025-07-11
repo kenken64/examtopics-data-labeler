@@ -1,5 +1,7 @@
 // Utility functions to transform question data from database format to frontend format
 
+import { isMultipleAnswerQuestion, answerToArray } from './multipleAnswerUtils';
+
 export interface DatabaseQuestion {
   _id: unknown;
   question_no: number;
@@ -17,7 +19,9 @@ export interface FrontendQuestion {
   question_no: number;
   question: string;
   options: string[];
-  correctAnswer: number;
+  correctAnswer: number | string; // Support both index and multiple letters
+  isMultipleAnswer?: boolean; // Flag to indicate multiple answer question
+  correctAnswers?: number[]; // Array of correct answer indices for multiple answers
   explanation?: string;
   createdAt?: Date;
   [key: string]: unknown; // Allow additional properties
@@ -49,21 +53,29 @@ export function parseAnswersToOptions(answers: string): string[] {
 }
 
 /**
- * Converts letter-based correct answer to numeric index
- * Input: "A" -> Output: 0, "B" -> Output: 1, etc.
+ * Converts letter-based correct answer to numeric index or array of indices
+ * Input: "A" -> Output: 0, "BC" -> Output: [1, 2], etc.
  */
-export function convertCorrectAnswerToIndex(correctAnswer: string | number): number {
+export function convertCorrectAnswerToIndex(correctAnswer: string | number): number | number[] {
   if (typeof correctAnswer === 'number') {
     return correctAnswer; // Already in correct format
   }
 
   if (typeof correctAnswer === 'string') {
-    const upperCase = correctAnswer.toUpperCase();
-    const charCode = upperCase.charCodeAt(0);
-    
-    // Convert A=0, B=1, C=2, D=3, etc.
-    if (charCode >= 65 && charCode <= 90) { // A-Z
-      return charCode - 65;
+    // Check if it's a multiple answer question
+    if (isMultipleAnswerQuestion(correctAnswer)) {
+      // Convert each letter to index
+      const letters = answerToArray(correctAnswer);
+      return letters.map(letter => letter.charCodeAt(0) - 65);
+    } else {
+      // Single answer
+      const upperCase = correctAnswer.toUpperCase();
+      const charCode = upperCase.charCodeAt(0);
+      
+      // Convert A=0, B=1, C=2, D=3, etc.
+      if (charCode >= 65 && charCode <= 90) { // A-Z
+        return charCode - 65;
+      }
     }
   }
 
@@ -96,8 +108,20 @@ export function transformQuestionForFrontend(dbQuestion: Record<string, unknown>
     question.options = [];
   }
 
-  // Transform correct answer
-  question.correctAnswer = convertCorrectAnswerToIndex(dbQuestion.correctAnswer as string | number);
+  // Transform correct answer and detect multiple answers
+  const correctAnswerString = dbQuestion.correctAnswer as string;
+  const isMultiple = isMultipleAnswerQuestion(correctAnswerString);
+  
+  question.isMultipleAnswer = isMultiple;
+  
+  if (isMultiple) {
+    // Store as string for multiple answers and create indices array
+    question.correctAnswer = correctAnswerString;
+    question.correctAnswers = convertCorrectAnswerToIndex(correctAnswerString) as number[];
+  } else {
+    // Single answer - store as index
+    question.correctAnswer = convertCorrectAnswerToIndex(correctAnswerString) as number;
+  }
 
   return question;
 }
@@ -128,10 +152,42 @@ export function getQuestionOptions(question: Record<string, unknown>): string[] 
 
 /**
  * Safe accessor for correct answer with fallback
+ * Returns primary correct answer index for single answers, first index for multiple
  */
 export function getCorrectAnswer(question: Record<string, unknown>): number {
-  if (question?.correctAnswer !== undefined) {
-    return convertCorrectAnswerToIndex(question.correctAnswer as string | number);
+  if (question?.correctAnswers && Array.isArray(question.correctAnswers)) {
+    // Multiple answer question - return first correct answer index
+    return question.correctAnswers[0] || 0;
   }
+  
+  if (question?.correctAnswer !== undefined) {
+    if (typeof question.correctAnswer === 'number') {
+      return question.correctAnswer;
+    }
+    
+    // Convert string answer to index (single answer only)
+    const result = convertCorrectAnswerToIndex(question.correctAnswer as string | number);
+    return Array.isArray(result) ? result[0] : result;
+  }
+  
   return 0;
+}
+
+/**
+ * Safe accessor for all correct answer indices
+ * Returns array for multiple answers, single-item array for single answers
+ */
+export function getAllCorrectAnswers(question: Record<string, unknown>): number[] {
+  if (question?.correctAnswers && Array.isArray(question.correctAnswers)) {
+    return question.correctAnswers;
+  }
+  
+  if (question?.isMultipleAnswer && question?.correctAnswer) {
+    const result = convertCorrectAnswerToIndex(question.correctAnswer as string | number);
+    return Array.isArray(result) ? result : [result];
+  }
+  
+  // Single answer
+  const singleAnswer = getCorrectAnswer(question);
+  return [singleAnswer];
 }

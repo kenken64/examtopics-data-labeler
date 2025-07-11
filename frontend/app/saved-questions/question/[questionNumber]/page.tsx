@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { getQuestionOptions, getCorrectAnswer } from '../../../utils/questionTransform';
+import { getQuestionOptions, getCorrectAnswer, getAllCorrectAnswers } from '../../../utils/questionTransform';
+import { isMultipleAnswerQuestion, validateMultipleAnswers, formatAnswerForDisplay, getAnswerInfo } from '../../../utils/multipleAnswerUtils';
 import ReactMarkdown from 'react-markdown';
 
 interface Question {
@@ -16,9 +17,11 @@ interface Question {
   question_no: number;
   question: string;
   options: string[];
-  correctAnswer: number;
+  correctAnswer: number | string;
+  isMultipleAnswer?: boolean;
+  correctAnswers?: number[];
   explanation?: string;
-  [key: string]: string | number | string[] | undefined | unknown;
+  [key: string]: string | number | string[] | number[] | boolean | undefined | unknown;
 }
 
 const QuestionDetailPage = () => {
@@ -32,7 +35,7 @@ const QuestionDetailPage = () => {
   const certificateCode = searchParams.get('certificateCode');
   
   const [question, setQuestion] = useState<Question | null>(null);
-  const [selectedAnswer, setSelectedAnswer] = useState<string>('');
+  const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]); // Changed to array for multiple selection
   const [showAnswer, setShowAnswer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [aiExplanation, setAiExplanation] = useState<string>('');
@@ -96,8 +99,24 @@ const QuestionDetailPage = () => {
     }
   };
 
-  const handleAnswerSelect = (option: string) => {
-    setSelectedAnswer(option);
+  const handleAnswerSelect = (optionLabel: string) => {
+    if (!question) return;
+    
+    const isMultiple = question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string);
+    
+    if (isMultiple) {
+      // Multiple answer question - toggle selection
+      setSelectedAnswers(prev => {
+        if (prev.includes(optionLabel)) {
+          return prev.filter(answer => answer !== optionLabel);
+        } else {
+          return [...prev, optionLabel];
+        }
+      });
+    } else {
+      // Single answer question - replace selection
+      setSelectedAnswers([optionLabel]);
+    }
   };
 
   const handleShowAnswer = () => {
@@ -105,7 +124,7 @@ const QuestionDetailPage = () => {
   };
 
   const handleReset = () => {
-    setSelectedAnswer('');
+    setSelectedAnswers([]);
     setShowAnswer(false);
     setShowAiExplanation(false);
     setAiExplanation('');
@@ -163,12 +182,32 @@ const QuestionDetailPage = () => {
   const isCorrectAnswer = (option: string) => {
     if (!question) return false;
     const options = getQuestionOptions(question);
-    const correctIndex = getCorrectAnswer(question);
-    return options[correctIndex] === option;
+    const correctIndices = getAllCorrectAnswers(question);
+    const optionIndex = options.indexOf(option);
+    return correctIndices.includes(optionIndex);
   };
 
-  const isSelectedAnswer = (option: string) => {
-    return selectedAnswer === option;
+  const isSelectedAnswer = (option: string, index: number) => {
+    const optionLabel = getOptionLabel(index);
+    return selectedAnswers.includes(optionLabel);
+  };
+
+  const isUserAnswerCorrect = () => {
+    if (!question) return false;
+    
+    const isMultiple = question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string);
+    
+    if (isMultiple) {
+      // For multiple answer questions, selectedAnswers contains letter labels like ["B", "C"]
+      // Convert array to string like "BC" for validation
+      const selectedString = selectedAnswers.join('');
+      return validateMultipleAnswers(selectedString, question.correctAnswer as string);
+    } else {
+      // Single answer: selectedAnswers contains letter label like ["B"]
+      const correctIndex = getCorrectAnswer(question);
+      const correctLabel = getOptionLabel(correctIndex);
+      return selectedAnswers.length === 1 && selectedAnswers[0] === correctLabel;
+    }
   };
 
   if (loading) {
@@ -263,14 +302,26 @@ const QuestionDetailPage = () => {
           <CardHeader>
             <CardTitle className="text-xl">Answer Options</CardTitle>
             <CardDescription>
-              {!showAnswer ? 'Select an answer to see if you\'re correct' : 'Correct answer highlighted'}
+              {!showAnswer ? (
+                <>
+                  {question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string) ? (
+                    <span className="text-blue-600 font-medium">
+                      {getAnswerInfo(getQuestionOptions(question), question.correctAnswer as string).hint} - You can select multiple options
+                    </span>
+                  ) : (
+                    'Select an answer to see if you\'re correct'
+                  )}
+                </>
+              ) : (
+                'Correct answer highlighted'
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {getQuestionOptions(question).map((option, index) => {
               const optionLabel = getOptionLabel(index);
               const isCorrect = isCorrectAnswer(option);
-              const isSelected = isSelectedAnswer(option);
+              const isSelected = isSelectedAnswer(option, index);
               
               let buttonVariant: "default" | "outline" | "secondary" = "outline";
               let iconElement = null;
@@ -296,7 +347,7 @@ const QuestionDetailPage = () => {
                     showAnswer && isSelected && !isCorrect ? 'bg-red-50 border-red-200 hover:bg-red-100 text-red-800' : 
                     'text-gray-800'
                   }`}
-                  onClick={() => !showAnswer && handleAnswerSelect(option)}
+                  onClick={() => !showAnswer && handleAnswerSelect(optionLabel)}
                   disabled={showAnswer}
                 >
                   <div className="flex items-start gap-3 w-full">
@@ -320,15 +371,14 @@ const QuestionDetailPage = () => {
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex gap-3 justify-center">
-              {!showAnswer ? (
-                <Button 
-                  onClick={handleShowAnswer}
-                  disabled={!selectedAnswer}
-                  size="lg"
-                >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Show Correct Answer
-                </Button>
+              {!showAnswer ? (              <Button 
+                onClick={handleShowAnswer}
+                disabled={selectedAnswers.length === 0}
+                size="lg"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Show Correct Answer
+              </Button>
               ) : (
                 <Button 
                   onClick={handleReset}
@@ -340,9 +390,9 @@ const QuestionDetailPage = () => {
               )}
             </div>
             
-            {selectedAnswer && !showAnswer && (
+            {selectedAnswers.length > 0 && !showAnswer && (
               <p className="text-center text-sm text-gray-600 mt-3">
-                You selected: <strong>{getOptionLabel((question.options || []).indexOf(selectedAnswer))}. {selectedAnswer}</strong>
+                You selected: <strong>{selectedAnswers.join(', ')}</strong>
               </p>
             )}
           </CardContent>
@@ -461,23 +511,23 @@ const QuestionDetailPage = () => {
         )}
 
         {/* Result Summary */}
-        {showAnswer && selectedAnswer && (
+        {showAnswer && selectedAnswers.length > 0 && (
           <Card className="mb-6">
             <CardContent className="pt-6">
               <div className="text-center">
-                {isCorrectAnswer(selectedAnswer) ? (
+                {isUserAnswerCorrect() ? (
                   <div className="text-green-600">
                     <CheckCircle className="h-12 w-12 mx-auto mb-3" />
                     <h3 className="text-xl font-semibold mb-2">Correct!</h3>
-                    <p className="text-gray-600">You selected the right answer.</p>
+                    <p className="text-gray-600">You selected the right answer{selectedAnswers.length > 1 ? 's' : ''}.</p>
                   </div>
                 ) : (
                   <div className="text-red-600">
                     <XCircle className="h-12 w-12 mx-auto mb-3" />
                     <h3 className="text-xl font-semibold mb-2">Incorrect</h3>
                     <p className="text-gray-600">
-                      You selected: <strong>{getOptionLabel(getQuestionOptions(question).indexOf(selectedAnswer))}</strong><br />
-                      Correct answer: <strong>{getOptionLabel(getCorrectAnswer(question))}</strong>
+                      You selected: <strong>{selectedAnswers.join(', ')}</strong><br />
+                      Correct answer{getAllCorrectAnswers(question).length > 1 ? 's' : ''}: <strong>{formatAnswerForDisplay(question.correctAnswer as string)}</strong>
                     </p>
                   </div>
                 )}

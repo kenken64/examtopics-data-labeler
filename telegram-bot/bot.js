@@ -2,12 +2,77 @@ const { Bot, InlineKeyboard } = require('grammy');
 const { MongoClient, ObjectId } = require('mongodb');
 require('dotenv').config();
 
+/**
+ * Utility functions for handling multiple-choice questions with multiple correct answers
+ */
+
+/**
+ * Normalizes answer format to consistent format without spaces
+ * @param {string} answer - Answer in various formats like "B C", "BC", "A B C"
+ * @returns {string} Normalized answer like "BC", "ABC"
+ */
+function normalizeAnswer(answer) {
+  if (!answer) return '';
+  
+  // Remove spaces and convert to uppercase
+  const normalized = answer.replace(/\s+/g, '').toUpperCase();
+  
+  // Sort letters alphabetically for consistent comparison
+  return normalized.split('').sort().join('');
+}
+
+/**
+ * Checks if a question has multiple correct answers
+ * @param {string} correctAnswer - The correct answer string
+ * @returns {boolean} True if multiple answers are required
+ */
+function isMultipleAnswerQuestion(correctAnswer) {
+  if (!correctAnswer) return false;
+  
+  const normalized = normalizeAnswer(correctAnswer);
+  return normalized.length > 1;
+}
+
+/**
+ * Validates if selected answers match the correct answer(s)
+ * @param {string[]|string} selectedAnswers - Array of selected answer letters or string of answers
+ * @param {string} correctAnswer - The correct answer string
+ * @returns {boolean} True if the selection is correct
+ */
+function validateMultipleAnswers(selectedAnswers, correctAnswer) {
+  if (!correctAnswer) return false;
+  
+  // Convert selectedAnswers to string if it's an array
+  const selectedString = Array.isArray(selectedAnswers) 
+    ? selectedAnswers.join('') 
+    : selectedAnswers;
+  
+  // Normalize both for comparison
+  const normalizedSelected = normalizeAnswer(selectedString);
+  const normalizedCorrect = normalizeAnswer(correctAnswer);
+  
+  return normalizedSelected === normalizedCorrect;
+}
+
+/**
+ * Formats answer for display (adds spaces between letters)
+ * @param {string} answer - Answer string like "BC"
+ * @returns {string} Formatted string like "B, C"
+ */
+function formatAnswerForDisplay(answer) {
+  if (!answer) return '';
+  
+  const normalized = normalizeAnswer(answer);
+  return normalized.split('').join(', ');
+}
+
 class CertificationBot {
   constructor() {
     this.bot = new Bot(process.env.BOT_TOKEN);
     this.mongoClient = new MongoClient(process.env.MONGODB_URI);
     this.db = null;
     this.userSessions = new Map(); // Store user quiz sessions
+    this.userSelections = new Map(); // Store user's current answer selections for multiple choice
     
     this.initializeBot();
   }
@@ -66,6 +131,16 @@ class CertificationBot {
     this.bot.callbackQuery(/^answer_([A-D])$/, async (ctx) => {
       const selectedAnswer = ctx.match[1];
       await this.handleQuizAnswer(ctx, selectedAnswer);
+    });
+
+    // Handle confirm selection for multiple choice questions
+    this.bot.callbackQuery('confirm_selection', async (ctx) => {
+      await this.handleConfirmSelection(ctx);
+    });
+
+    // Handle clear selection for multiple choice questions
+    this.bot.callbackQuery('clear_selection', async (ctx) => {
+      await this.handleClearSelection(ctx);
     });
 
     // Handle next question
@@ -369,6 +444,16 @@ class CertificationBot {
       return;
     }
 
+    // Check if this is a multiple answer question
+    const isMultiple = isMultipleAnswerQuestion(currentQuestion.correctAnswer);
+    
+    // Clear any previous selections for this question
+    if (!this.userSelections.has(userId)) {
+      this.userSelections.set(userId, []);
+    } else {
+      this.userSelections.set(userId, []);
+    }
+
     // Format question text
     const questionText = 
       `📝 Question ${questionNumber}/${totalQuestions}\n` +
@@ -377,12 +462,25 @@ class CertificationBot {
       `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
       `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
       `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
-      `D. ${currentQuestion.options.D || 'Option D not available'}`;
+      `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+      (isMultiple ? `⚠️ Multiple answers required: Select ${normalizeAnswer(currentQuestion.correctAnswer).length} options` : '💡 Select one answer');
 
     // Create answer keyboard
-    const keyboard = new InlineKeyboard()
-      .text('A', 'answer_A').text('B', 'answer_B').row()
-      .text('C', 'answer_C').text('D', 'answer_D');
+    const keyboard = new InlineKeyboard();
+    
+    if (isMultiple) {
+      // Multiple answer layout with confirm/clear buttons
+      keyboard
+        .text('A', 'answer_A').text('B', 'answer_B').row()
+        .text('C', 'answer_C').text('D', 'answer_D').row()
+        .text('✅ Confirm Selection', 'confirm_selection').row()
+        .text('🔄 Clear All', 'clear_selection');
+    } else {
+      // Single answer layout
+      keyboard
+        .text('A', 'answer_A').text('B', 'answer_B').row()
+        .text('C', 'answer_C').text('D', 'answer_D');
+    }
 
     await ctx.reply(questionText, {
       reply_markup: keyboard
@@ -399,15 +497,167 @@ class CertificationBot {
     }
 
     const currentQuestion = session.questions[session.currentQuestionIndex];
-    const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
+    const isMultiple = isMultipleAnswerQuestion(currentQuestion.correctAnswer);
+    
+    if (isMultiple) {
+      // Handle multi-answer question selection
+      let userSelections = this.userSelections.get(userId) || [];
+      
+      // Toggle selection
+      if (userSelections.includes(selectedAnswer)) {
+        userSelections = userSelections.filter(ans => ans !== selectedAnswer);
+      } else {
+        userSelections.push(selectedAnswer);
+        userSelections.sort(); // Keep selections sorted
+      }
+      
+      this.userSelections.set(userId, userSelections);
+      
+      // Update the message to show current selections
+      const requiredCount = normalizeAnswer(currentQuestion.correctAnswer).length;
+      const selectedCount = userSelections.length;
+      const questionNumber = session.currentQuestionIndex + 1;
+      const totalQuestions = session.questions.length;
+      
+      const questionText = 
+        `📝 Question ${questionNumber}/${totalQuestions}\n` +
+        `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
+        `${currentQuestion.question}\n\n` +
+        `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+        `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+        `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+        `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+        `⚠️ Multiple answers required: Select ${requiredCount} options\n` +
+        `✅ Selected: ${userSelections.length > 0 ? userSelections.join(', ') : 'None'} (${selectedCount}/${requiredCount})`;
+
+      // Create updated keyboard with selected indicators
+      const keyboard = new InlineKeyboard();
+      
+      ['A', 'B', 'C', 'D'].forEach((option, index) => {
+        const isSelected = userSelections.includes(option);
+        const buttonText = isSelected ? `✅ ${option}` : option;
+        keyboard.text(buttonText, `answer_${option}`);
+        if (index % 2 === 1) keyboard.row();
+      });
+      
+      keyboard.text('✅ Confirm Selection', 'confirm_selection').row();
+      keyboard.text('🔄 Clear All', 'clear_selection');
+
+      await ctx.editMessageText(questionText, {
+        reply_markup: keyboard
+      });
+      
+    } else {
+      // Handle single-answer question (original logic)
+      const isCorrect = selectedAnswer === currentQuestion.correctAnswer;
+      
+      // Store answer
+      session.answers.push({
+        questionId: currentQuestion._id,
+        selectedAnswer: selectedAnswer,
+        correctAnswer: currentQuestion.correctAnswer,
+        isCorrect: isCorrect
+      });
+
+      if (isCorrect) {
+        session.correctAnswers++;
+        
+        // Show correct answer message
+        await ctx.editMessageText(
+          `✅ Correct!\n\n` +
+          `Your answer: ${selectedAnswer}\n` +
+          `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`
+        );
+
+        // Move to next question or show results
+        if (session.currentQuestionIndex < session.questions.length - 1) {
+          session.currentQuestionIndex++;
+          
+          setTimeout(async () => {
+            await this.showCurrentQuestion(ctx);
+          }, 2000);
+        } else {
+          await this.showQuizResults(ctx);
+        }
+      } else {
+        // Save wrong answer to database
+        await this.saveWrongAnswer(userId, session, currentQuestion, selectedAnswer);
+        
+        // Show wrong answer with explanation
+        const explanation = currentQuestion.explanation || 'No explanation available.';
+        
+        const keyboard = new InlineKeyboard();
+        
+        if (session.currentQuestionIndex < session.questions.length - 1) {
+          keyboard.text('Next Question ➡️', 'next_question');
+        } else {
+          keyboard.text('Show Results 📊', 'next_question');
+        }
+
+        await ctx.editMessageText(
+          `❌ Wrong! Your answer: ${selectedAnswer}\n\n` +
+          `The correct answer was: ${currentQuestion.correctAnswer}\n\n` +
+          `📖 Explanation:\n${explanation}\n\n` +
+          `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`,
+          {
+            reply_markup: keyboard
+          }
+        );
+      }
+    }
+  }
+
+  async handleConfirmSelection(ctx) {
+    const userId = ctx.from.id;
+    const session = this.userSessions.get(userId);
+
+    if (!session || !session.questions) {
+      await ctx.reply('❌ Session error. Please use /start to begin again.');
+      return;
+    }
+
+    const currentQuestion = session.questions[session.currentQuestionIndex];
+    const userSelections = this.userSelections.get(userId) || [];
+    
+    // Validate that this is a multi-answer question
+    if (!isMultipleAnswerQuestion(currentQuestion.correctAnswer)) {
+      await ctx.reply('❌ This is not a multiple-answer question.');
+      return;
+    }
+
+    // Check if user has made any selections
+    if (userSelections.length === 0) {
+      await ctx.editMessageText(
+        '⚠️ Please select at least one answer before confirming.',
+        { reply_markup: ctx.msg.reply_markup }
+      );
+      return;
+    }
+
+    // Check if user has selected the correct number of answers
+    const requiredCount = normalizeAnswer(currentQuestion.correctAnswer).length;
+    if (userSelections.length !== requiredCount) {
+      await ctx.editMessageText(
+        `⚠️ Please select exactly ${requiredCount} answers. You have selected ${userSelections.length}.`,
+        { reply_markup: ctx.msg.reply_markup }
+      );
+      return;
+    }
+
+    // Validate the answer
+    const userAnswer = userSelections.join('');
+    const isCorrect = validateMultipleAnswers(userAnswer, currentQuestion.correctAnswer);
     
     // Store answer
     session.answers.push({
       questionId: currentQuestion._id,
-      selectedAnswer: selectedAnswer,
+      selectedAnswer: userAnswer,
       correctAnswer: currentQuestion.correctAnswer,
       isCorrect: isCorrect
     });
+
+    // Clear user selections for this question
+    this.userSelections.delete(userId);
 
     if (isCorrect) {
       session.correctAnswers++;
@@ -415,7 +665,7 @@ class CertificationBot {
       // Show correct answer message
       await ctx.editMessageText(
         `✅ Correct!\n\n` +
-        `Your answer: ${selectedAnswer}\n` +
+        `Your answer: ${formatAnswerForDisplay(userAnswer)}\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`
       );
 
@@ -431,7 +681,7 @@ class CertificationBot {
       }
     } else {
       // Save wrong answer to database
-      await this.saveWrongAnswer(userId, session, currentQuestion, selectedAnswer);
+      await this.saveWrongAnswer(userId, session, currentQuestion, userAnswer);
       
       // Show wrong answer with explanation
       const explanation = currentQuestion.explanation || 'No explanation available.';
@@ -445,8 +695,8 @@ class CertificationBot {
       }
 
       await ctx.editMessageText(
-        `❌ Wrong! Your answer: ${selectedAnswer}\n\n` +
-        `The correct answer was: ${currentQuestion.correctAnswer}\n\n` +
+        `❌ Wrong! Your answer: ${formatAnswerForDisplay(userAnswer)}\n\n` +
+        `The correct answer was: ${formatAnswerForDisplay(currentQuestion.correctAnswer)}\n\n` +
         `📖 Explanation:\n${explanation}\n\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`,
         {
@@ -454,6 +704,55 @@ class CertificationBot {
         }
       );
     }
+  }
+
+  async handleClearSelection(ctx) {
+    const userId = ctx.from.id;
+    const session = this.userSessions.get(userId);
+
+    if (!session || !session.questions) {
+      await ctx.reply('❌ Session error. Please use /start to begin again.');
+      return;
+    }
+
+    const currentQuestion = session.questions[session.currentQuestionIndex];
+    
+    // Validate that this is a multi-answer question
+    if (!isMultipleAnswerQuestion(currentQuestion.correctAnswer)) {
+      await ctx.reply('❌ This is not a multiple-answer question.');
+      return;
+    }
+
+    // Clear all selections
+    this.userSelections.set(userId, []);
+    
+    // Recreate the question display
+    const requiredCount = normalizeAnswer(currentQuestion.correctAnswer).length;
+    const questionNumber = session.currentQuestionIndex + 1;
+    const totalQuestions = session.questions.length;
+    
+    const questionText = 
+      `📝 Question ${questionNumber}/${totalQuestions}\n` +
+      `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
+      `${currentQuestion.question}\n\n` +
+      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+      `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+      `⚠️ Multiple answers required: Select ${requiredCount} options\n` +
+      `✅ Selected: None (0/${requiredCount})`;
+
+    // Create fresh keyboard
+    const keyboard = new InlineKeyboard();
+    keyboard
+      .text('A', 'answer_A').text('B', 'answer_B').row()
+      .text('C', 'answer_C').text('D', 'answer_D').row()
+      .text('✅ Confirm Selection', 'confirm_selection').row()
+      .text('🔄 Clear All', 'clear_selection');
+
+    await ctx.editMessageText(questionText, {
+      reply_markup: keyboard
+    });
   }
 
   async handleNextQuestion(ctx) {
