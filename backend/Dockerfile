@@ -29,7 +29,7 @@ RUN pip install --upgrade pip setuptools wheel
 
 # Copy requirements and install Python dependencies
 COPY requirements-railway.txt .
-RUN pip install --no-cache-dir -r requirements-railway.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
