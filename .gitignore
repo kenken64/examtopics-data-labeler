@@ -38,3 +38,4 @@ logs/
 myenv
 
 commit-message*.txt
+commit-message/
