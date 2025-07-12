@@ -1,0 +1,8 @@
+# Nixpacks configuration for Railway deployment
+[start]
+cmd = "npm start"
+
+[variables]
+NODE_ENV = "production"
+PORT = "3000"
+NEXT_TELEMETRY_DISABLED = "1"

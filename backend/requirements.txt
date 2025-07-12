@@ -1,8 +1,9 @@
-Flask
-docling
-pypdf
-Flask-Cors
-pdf2image
-openai
-Pillow
-python-dotenv
+Flask>=2.3.0
+docling>=1.0.0
+pypdf>=3.0.0
+Flask-Cors>=4.0.0
+pdf2image>=3.1.0
+openai>=1.0.0
+Pillow>=10.0.0
+python-dotenv>=1.0.0
+gunicorn>=21.0.0

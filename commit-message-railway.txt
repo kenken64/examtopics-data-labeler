@@ -1,0 +1,50 @@
+Backend Railway deployment preparation with production configuration
+
+This commit prepares the backend for seamless Railway.app deployment with comprehensive production setup:
+
+🚀 Railway Deployment Configuration:
+- railway.json: Railway-specific deployment settings with health checks
+- nixpacks.toml: Build configuration with system dependencies (poppler, tesseract)
+- Dockerfile: Alternative Docker deployment method
+- wsgi.py: Production WSGI server with Gunicorn configuration
+
+🔧 Production Flask Application:
+- Health check endpoint (/health) for Railway monitoring
+- Root endpoint (/) with service information
+- Environment-based configuration (production/development)
+- Dynamic port configuration using Railway's PORT variable
+- CORS enabled for frontend integration
+
+📦 Dependencies and Requirements:
+- Updated requirements.txt with pinned versions for stability
+- Added Gunicorn WSGI server for production
+- System dependencies: poppler-utils, tesseract-ocr
+- OpenGL and font rendering libraries included
+
+⚙️ Environment Configuration:
+- .env.railway: Template for Railway environment variables
+- Production Flask settings (debug=False, env=production)
+- Automatic Railway environment detection
+- Secure environment variable handling for OPENAI_API_KEY
+
+🛡️ Production Features:
+- Gunicorn WSGI server with 4 workers and optimized settings
+- Health check monitoring and auto-restart policies
+- Structured logging for production debugging
+- Error handling and graceful failure recovery
+- Security headers and production Flask configuration
+
+📋 Deployment Tools:
+- deploy-railway.sh/bat: Cross-platform deployment preparation scripts
+- RAILWAY_DEPLOYMENT.md: Comprehensive deployment guide
+- Environment validation and dependency checking
+- Step-by-step Railway setup instructions
+
+🎯 Key Capabilities:
+- PDF conversion and OCR processing endpoints
+- OpenAI API integration for document analysis
+- Automatic scaling and load balancing via Railway
+- SSL/HTTPS with automatic certificate management
+- Real-time logging and monitoring dashboard
+
+This provides a complete production-ready backend deployment setup for Railway with monitoring, scaling, and security best practices.

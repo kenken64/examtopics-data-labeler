@@ -1,30 +1,41 @@
-Add editing functionality to saved questions: editable correct answer and explanation
+Complete MongoDB management suite: PowerShell scripts, backup, restore, and cleanup tools
 
-FEATURE: Enhanced question management with inline editing capabilities
+This commit creates a comprehensive MongoDB management toolkit with cross-platform support and enhanced authentication:
 
-NEW EDITING FEATURES:
-- Correct answer dropdown selector with option previews
-- Explanation textarea with markdown support for rich text editing
-- Real-time edit/save/cancel controls with loading states
-- Visual feedback during save operations
+� New PowerShell Scripts:
+- mongodb-backup.ps1: Full-featured backup script with PowerShell parameters
+- mongodb-restore.ps1: Advanced restore script with drop collection option
+- mongodb-cleanup.ps1: Safe collection cleanup with confirmation prompts
 
-TECHNICAL IMPLEMENTATION:
-- Added PATCH endpoint to /api/saved-questions for updating questions in quizzes collection
-- Enhanced question detail page with editing state management
-- Added shadcn/ui textarea component for explanation editing
-- Dropdown shows option letters with text preview for easy selection
-- Maintains existing markdown rendering for read-only view
+📋 Enhanced Script Collection:
+- mongodb-backup.sh/bat: Cross-platform backup scripts
+- mongodb-restore.sh/bat: Cross-platform restore scripts  
+- mongodb-cleanup.sh/bat: Safe cleanup scripts for all platforms
 
-UI/UX IMPROVEMENTS:
-- Toggle between view and edit modes with clear controls
-- Save and cancel buttons with proper disabled states during operations
-- Consistent styling with existing design system
-- Error handling and success notifications for all operations
+⚙️ Environment Configuration:
+- backup-env-vars.sh/bat: Environment setup for backup operations
+- restore-env-vars.sh/bat: Environment setup for restore operations
+- cleanup-env-vars.sh/bat: Environment setup for cleanup operations
 
-BACKEND UPDATES:
-- New PATCH route validates question ID and updates MongoDB quizzes collection
-- Adds updatedAt timestamp for change tracking
-- Proper error handling for invalid questions or database issues
+� Authentication Improvements:
+- SCRAM-SHA-256 as primary authentication mechanism
+- Fallback methods for compatibility (SCRAM-SHA-1, MONGODB-CR, PLAIN)
+- Enhanced URI format with authSource and authMechanism parameters
+- Separate parameter method as secondary approach
 
-This allows admins to easily correct wrong answers and improve explanations
-without needing direct database access.
+✨ Key Features:
+- Cross-platform support (Windows, Linux, macOS)
+- PowerShell cmdlet-style parameters and help
+- Safety confirmations for destructive operations
+- Comprehensive error handling and troubleshooting
+- Timestamped backups with size reporting
+- Verbose logging and progress indicators
+
+🛡️ Safety Features:
+- Confirmation prompts for cleanup operations
+- Force flags for automation scenarios
+- Clear warning messages for destructive actions
+- Environment variable validation
+- Connection testing before operations
+
+This provides a complete MongoDB DevOps toolkit for backup, restore, and maintenance operations across all platforms.

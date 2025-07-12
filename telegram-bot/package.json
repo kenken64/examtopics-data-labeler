@@ -1,20 +1,24 @@
 {
-  "name": "telegram-bot",
+  "name": "examtopics-telegram-bot",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AWS Certification Practice Bot for Telegram",
+  "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
     "dev": "node bot.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "validate": "node -c bot.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["telegram", "bot", "aws", "certification", "practice", "quiz"],
+  "author": "ExamTopics",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "dependencies": {
-    "dotenv": "^17.2.0",
-    "grammy": "^1.37.0",
-    "mongodb": "^6.17.0"
+    "dotenv": "^16.0.3",
+    "grammy": "^1.15.0",
+    "mongodb": "^5.6.0"
   }
 }
