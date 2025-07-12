@@ -1,14 +1,29 @@
 @echo off
 REM Git automation script for Windows Batch
-REM Usage: git-auto.bat "Your commit message"
+REM Usage: git-auto.bat [commit-message-file]
+REM Reads commit message from commit-message.txt file by default
 
+REM Set default commit message file
 if "%~1"=="" (
-    echo Error: Please provide a commit message
-    echo Usage: git-auto.bat "Your commit message"
+    set COMMIT_MESSAGE_FILE=commit-message.txt
+) else (
+    set COMMIT_MESSAGE_FILE=%~1
+)
+
+REM Check if commit message file exists
+if not exist "%COMMIT_MESSAGE_FILE%" (
+    echo ❌ Error: Commit message file '%COMMIT_MESSAGE_FILE%' not found
+    echo 📝 Please create a '%COMMIT_MESSAGE_FILE%' file with your commit message
     exit /b 1
 )
 
-set COMMIT_MESSAGE=%~1
+REM Check if commit message file is empty
+for %%A in ("%COMMIT_MESSAGE_FILE%") do set SIZE=%%~zA
+if %SIZE% equ 0 (
+    echo ❌ Error: Commit message file '%COMMIT_MESSAGE_FILE%' is empty
+    echo 📝 Please add your commit message to '%COMMIT_MESSAGE_FILE%'
+    exit /b 1
+)
 
 echo 🔍 Checking git status...
 git status
@@ -18,8 +33,9 @@ echo 📝 Adding all changes...
 git add .
 
 echo.
-echo 💾 Committing changes with message: '%COMMIT_MESSAGE%'
-git commit -m "%COMMIT_MESSAGE%"
+echo 💾 Committing changes with message from '%COMMIT_MESSAGE_FILE%':
+type "%COMMIT_MESSAGE_FILE%"
+git commit -F "%COMMIT_MESSAGE_FILE%"
 
 echo.
 echo 🚀 Getting current branch name...

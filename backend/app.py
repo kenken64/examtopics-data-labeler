@@ -17,8 +17,37 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.debug = True # Enable debug mode
+
+# Configure Flask for Railway deployment
+app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+app.config['ENV'] = os.getenv('FLASK_ENV', 'production')
+
 CORS(app) # Enable CORS for all routes
+
+# Health check endpoint for Railway
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for Railway deployment monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'examtopics-backend',
+        'version': '1.0.0',
+        'environment': app.config['ENV']
+    }), 200
+
+# Root endpoint
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint with service information"""
+    return jsonify({
+        'service': 'ExamTopics Data Labeler Backend',
+        'version': '1.0.0',
+        'endpoints': [
+            '/health - Health check',
+            '/convert-pdf - PDF conversion and OCR',
+            '/ocr-pdf - PDF OCR processing'
+        ]
+    }), 200
 
 @app.route('/convert-pdf', methods=['POST'])
 def convert_pdf():
@@ -272,4 +301,6 @@ def convert_pdf_ocr():
                 print(f"Cleaned up single page PDF: {single_page_pdf_path}")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    # Get port from environment variable (Railway sets this automatically)
+    port = int(os.getenv('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)

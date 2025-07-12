@@ -36,3 +36,6 @@ logs/
 *.swo
 
 myenv
+
+commit-message*.txt
+commit-message/

@@ -1,0 +1,14 @@
+# Nixpacks configuration for Railway deployment
+[start]
+cmd = "python app.py"
+
+[build]
+nixLibs = ["poppler_utils", "tesseract"]
+
+[variables]
+PORT = "5000"
+PYTHONUNBUFFERED = "1"
+PYTHONDONTWRITEBYTECODE = "1"
+
+[python]
+version = "3.12.4"

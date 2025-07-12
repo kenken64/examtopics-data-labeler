@@ -1,5 +1,6 @@
 const { Bot, InlineKeyboard } = require('grammy');
 const { MongoClient, ObjectId } = require('mongodb');
+const http = require('http');
 require('dotenv').config();
 
 /**
@@ -78,8 +79,10 @@ class CertificationBot {
     this.db = null;
     this.userSessions = new Map(); // Store user quiz sessions
     this.userSelections = new Map(); // Store user's current answer selections for multiple choice
+    this.healthServer = null; // Health check server for Railway
     
     this.initializeBot();
+    this.setupHealthCheck();
   }
 
   async connectToDatabase() {
@@ -177,6 +180,40 @@ class CertificationBot {
     // Handle quick action menu
     this.bot.callbackQuery('quick_menu', async (ctx) => {
       await this.handleQuickMenu(ctx);
+    });
+  }
+
+  setupHealthCheck() {
+    // Create HTTP server for Railway health checks
+    const port = process.env.PORT || 8080;
+    
+    this.healthServer = http.createServer((req, res) => {
+      if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'healthy',
+          service: 'examtopics-telegram-bot',
+          version: '1.0.0',
+          uptime: process.uptime(),
+          timestamp: new Date().toISOString(),
+          mongodb: this.db ? 'connected' : 'disconnected'
+        }));
+      } else if (req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          service: 'ExamTopics Telegram Bot',
+          version: '1.0.0',
+          description: 'AWS Certification Practice Bot',
+          health: '/health'
+        }));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not Found' }));
+      }
+    });
+
+    this.healthServer.listen(port, '0.0.0.0', () => {
+      console.log(`Health check server running on port ${port}`);
     });
   }
 
@@ -1314,8 +1351,8 @@ class CertificationBot {
         message += '\n\n';
       });
 
-      message += `💡 Tip: Focus on reviewing these questions from your current access code to improve your knowledge!\n\n`;
-      message += `📊 Detailed breakdown:\n`;
+      message += `💡 Tip: Focus on reviewing these questions from your current access code to improve your knowledge!\n\n` +
+                 `📊 Detailed breakdown:\n`;
       
       // Show detailed breakdown for each certificate
       wrongAnswersByCategory.forEach((category, index) => {
@@ -1555,7 +1592,7 @@ class CertificationBot {
         `Certificate: ${session.certificate.name}\n` +
         `Progress: ${session.currentQuestionIndex + 1}/${session.questions.length}\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}\n\n` +
-        `<b>Quick Actions:</b>\n`;
+        `<b>Quick Actions:</b>\n` ;
       
       const keyboard = new InlineKeyboard()
         .text('📝 Current Question', 'menu_current_question').row()
@@ -1572,7 +1609,7 @@ class CertificationBot {
       // No active session
       menuMessage += 
         `🎯 <b>No Active Quiz Session</b>\n\n` +
-        `<b>Quick Actions:</b>\n`;
+        `<b>Quick Actions:</b>\n` ;
       
       const keyboard = new InlineKeyboard()
         .text('🚀 Start New Quiz', 'menu_start').row()
@@ -1615,6 +1652,14 @@ const gracefulShutdown = async (signal) => {
   
   try {
     await bot.stop();
+    
+    // Close health check server
+    if (bot.healthServer) {
+      bot.healthServer.close(() => {
+        console.log('Health check server closed');
+      });
+    }
+    
     console.log('Bot shutdown completed');
     process.exit(0);
   } catch (error) {
