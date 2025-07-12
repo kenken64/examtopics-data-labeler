@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, BookOpen, Loader2, CheckCircle, XCircle, Info, Brain } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2, CheckCircle, XCircle, Info, Brain, Edit, Save, X } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { getQuestionOptions, getCorrectAnswer, getAllCorrectAnswers } from '../../../utils/questionTransform';
 import { isMultipleAnswerQuestion, validateMultipleAnswers, formatAnswerForDisplay, getAnswerInfo } from '../../../utils/multipleAnswerUtils';
@@ -41,6 +43,13 @@ const QuestionDetailPage = () => {
   const [aiExplanation, setAiExplanation] = useState<string>('');
   const [loadingAiExplanation, setLoadingAiExplanation] = useState(false);
   const [showAiExplanation, setShowAiExplanation] = useState(false);
+  
+  // Editing states
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingCorrectAnswer, setEditingCorrectAnswer] = useState<string>('');
+  const [editingExplanation, setEditingExplanation] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -48,6 +57,14 @@ const QuestionDetailPage = () => {
       loadQuestion();
     }
   }, [questionNumber, accessCode, certificateCode]);
+
+  // Initialize editing values when question loads
+  useEffect(() => {
+    if (question) {
+      setEditingCorrectAnswer(String(question.correctAnswer || ''));
+      setEditingExplanation(question.explanation || '');
+    }
+  }, [question]);
 
   const loadQuestion = async () => {
     try {
@@ -175,6 +192,64 @@ const QuestionDetailPage = () => {
     }
   };
 
+  const handleEditToggle = () => {
+    if (isEditing) {
+      // Cancel editing - reset values
+      setEditingCorrectAnswer(String(question?.correctAnswer || ''));
+      setEditingExplanation(question?.explanation || '');
+    }
+    setIsEditing(!isEditing);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!question) return;
+    
+    try {
+      setSaving(true);
+      
+      const response = await fetch('/api/saved-questions', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          questionId: question._id,
+          correctAnswer: editingCorrectAnswer,
+          explanation: editingExplanation.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to save changes');
+      }
+
+      // Update local question state
+      setQuestion(prev => prev ? {
+        ...prev,
+        correctAnswer: editingCorrectAnswer,
+        explanation: editingExplanation.trim()
+      } : null);
+
+      setIsEditing(false);
+      
+      toast({
+        title: "Success",
+        description: "Question updated successfully.",
+      });
+
+    } catch (error) {
+      console.error('Error saving changes:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to save changes. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const getOptionLabel = (index: number) => {
     return String.fromCharCode(65 + index); // A, B, C, D, etc.
   };
@@ -236,6 +311,15 @@ const QuestionDetailPage = () => {
       const selectedIndex = selectedAnswers.length === 1 ? (selectedAnswers[0].charCodeAt(0) - 65) : -1;
       return selectedIndex === correctIndex;
     }
+  };
+
+  const getAnswerOptions = () => {
+    if (!question) return [];
+    const options = getQuestionOptions(question);
+    return options.map((option, index) => ({
+      value: String(index),
+      label: `${getOptionLabel(index)}: ${option.substring(0, 50)}${option.length > 50 ? '...' : ''}`
+    }));
   };
 
   if (loading) {
@@ -426,8 +510,131 @@ const QuestionDetailPage = () => {
           </CardContent>
         </Card>
 
-        {/* Explanation Card */}
-        {showAnswer && question.explanation && (
+        {/* Edit Controls */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-xl flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Edit className="h-5 w-5 text-blue-600" />
+                Question Management
+              </span>
+              <div className="flex gap-2">
+                {!isEditing ? (
+                  <Button 
+                    onClick={handleEditToggle}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Question
+                  </Button>
+                ) : (
+                  <>
+                    <Button 
+                      onClick={handleSaveChanges}
+                      size="sm"
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save Changes
+                    </Button>
+                    <Button 
+                      onClick={handleEditToggle}
+                      size="sm"
+                      variant="outline"
+                      disabled={saving}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </>
+                )}
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Correct Answer Editor */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">
+                Correct Answer
+              </label>
+              {isEditing ? (
+                <Select 
+                  value={editingCorrectAnswer} 
+                  onValueChange={setEditingCorrectAnswer}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select correct answer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getAnswerOptions().map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="p-3 bg-gray-50 rounded-md border">
+                  <span className="font-medium">
+                    {getOptionLabel(parseInt(String(question.correctAnswer)))}: 
+                  </span>
+                  <span className="ml-2">
+                    {getQuestionOptions(question)[parseInt(String(question.correctAnswer))]?.substring(0, 100)}
+                    {(getQuestionOptions(question)[parseInt(String(question.correctAnswer))]?.length || 0) > 100 ? '...' : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Explanation Editor */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 mb-2 block">
+                Explanation
+              </label>
+              {isEditing ? (
+                <Textarea
+                  value={editingExplanation}
+                  onChange={(e) => setEditingExplanation(e.target.value)}
+                  placeholder="Enter question explanation..."
+                  className="min-h-[200px] resize-vertical"
+                />
+              ) : (
+                <div className="p-3 bg-gray-50 rounded-md border min-h-[100px]">
+                  {question.explanation ? (
+                    <div className="text-gray-800 leading-relaxed prose prose-sm max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({ children }) => <h1 className="text-lg font-semibold text-gray-900 mb-2">{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-base font-semibold text-gray-900 mb-2">{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-semibold text-gray-900 mb-1">{children}</h3>,
+                          ul: ({ children }) => <ul className="list-disc list-inside space-y-1 mb-3">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-3">{children}</ol>,
+                          li: ({ children }) => <li className="text-gray-800">{children}</li>,
+                          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+                          strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                          code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                          blockquote: ({ children }) => <blockquote className="border-l-4 border-blue-300 pl-4 italic text-gray-700">{children}</blockquote>,
+                        }}
+                      >
+                        {question.explanation}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 italic">No explanation provided</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Original Explanation Card - Show when not editing and answer is shown */}
+        {showAnswer && !isEditing && question.explanation && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle className="text-xl flex items-center gap-2">
@@ -563,6 +770,98 @@ const QuestionDetailPage = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Editing Section */}
+        {isEditing && question && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Edit className="h-5 w-5 text-green-600" />
+                Edit Question
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Correct Answer Edit */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Correct Answer
+                  </label>
+                  <Select
+                    value={editingCorrectAnswer}
+                    onValueChange={setEditingCorrectAnswer}
+                    disabled={saving}
+                  >
+                    <SelectTrigger className="border-gray-300">
+                      <SelectValue placeholder="Select correct answer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAnswerOptions().map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Explanation Edit */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Explanation
+                  </label>
+                  <Textarea
+                    value={editingExplanation}
+                    onChange={(e) => setEditingExplanation(e.target.value)}
+                    placeholder="Enter explanation"
+                    className="resize-none border-gray-300"
+                    disabled={saving}
+                    rows={3}
+                  />
+                </div>
+
+                {/* Save/Cancel Buttons */}
+                <div className="flex gap-3">
+                  <Button 
+                    onClick={handleSaveChanges}
+                    className="flex-1"
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save Changes
+                  </Button>
+                  <Button 
+                    onClick={handleEditToggle}
+                    variant="outline"
+                    className="flex-1"
+                    disabled={saving}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Edit Toggle Button */}
+        <div className="text-center">
+          {!isEditing && (
+            <Button 
+              onClick={handleEditToggle}
+              variant="outline"
+              className="mb-6"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Question
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
