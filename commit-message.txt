@@ -1,9 +1,22 @@
-Fix Telegram bot access code validation for certificate mismatch
+Fix Telegram bot 409 conflict error with comprehensive bot management system
 
-- Fixed critical security bug where access codes for one certificate could be used with a different certificate
-- Issue: certificateId comparison was failing because session stored string but database has ObjectId
-- Solution: Convert certificateId to ObjectId in getQuestionsForAccessCode method before comparison
-- Now properly validates that access code belongs to selected certificate
-- Users get clear error message when trying to use access code for wrong certificate
+PROBLEM SOLVED: "409 Conflict: terminated by other getUpdates request" error
 
-Example: AC-BG4F3QA3 is for Solutions Architect but was incorrectly allowing AI Practitioner access
+- Added proper error handling for bot startup conflicts (409 errors)  
+- Implemented graceful shutdown with better process cleanup
+- Created bot-manager.js for automatic conflict resolution and process management
+- Added Windows PowerShell script (bot.ps1) for enhanced process control
+- Added Windows batch file (bot.bat) for command prompt users
+- Enhanced startup with drop_pending_updates option to clear stale connections
+- Improved signal handlers with shutdown prevention for multiple signals
+- Added process title for easier identification and management
+
+NEW MANAGEMENT TOOLS:
+- bot-manager.js: Cross-platform process management (recommended)
+- bot.ps1: PowerShell script with status checking and cleanup
+- bot.bat: Simple batch file for Windows command prompt
+- BOT_MANAGEMENT.md: Comprehensive troubleshooting guide
+
+USAGE: Run "node bot-manager.js start" to automatically handle conflicts
+
+Now users can easily start/stop/restart the bot without 409 conflicts!

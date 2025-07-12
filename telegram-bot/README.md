@@ -33,9 +33,42 @@ A Telegram bot built with Grammy framework for AWS certification quiz practice.
    - Update `BOT_TOKEN` in `.env`
 
 4. **Start the Bot**
+
+   **Recommended (handles conflicts automatically):**
    ```bash
-   npm start
+   node bot-manager.js start
    ```
+
+   **Alternative methods:**
+   ```bash
+   # Standard start
+   npm start
+   # or
+   node bot.js
+   
+   # Windows PowerShell
+   .\bot.ps1 start
+   
+   # Windows Command Prompt  
+   bot.bat start
+   ```
+
+   > **Note:** If you get a "409 Conflict" error, see the [Bot Management Guide](./BOT_MANAGEMENT.md)
+
+## Common Issues
+
+### 409 Conflict Error
+If you see this error:
+```
+GrammyError: Call to 'getUpdates' failed! (409: Conflict...)
+```
+
+**Quick Fix:**
+```bash
+node bot-manager.js start
+```
+
+For detailed troubleshooting, see [BOT_MANAGEMENT.md](./BOT_MANAGEMENT.md)
 
 ## Usage
 

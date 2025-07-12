@@ -1381,18 +1381,36 @@ class CertificationBot {
       await this.connectToDatabase();
       console.log('Connected to MongoDB');
       
-      await this.bot.start();
-      console.log('Bot started successfully!');
+      // Add error handling for bot conflicts
+      await this.bot.start({
+        onStart: () => console.log('Bot started successfully!'),
+        drop_pending_updates: true // This helps clear any pending updates from previous instances
+      });
     } catch (error) {
-      console.error('Error starting bot:', error);
+      if (error.error_code === 409) {
+        console.error('Bot conflict detected! Another instance is already running.');
+        console.error('Please stop any other running bot instances and try again.');
+        console.error('You can also wait a few minutes for the previous instance to timeout.');
+        process.exit(1);
+      } else {
+        console.error('Error starting bot:', error);
+        process.exit(1);
+      }
     }
   }
 
   async stop() {
-    if (this.mongoClient) {
-      await this.mongoClient.close();
+    console.log('Shutting down bot...');
+    try {
+      if (this.mongoClient) {
+        await this.mongoClient.close();
+        console.log('MongoDB connection closed');
+      }
+      await this.bot.stop();
+      console.log('Bot stopped successfully');
+    } catch (error) {
+      console.error('Error during shutdown:', error);
     }
-    await this.bot.stop();
   }
 
   async handleCommandMenu(ctx) {
@@ -1570,21 +1588,47 @@ class CertificationBot {
   }
 }
 
-// Create and start the bot
+// Create and start the bot with better error handling
+console.log('Initializing Telegram Bot...');
+console.log('If you get a 409 conflict error, run: node bot-manager.js kill');
+console.log('Or use: node bot-manager.js start (recommended)');
+console.log('');
+
 const bot = new CertificationBot();
+
+// Add process title for easier identification
+process.title = 'telegram-aws-cert-bot';
+
 bot.start();
 
 // Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Stopping bot...');
-  await bot.stop();
-  process.exit(0);
-});
+let isShuttingDown = false;
 
-process.on('SIGTERM', async () => {
-  console.log('Stopping bot...');
-  await bot.stop();
-  process.exit(0);
-});
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) {
+    console.log('Shutdown already in progress...');
+    return;
+  }
+  
+  isShuttingDown = true;
+  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+  
+  try {
+    await bot.stop();
+    console.log('Bot shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle Windows-specific signals
+if (process.platform === 'win32') {
+  process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+}
 
 module.exports = CertificationBot;
