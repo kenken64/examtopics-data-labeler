@@ -64,12 +64,11 @@ echo "⚠️  WARNING: This will restore data to the '$MONGO_RESTORE_DB' databas
 echo "Press Ctrl+C to cancel, or press Enter to continue..."
 read -r
 
-# Build MongoDB URI
-MONGO_URI="mongodb://$MONGO_RESTORE_USER:$MONGO_RESTORE_PASS@$MONGO_RESTORE_HOST"
+# Build connection string
+CONNECTION_STRING="$MONGO_RESTORE_USER:$MONGO_RESTORE_PASS@$MONGO_RESTORE_HOST"
 
-# Run mongorestore command using URI format
-echo "Running: mongorestore --uri $MONGO_URI --db $MONGO_RESTORE_DB ./backup/awscert/"
-mongorestore --uri "$MONGO_URI" --db "$MONGO_RESTORE_DB" ./backup/awscert/
+# Run mongorestore command
+mongorestore --host "$CONNECTION_STRING" --db "$MONGO_RESTORE_DB" ./backup/awscert/
 
 # Check if restore was successful
 if [ $? -eq 0 ]; then

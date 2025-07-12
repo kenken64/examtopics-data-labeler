@@ -145,15 +145,6 @@ ls -la ./backup/awscert/
 2. **Connection refused**: Check MongoDB service status
 3. **Authentication failed**: Verify connection string credentials
 4. **Permission denied**: Make scripts executable with `chmod +x`
-5. **Invalid Options Error**: Fixed in latest version - scripts now use `--uri` instead of `--host` with credentials
-
-### MongoDB Connection Format
-The scripts use MongoDB URI format for proper authentication:
-```
-mongodb://username:password@host:port
-```
-
-This replaces the previous `--host` parameter approach that caused parsing errors.
 
 ### Log Output
 Both scripts provide detailed logging including:
