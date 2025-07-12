@@ -69,11 +69,49 @@ mongodb-restore.bat
 - **Authentication**: None (local instance)
 
 ### Target (Restore)
-- **Host**: `metro.proxy.rlwy.net:20769`
-- **Database**: `test`
-- **Authentication**: Embedded in connection string
-- **Username**: `mongo`
-- **Password**: `LljBYulYQHFmXxYZVFjhYHyJtosRSnaN`
+- **Host**: Set via `MONGO_RESTORE_HOST` environment variable
+- **Database**: Set via `MONGO_RESTORE_DB` environment variable (defaults to 'test')
+- **Authentication**: Set via `MONGO_RESTORE_USER` and `MONGO_RESTORE_PASS` environment variables
+
+## Environment Variables Setup
+
+The restore scripts require environment variables for security. **DO NOT hardcode credentials in scripts.**
+
+### Method 1: Environment Variables Setup Files
+
+Use the provided setup files:
+
+```bash
+# Unix/Linux/macOS
+source restore-env-vars.sh
+
+# Windows
+restore-env-vars.bat
+```
+
+### Method 2: Manual Setup
+
+```bash
+# Unix/Linux/macOS
+export MONGO_RESTORE_HOST=your-mongo-host:port
+export MONGO_RESTORE_USER=your-username
+export MONGO_RESTORE_PASS=your-password
+export MONGO_RESTORE_DB=your-target-database
+
+# Windows
+set MONGO_RESTORE_HOST=your-mongo-host:port
+set MONGO_RESTORE_USER=your-username
+set MONGO_RESTORE_PASS=your-password
+set MONGO_RESTORE_DB=your-target-database
+```
+
+### Method 3: .env File
+
+1. Copy `.env.example` to `.env`
+2. Update with your credentials
+3. Source the file before running scripts
+
+**⚠️ Important**: Add `.env` to your `.gitignore` to prevent committing credentials!
 
 ## Safety Features
 
@@ -86,13 +124,16 @@ mongodb-restore.bat
 ## Example Usage
 
 ```bash
-# 1. Create backup
+# 1. Set up environment variables
+source restore-env-vars.sh  # or restore-env-vars.bat on Windows
+
+# 2. Create backup
 ./mongodb-backup.sh
 
-# 2. Verify backup
+# 3. Verify backup
 ls -la ./backup/awscert/
 
-# 3. Restore to remote
+# 4. Restore to remote
 ./mongodb-restore.sh
 ```
 
@@ -114,7 +155,23 @@ Both scripts provide detailed logging including:
 
 ## Security Notes
 
-⚠️ **Important**: The restore script contains database credentials. Ensure:
-- Scripts are not committed to public repositories with real credentials
-- File permissions restrict access to authorized users only
-- Consider using environment variables for sensitive information
+🔒 **IMPORTANT SECURITY PRACTICES**:
+
+1. **Never hardcode credentials** in scripts or commit them to version control
+2. **Use environment variables** for all sensitive information
+3. **Add `.env` files to `.gitignore`** to prevent accidental commits
+4. **Rotate credentials regularly** and use strong passwords
+5. **Limit database permissions** to only what's necessary for backup/restore
+6. **Use secure connections** (TLS/SSL) when available
+7. **Store backup files securely** and encrypt sensitive backups
+
+### Files and Permissions:
+- Add `restore-env-vars.sh`, `restore-env-vars.bat`, and `.env` to `.gitignore`
+- Set restrictive file permissions: `chmod 600 .env restore-env-vars.*`
+- Ensure scripts are executable: `chmod +x *.sh`
+
+### Environment Variables:
+- `MONGO_RESTORE_HOST` - MongoDB host and port
+- `MONGO_RESTORE_USER` - Username for authentication  
+- `MONGO_RESTORE_PASS` - Password for authentication
+- `MONGO_RESTORE_DB` - Target database name (optional, defaults to 'test')

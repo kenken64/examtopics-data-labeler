@@ -1,9 +1,12 @@
-fix: remove duplicate edit forms in saved questions detail page
+security: remove hardcoded credentials from MongoDB restore scripts
 
-- Removed duplicate "Original Explanation Card" that caused duplicate explanation display
-- Removed separate editing section that created duplicate editing forms
-- Consolidated all editing functionality within the main question card
-- Added save/cancel buttons to main card when in editing mode
-- Ensures single, clean editing interface without UI duplication
+- Replace hardcoded connection string with environment variables
+- Add MONGO_RESTORE_HOST, MONGO_RESTORE_USER, MONGO_RESTORE_PASS, MONGO_RESTORE_DB variables
+- Updated both mongodb-restore.sh and mongodb-restore.bat scripts
+- Created environment variable setup files (restore-env-vars.sh/.bat)
+- Added .env.example template for secure credential management
+- Updated README.md with security best practices and setup instructions
+- Added .gitignore-recommendation to prevent credential commits
+- Enhanced error handling for missing environment variables
 
-Fixes issue where multiple edit forms could appear simultaneously on the question detail page.
+This removes security risks of exposing database credentials in version control.

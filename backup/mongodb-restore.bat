@@ -4,8 +4,45 @@ REM This script restores the awscert database backup to a remote MongoDB instanc
 
 echo 🔄 Starting MongoDB restore process...
 echo Source: ./backup/awscert/
-echo Target Host: metro.proxy.rlwy.net:20769
-echo Target Database: test
+
+REM Check for environment variables or use defaults
+if "%MONGO_RESTORE_HOST%"=="" (
+    echo ❌ Error: MONGO_RESTORE_HOST environment variable not set!
+    echo Please set the following environment variables:
+    echo   MONGO_RESTORE_HOST=your-mongo-host:port
+    echo   MONGO_RESTORE_USER=your-username
+    echo   MONGO_RESTORE_PASS=your-password
+    echo   MONGO_RESTORE_DB=target-database-name
+    echo.
+    echo Example:
+    echo   set MONGO_RESTORE_HOST=metro.proxy.rlwy.net:20769
+    echo   set MONGO_RESTORE_USER=mongo
+    echo   set MONGO_RESTORE_PASS=your-password
+    echo   set MONGO_RESTORE_DB=test
+    pause
+    exit /b 1
+)
+
+if "%MONGO_RESTORE_USER%"=="" (
+    echo ❌ Error: MONGO_RESTORE_USER environment variable not set!
+    pause
+    exit /b 1
+)
+
+if "%MONGO_RESTORE_PASS%"=="" (
+    echo ❌ Error: MONGO_RESTORE_PASS environment variable not set!
+    pause
+    exit /b 1
+)
+
+if "%MONGO_RESTORE_DB%"=="" (
+    set MONGO_RESTORE_DB=test
+    echo Using default target database: test
+)
+
+echo Target Host: %MONGO_RESTORE_HOST%
+echo Target Database: %MONGO_RESTORE_DB%
+echo Target User: %MONGO_RESTORE_USER%
 
 REM Check if backup directory exists
 if not exist "./backup/awscert" (
@@ -26,12 +63,15 @@ if exist "./backup/awscert" (
 )
 
 echo.
-echo ⚠️  WARNING: This will restore data to the 'test' database on the remote server.
+echo ⚠️  WARNING: This will restore data to the '%MONGO_RESTORE_DB%' database on the remote server.
 echo Press Ctrl+C to cancel, or press any key to continue...
 pause
 
+REM Build connection string
+set CONNECTION_STRING=%MONGO_RESTORE_USER%:%MONGO_RESTORE_PASS%@%MONGO_RESTORE_HOST%
+
 REM Run mongorestore command
-mongorestore --host mongo:LljBYulYQHFmXxYZVFjhYHyJtosRSnaN@metro.proxy.rlwy.net:20769 --db test ./backup/awscert/
+mongorestore --host %CONNECTION_STRING% --db %MONGO_RESTORE_DB% ./backup/awscert/
 
 REM Check if restore was successful
 if %ERRORLEVEL% equ 0 (
@@ -47,8 +87,8 @@ if %ERRORLEVEL% equ 0 (
 echo.
 echo 📋 Restore Summary:
 echo - Source: ./backup/awscert/
-echo - Target Host: metro.proxy.rlwy.net:20769
-echo - Target Database: test
+echo - Target Host: %MONGO_RESTORE_HOST%
+echo - Target Database: %MONGO_RESTORE_DB%
 echo - Status: Complete
 
 pause

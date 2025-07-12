@@ -1,0 +1,10 @@
+# Add these lines to your .gitignore file to protect credentials
+
+# MongoDB restore environment variables
+backup/.env
+backup/restore-env-vars.sh
+backup/restore-env-vars.bat
+
+# Or if you want to keep the template files but ignore the actual credentials:
+# backup/.env
+# !backup/.env.example
