@@ -162,28 +162,38 @@ const SettingsPage = () => {
             <CardHeader>
               <CardTitle>{t('settings.about.title')}</CardTitle>
               <CardDescription>
-                {t('settings.about.description')}
+                AWS Certification Management and Quiz Platform
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground mb-4">
+                A comprehensive platform for AWS certification exam preparation with advanced question management, 
+                Telegram bot integration, and intelligent analytics. Features include quiz labeling, payee management, 
+                dashboard analytics, saved questions editing, and secure access code validation for personalized study sessions.
+              </div>
+              
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <div className="font-medium text-foreground">{t('settings.about.version')}</div>
+                  <div className="font-medium text-foreground">Version</div>
                   <div className="text-muted-foreground">1.0.0</div>
                 </div>
                 <div>
-                  <div className="font-medium text-foreground">{t('settings.about.lastUpdated')}</div>
-                  <div className="text-muted-foreground">December 2024</div>
+                  <div className="font-medium text-foreground">Last Updated</div>
+                  <div className="text-muted-foreground">July 12, 2025</div>
                 </div>
               </div>
               <Separator />
               <div>
-                <div className="font-medium text-foreground mb-2">{t('settings.about.features')}</div>
+                <div className="font-medium text-foreground mb-2">Key Features</div>
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{t('settings.about.feature1')}</Badge>
-                  <Badge variant="secondary">{t('settings.about.feature2')}</Badge>
-                  <Badge variant="secondary">{t('settings.about.feature3')}</Badge>
-                  <Badge variant="secondary">{t('settings.about.feature4')}</Badge>
+                  <Badge variant="secondary">Quiz Management</Badge>
+                  <Badge variant="secondary">Telegram Bot</Badge>
+                  <Badge variant="secondary">Analytics Dashboard</Badge>
+                  <Badge variant="secondary">Payee Tracking</Badge>
+                  <Badge variant="secondary">Question Editing</Badge>
+                  <Badge variant="secondary">Access Codes</Badge>
+                  <Badge variant="secondary">AI Integration</Badge>
+                  <Badge variant="secondary">PDF Processing</Badge>
                 </div>
               </div>
             </CardContent>
