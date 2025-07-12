@@ -630,40 +630,37 @@ const QuestionDetailPage = () => {
                 </div>
               )}
             </div>
+
+            {/* Save/Cancel Buttons - Show only when editing */}
+            {isEditing && (
+              <div className="flex gap-3 pt-4 border-t">
+                <Button 
+                  onClick={handleSaveChanges}
+                  className="flex-1"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Save Changes
+                </Button>
+                <Button 
+                  onClick={handleEditToggle}
+                  variant="outline"
+                  className="flex-1"
+                  disabled={saving}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Original Explanation Card - Show when not editing and answer is shown */}
-        {showAnswer && !isEditing && question.explanation && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <Info className="h-5 w-5 text-blue-600" />
-                Explanation
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-gray-800 leading-relaxed prose prose-sm max-w-none">
-                <ReactMarkdown
-                  components={{
-                    h1: ({ children }) => <h1 className="text-lg font-semibold text-gray-900 mb-2">{children}</h1>,
-                    h2: ({ children }) => <h2 className="text-base font-semibold text-gray-900 mb-2">{children}</h2>,
-                    h3: ({ children }) => <h3 className="text-sm font-semibold text-gray-900 mb-1">{children}</h3>,
-                    ul: ({ children }) => <ul className="list-disc list-inside space-y-1 mb-3">{children}</ul>,
-                    ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 mb-3">{children}</ol>,
-                    li: ({ children }) => <li className="text-gray-800">{children}</li>,
-                    p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
-                    strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-                    code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
-                    blockquote: ({ children }) => <blockquote className="border-l-4 border-blue-300 pl-4 italic text-gray-700">{children}</blockquote>,
-                  }}
-                >
-                  {question.explanation}
-                </ReactMarkdown>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+
 
         {/* AI Second Opinion Section */}
         {showAnswer && (
@@ -771,83 +768,7 @@ const QuestionDetailPage = () => {
           </Card>
         )}
 
-        {/* Editing Section */}
-        {isEditing && question && (
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <Edit className="h-5 w-5 text-green-600" />
-                Edit Question
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Correct Answer Edit */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Correct Answer
-                  </label>
-                  <Select
-                    value={editingCorrectAnswer}
-                    onValueChange={setEditingCorrectAnswer}
-                    disabled={saving}
-                  >
-                    <SelectTrigger className="border-gray-300">
-                      <SelectValue placeholder="Select correct answer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getAnswerOptions().map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                {/* Explanation Edit */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Explanation
-                  </label>
-                  <Textarea
-                    value={editingExplanation}
-                    onChange={(e) => setEditingExplanation(e.target.value)}
-                    placeholder="Enter explanation"
-                    className="resize-none border-gray-300"
-                    disabled={saving}
-                    rows={3}
-                  />
-                </div>
-
-                {/* Save/Cancel Buttons */}
-                <div className="flex gap-3">
-                  <Button 
-                    onClick={handleSaveChanges}
-                    className="flex-1"
-                    disabled={saving}
-                  >
-                    {saving ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    Save Changes
-                  </Button>
-                  <Button 
-                    onClick={handleEditToggle}
-                    variant="outline"
-                    className="flex-1"
-                    disabled={saving}
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Edit Toggle Button */}
         <div className="text-center">
