@@ -1,0 +1,10 @@
+enhance: modify git-auto.ps1 to read commit messages from file
+
+- Changed script to read commit message from commit-message.txt file instead of command line parameter
+- Added file existence validation and empty file checking
+- Updated usage to be simpler: just run .\git-auto.ps1 without parameters
+- Uses git commit -F flag to preserve multi-line commit messages from file
+- Improved error messages to guide users on proper file setup
+- Makes commit workflow more consistent with file-based message management
+
+This allows for better commit message formatting and easier automation workflows.
