@@ -1,4 +1,7 @@
 # Nixpacks configuration for Railway deployment
+[build]
+cmd = "npm install && npm run validate"
+
 [start]
 cmd = "npm start"
 

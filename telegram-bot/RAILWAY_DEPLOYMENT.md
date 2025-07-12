@@ -9,6 +9,28 @@ This guide will help you deploy the ExamTopics Telegram Bot to Railway.app.
 3. **Telegram Bot Token**: Create a bot with [@BotFather](https://t.me/BotFather) on Telegram
 4. **MongoDB Database**: MongoDB Atlas or Railway MongoDB service
 
+## Lockfile Management
+
+⚠️ **Important**: Before deploying, ensure your `package-lock.json` is synchronized with `package.json`.
+
+If you encounter npm lockfile errors during deployment:
+
+```bash
+# Option 1: Use the comprehensive preparation script
+./prepare-deployment.sh    # On Unix/Linux/macOS
+./prepare-deployment.bat   # On Windows
+
+# Option 2: Update lockfile manually
+rm package-lock.json
+npm install
+
+# Option 3: Use simple update scripts
+./update-lockfile.sh    # On Unix/Linux/macOS
+./update-lockfile.bat   # On Windows
+```
+
+**Note**: The Railway configuration has been updated to automatically regenerate the lockfile during build.
+
 ## Deployment Steps
 
 ### 1. Create Telegram Bot

@@ -7,6 +7,30 @@ This guide will help you deploy the ExamTopics backend to Railway.app.
 1. **Railway Account**: Sign up at [railway.app](https://railway.app)
 2. **GitHub Repository**: Your code should be in a GitHub repository
 3. **OpenAI API Key**: Get one from [OpenAI Platform](https://platform.openai.com)
+4. **Python 3.12.4**: The application is configured to use Python 3.12.4
+
+## Python Version Configuration
+
+This backend application is configured to use **Python 3.12.4** specifically. The following files ensure the correct Python version is used:
+
+- `runtime.txt`: Specifies `python-3.12.4` for Railway/Heroku-style deployment
+- `.python-version`: Specifies `3.12.4` for pyenv and similar version managers
+- `nixpacks.toml`: Contains `[python] version = "3.12.4"` for Nixpacks
+- `Dockerfile`: Uses `FROM python:3.12.4-slim` base image
+
+### Verify Python Version
+
+Before deployment, you can verify your local Python version compatibility:
+
+```bash
+# Option 1: Use verification scripts
+./check-python-version.sh    # On Unix/Linux/macOS
+./check-python-version.bat   # On Windows
+
+# Option 2: Manual verification
+python3 --version  # Should show 3.12.x
+python3 verify-python-version.py
+```
 
 ## Deployment Steps
 

@@ -9,3 +9,6 @@ nixLibs = ["poppler_utils", "tesseract"]
 PORT = "5000"
 PYTHONUNBUFFERED = "1"
 PYTHONDONTWRITEBYTECODE = "1"
+
+[python]
+version = "3.12.4"
