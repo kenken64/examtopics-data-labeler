@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "verify-google-drive": "node scripts/verify-google-drive.js"
+    "verify-google-drive": "node scripts/verify-google-drive.js",
+    "railway:install": "pnpm install --no-frozen-lockfile --reporter=append-only",
+    "railway:build": "pnpm run railway:install && pnpm build",
+    "railway:build-skip-lint": "pnpm run railway:install && cross-env NEXT_BUILD_LINT=false NODE_ENV=production RAILWAY_ENVIRONMENT=true pnpm build",
+    "railway:fix": "node railway-fix-lockfile.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",

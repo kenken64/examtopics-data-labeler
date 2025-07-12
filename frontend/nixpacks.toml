@@ -1,6 +1,18 @@
 # Nixpacks configuration for Railway deployment
-[build]
-cmd = "pnpm install --no-frozen-lockfile && pnpm build"
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "pnpm"]
+
+[phases.install]
+cmds = [
+  "echo 'Starting Railway installation...'",
+  "echo 'Node version:' && node --version",
+  "echo 'PNPM version:' && pnpm --version",
+  "pnpm run railway:install",
+  "echo 'Installation completed successfully'"
+]
+
+[phases.build]
+cmd = "NODE_ENV=production RAILWAY_ENVIRONMENT=true pnpm build"
 
 [start]
 cmd = "npm start"
@@ -9,6 +21,9 @@ cmd = "npm start"
 NODE_ENV = "production"
 PORT = "3000"
 NEXT_TELEMETRY_DISABLED = "1"
+RAILWAY_ENVIRONMENT = "true"
+# Prevent frozen lockfile issues
+PNPM_FROZEN_LOCKFILE = "false"
 # Dummy build-time environment variables
 MONGODB_URI = "mongodb://localhost:27017/awscert"
 JWT_SECRET = "dummy-jwt-secret-for-build"
