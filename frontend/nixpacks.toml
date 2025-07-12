@@ -9,3 +9,7 @@ cmd = "npm start"
 NODE_ENV = "production"
 PORT = "3000"
 NEXT_TELEMETRY_DISABLED = "1"
+# Dummy build-time environment variables
+MONGODB_URI = "mongodb://localhost:27017/awscert"
+JWT_SECRET = "dummy-jwt-secret-for-build"
+NEXT_PUBLIC_PDF_CONVERSION_API_URL = "http://localhost:5000"
