@@ -1,36 +1,28 @@
-# Railway Backend Deployment - Dockerfile Path Fix Documentation
+# Railway Backend Deployment - Service Directory Context Fix
 
 ## Problem Summary
-Railway backend deployment was failing with the error:
-```
-Dockerfile `Dockerfile.railway` does not exist
-```
+Railway backend deployment was failing with multiple errors:
+1. Initial error: `Dockerfile 'Dockerfile.railway' does not exist`
+2. Subsequent error: `"/backend/requirements-railway.txt": not found`
+3. Build context issue: Railway building from wrong directory
 
-## Root Cause
+## Root Cause Analysis
 The issue occurred because:
-1. Railway was looking for the Dockerfile at the repository root level
-2. Our backend service configuration was pointing to `Dockerfile.railway` in the backend directory
-3. Railway's build context and service directory structure required proper path resolution
+1. Railway services build from their individual service directory context (e.g., `backend/`)
+2. When we tried to reference `backend/` from repository root, Railway couldn't find it
+3. Railway expects the Dockerfile to be in the same directory as the service files
+4. The build context is isolated to the service directory, not the entire repository
 
 ## Solution Implementation
 
-### 1. Created Root-Level Dockerfile
-- Created `Dockerfile.backend.railway` at repository root
-- Modified copy paths to account for building from repository root instead of backend directory
+### 1. Reverted to Service-Local Dockerfile
+- Use `backend/Dockerfile.railway` (in the backend directory)
+- Build context is `backend/` directory, not repository root
+- All file paths are relative to the backend directory
 
-### 2. Updated Copy Paths in Dockerfile
+### 2. Updated Backend Dockerfile
 ```dockerfile
-# Before (backend directory context):
-COPY requirements-railway.txt .
-COPY . .
-
-# After (repository root context):
-COPY backend/requirements-railway.txt .
-COPY backend/ .
-```
-
-### 3. Added curl for Health Checks
-```dockerfile
+# Added curl for health checks
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     tesseract-ocr \
@@ -39,62 +31,73 @@ RUN apt-get update && apt-get install -y \
     g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Files are copied from backend directory context
+COPY requirements-railway.txt .
+COPY . .
 ```
 
-### 4. Updated Railway Configuration
+### 3. Railway Service Configuration
 ```json
 {
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile.backend.railway"
+    "dockerfilePath": "Dockerfile.railway"
   }
 }
 ```
+
+## Railway Service Directory Structure
+
+Railway treats each service as having its own isolated build context:
+
+```
+Repository Structure:
+examtopics-data-labeler/
+├── backend/                    ← Railway backend service builds from here
+│   ├── Dockerfile.railway     ← Railway finds this file
+│   ├── railway.json           ← Service configuration
+│   ├── app-railway.py
+│   ├── requirements-railway.txt
+│   └── ...
+├── frontend/                   ← Railway frontend service builds from here
+│   ├── nixpacks.toml
+│   ├── railway.json
+│   └── ...
+└── telegram-bot/               ← Railway telegram service builds from here
+    ├── railway.json
+    └── ...
+```
+
+## Key Understanding: Railway Build Context
+
+### How Railway Works
+- Each service in Railway has its own build context
+- Build context = the directory containing the service files
+- Dockerfile paths are relative to the service directory
+- Services cannot reference files outside their directory
+
+### Our Backend Service
+- **Service Directory**: `backend/`
+- **Build Context**: `backend/`
+- **Dockerfile Location**: `backend/Dockerfile.railway`
+- **File References**: Relative to `backend/` (e.g., `COPY . .` copies from `backend/`)
 
 ## File Structure After Fix
 
 ```
 examtopics-data-labeler/
-├── Dockerfile.backend.railway          # Railway backend Dockerfile (repository root)
 ├── backend/
-│   ├── Dockerfile.railway             # Original backend Dockerfile
-│   ├── railway.json                   # Backend Railway config
-│   ├── app-railway.py                 # Railway-optimized backend app
-│   ├── requirements-railway.txt       # Lightweight dependencies
+│   ├── Dockerfile.railway         # ✅ Railway backend Dockerfile (service-local)
+│   ├── railway.json               # ✅ Points to local Dockerfile
+│   ├── app-railway.py            # ✅ Railway-optimized backend app
+│   ├── requirements-railway.txt   # ✅ Lightweight dependencies
 │   └── ...
-├── frontend/
-│   ├── railway.json                   # Frontend Railway config
-│   └── ...
-└── telegram-bot/
-    ├── railway.json                   # Telegram bot Railway config
-    └── ...
+├── Dockerfile.backend.railway     # ❌ Not used (removed from config)
+└── ...
 ```
 
-## Key Changes Made
-
-### 1. Repository Root Dockerfile (`Dockerfile.backend.railway`)
-- **Purpose**: Railway-compatible Dockerfile that builds from repository root
-- **Key Features**: 
-  - Correct path references to backend directory
-  - Includes curl for health checks
-  - Uses lightweight Railway requirements
-  - Proper working directory setup
-
-### 2. Updated Build Context
-- **Before**: Building from `backend/` directory with local files
-- **After**: Building from repository root with `backend/` prefixed paths
-- **Benefit**: Compatible with Railway's service deployment model
-
-### 3. Path Resolution Fix
-```dockerfile
-# Requirements installation
-COPY backend/requirements-railway.txt .
-
-# Application code copy
-COPY backend/ .
-```
-
-## Railway Service Configuration
+## Updated Railway Configuration
 
 ### Backend Service (`backend/railway.json`)
 ```json
@@ -102,7 +105,7 @@ COPY backend/ .
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "DOCKERFILE",
-    "dockerfilePath": "Dockerfile.backend.railway"
+    "dockerfilePath": "Dockerfile.railway"
   },
   "deploy": {
     "startCommand": "python app-railway.py",
@@ -114,86 +117,98 @@ COPY backend/ .
 }
 ```
 
-## Verification Steps
+### Backend Dockerfile (`backend/Dockerfile.railway`)
+```dockerfile
+FROM python:3.12.4-slim
 
-### 1. Local Docker Build Test
-```bash
-# From repository root
-docker build -f Dockerfile.backend.railway -t backend-railway-test .
+# Install system dependencies (including curl for health checks)
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install dependencies
+COPY requirements-railway.txt .
+RUN pip install --no-cache-dir -r requirements-railway.txt
+
+# Copy application code
+COPY . .
+
+# Health check and startup
+HEALTHCHECK CMD curl -f http://localhost:5000/health || exit 1
+CMD ["python", "app-railway.py"]
 ```
 
-### 2. Check File Copying
-- Verify requirements file is found at `backend/requirements-railway.txt`
-- Ensure all backend application files are copied correctly
-- Confirm health check endpoint works
+## Expected Behavior After Fix
 
-### 3. Railway Deployment
-- Dockerfile should be found at repository root
-- Build context includes entire repository
-- Backend files copied from correct directory
+### Build Process
+1. Railway identifies backend service in `backend/` directory
+2. Uses `backend/Dockerfile.railway` for build instructions
+3. Copies `requirements-railway.txt` from backend directory
+4. Installs lightweight dependencies for Railway
+5. Copies all backend application files
+6. Sets up health checks with curl
 
-## Expected Behavior
+### Deployment
+- Service starts with `python app-railway.py`
+- Health checks accessible at `/health`
+- Restart policy handles failures gracefully
+- Lightweight dependencies improve build speed
 
-### Before Fix
-- Railway fails to find `Dockerfile.railway`
-- Build process stops with "file does not exist" error
-- Service deployment fails immediately
+## Troubleshooting Guide
 
-### After Fix
-- Railway locates `Dockerfile.backend.railway` at repository root
-- Build process copies files from `backend/` directory correctly
-- Dependencies install from `backend/requirements-railway.txt`
-- Health checks work with curl
-- Service deploys successfully
+### Issue: "Dockerfile not found"
+**Solution**: Ensure `Dockerfile.railway` exists in `backend/` directory
 
-## Troubleshooting
+### Issue: "requirements-railway.txt not found"
+**Solution**: Verify file exists in `backend/` directory, not repository root
 
-### Issue: "COPY backend/requirements-railway.txt . failed"
-**Solution**: Verify the file exists at `backend/requirements-railway.txt` in repository
+### Issue: "curl command not found in health check"
+**Solution**: Verify curl is installed in Dockerfile dependencies
 
-### Issue: "app-railway.py not found"
-**Solution**: Ensure `COPY backend/ .` command includes all backend files
+### Issue: "Module not found" errors
+**Solution**: Check `requirements-railway.txt` contains all needed dependencies
 
-### Issue: Health check failing
-**Solution**: Verify curl is installed and `/health` endpoint is accessible
+## Verification Steps
 
-## Files Modified/Created
+### 1. File Location Check
+```bash
+# Verify files exist in backend directory
+ls backend/Dockerfile.railway
+ls backend/requirements-railway.txt
+ls backend/app-railway.py
+```
 
-### New Files
-- `Dockerfile.backend.railway` - Railway-compatible Dockerfile at repository root
+### 2. Railway Configuration Check
+- `dockerfilePath` points to `Dockerfile.railway` (not full path)
+- Service directory contains all referenced files
+- Health check path matches application endpoint
 
-### Modified Files
-- `backend/railway.json` - Updated dockerfilePath to point to root-level Dockerfile
-
-### Preserved Files
-- `backend/Dockerfile.railway` - Original backend Dockerfile (kept for reference)
-- `backend/app-railway.py` - Railway-optimized backend application
-- `backend/requirements-railway.txt` - Lightweight dependency list
+### 3. Dependency Check
+- All imports in `app-railway.py` have corresponding packages in `requirements-railway.txt`
+- No heavy ML dependencies that cause Railway build timeouts
 
 ## Success Metrics
 
-- ✅ Railway finds Dockerfile at expected location
-- ✅ Build process completes without path errors
-- ✅ Dependencies install correctly
-- ✅ Application files copied to correct locations
-- ✅ Health checks work properly
-- ✅ Service starts and responds to requests
+- ✅ Railway finds Dockerfile in correct service directory
+- ✅ Build process copies files without path errors
+- ✅ Dependencies install successfully
+- ✅ Health checks work with curl
+- ✅ Application starts and responds to requests
+- ✅ No build context or file reference errors
 
-## Next Steps
+## Lessons Learned
 
-1. Test Railway deployment with new Dockerfile configuration
-2. Monitor build logs for any remaining path issues
-3. Verify health check endpoint responds correctly
-4. Ensure all API endpoints work as expected
-
-## Support Information
-
-For issues with this fix:
-1. Check Railway build logs for specific path errors
-2. Verify file structure matches expected layout
-3. Test Docker build locally using same command Railway uses
-4. Contact support with specific build error messages if issues persist
+1. **Railway Services are Isolated**: Each service builds in its own directory context
+2. **Dockerfile Location Matters**: Must be in the same directory as service files
+3. **File Paths are Relative**: All COPY commands relative to service directory
+4. **Health Check Dependencies**: Ensure curl or alternative is available
+5. **Keep It Simple**: Service-local builds are more reliable than cross-directory references
 
 ---
 *Last Updated: July 13, 2025*
-*Status: Ready for Railway backend deployment*
+*Status: Fixed - Railway backend should deploy successfully from service directory*
