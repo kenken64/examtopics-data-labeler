@@ -1,0 +1,4 @@
+Clean up: Remove debug script accidentally committed
+
+- Removed check-access-code-structure.js debug file
+- This was a temporary testing script that shouldn't be in the repository

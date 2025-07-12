@@ -143,7 +143,7 @@ class CertificationBot {
     });
 
     // Handle quiz answer selection
-    this.bot.callbackQuery(/^answer_([A-D])$/, async (ctx) => {
+    this.bot.callbackQuery(/^answer_([A-F])$/, async (ctx) => {
       const selectedAnswer = ctx.match[1];
       await this.handleQuizAnswer(ctx, selectedAnswer);
     });
@@ -195,7 +195,7 @@ class CertificationBot {
       `• /menu - Show interactive command menu\n` +
       `• /bookmark <number> - Save a question for later\n` +
       `• /bookmarks - View your saved bookmarks\n` +
-      `• /revision - Review questions you answered incorrectly\n\n` +
+      `• /revision - Review questions you answered incorrectly for current access code\n\n` +
       `💡 Type /menu for an interactive command menu or /help for detailed instructions!\n\n` +
       `Let's get started by selecting a certificate:`
     );
@@ -233,13 +233,13 @@ class CertificationBot {
       `   • Example: /bookmark 42\n\n` +
       
       `📑 <b>/bookmarks</b>\n` +
-      `   • View all your saved bookmarked questions\n` +
+      `   • View all your saved bookmarked questions for current access code\n` +
       `   • Shows questions organized by certificate\n` +
       `   • Allows you to quickly access saved questions\n` +
       `   • Usage: Simply type /bookmarks\n\n` +
       
       `📖 <b>/revision</b>\n` +
-      `   • Review questions you answered incorrectly\n` +
+      `   • Review questions you answered incorrectly for current access code\n` +
       `   • Shows wrong answers organized by certificate\n` +
       `   • Perfect for focused study on weak areas\n` +
       `   • Usage: Simply type /revision\n\n` +
@@ -261,7 +261,8 @@ class CertificationBot {
       `📊 <b>Progress Tracking:</b>\n` +
       `   • Your answers are automatically saved\n` +
       `   • Wrong answers are stored for revision\n` +
-      `   • Bookmarks are saved across sessions\n` +
+      `   • Bookmarks and revision data are tied to your current access code\n` +
+      `   • Each access code maintains separate bookmark and revision history\n` +
       `   • Track your progress per certificate\n\n` +
       
       `💡 <b>Tips for Best Experience:</b>\n\n` +
@@ -350,11 +351,24 @@ class CertificationBot {
     try {
       const db = await this.connectToDatabase();
       
-      // Validate access code and get questions
-      const questions = await this.getQuestionsForAccessCode(accessCode);
+      // Validate access code and get questions for the selected certificate
+      const questions = await this.getQuestionsForAccessCode(accessCode, session.certificateId);
       
       if (!questions || questions.length === 0) {
-        await ctx.reply('❌ Invalid access code or no questions available. Please check your access code and try again.');
+        // Check if access code exists but for a different certificate
+        const accessCodeExists = await this.checkAccessCodeExists(accessCode);
+        if (accessCodeExists) {
+          const actualCertificate = await this.getCertificateForAccessCode(accessCode);
+          await ctx.reply(
+            `❌ Access code mismatch!\n\n` +
+            `🔑 Access code: ${accessCode}\n` +
+            `📋 You selected: ${session.certificate.name} (${session.certificate.code})\n` +
+            `📋 Access code is for: ${actualCertificate ? actualCertificate.name + ' (' + actualCertificate.code + ')' : 'Different certificate'}\n\n` +
+            `Please use /start to select the correct certificate or enter a valid access code for ${session.certificate.name}.`
+          );
+        } else {
+          await ctx.reply('❌ Invalid access code or no questions available. Please check your access code and try again.');
+        }
         return;
       }
 
@@ -385,13 +399,25 @@ class CertificationBot {
     }
   }
 
-  async getQuestionsForAccessCode(accessCode) {
+  async getQuestionsForAccessCode(accessCode, certificateId = null) {
     try {
       const db = await this.connectToDatabase();
       
-      // Get questions assigned to this access code
+      // Build match criteria - include certificate validation if provided
+      const matchCriteria = { 
+        generatedAccessCode: accessCode, 
+        isEnabled: true 
+      };
+      
+      // If certificateId is provided, validate that access code belongs to this certificate
+      if (certificateId) {
+        // Ensure certificateId is converted to ObjectId for proper comparison
+        matchCriteria.certificateId = new ObjectId(certificateId);
+      }
+      
+      // Get questions assigned to this access code and certificate
       const pipeline = [
-        { $match: { generatedAccessCode: accessCode, isEnabled: true } },
+        { $match: matchCriteria },
         {
           $lookup: {
             from: 'quizzes',
@@ -432,10 +458,56 @@ class CertificationBot {
     }
   }
 
+  async checkAccessCodeExists(accessCode) {
+    try {
+      const db = await this.connectToDatabase();
+      const accessCodeRecord = await db.collection('access-code-questions').findOne({
+        generatedAccessCode: accessCode
+      });
+      return !!accessCodeRecord;
+    } catch (error) {
+      console.error('Error checking access code existence:', error);
+      return false;
+    }
+  }
+
+  async getCertificateForAccessCode(accessCode) {
+    try {
+      const db = await this.connectToDatabase();
+      
+      // Get the certificate associated with this access code
+      const pipeline = [
+        { $match: { generatedAccessCode: accessCode } },
+        {
+          $lookup: {
+            from: 'certificates',
+            localField: 'certificateId',
+            foreignField: '_id',
+            as: 'certificate'
+          }
+        },
+        { $unwind: '$certificate' },
+        { $limit: 1 },
+        {
+          $project: {
+            name: '$certificate.name',
+            code: '$certificate.code'
+          }
+        }
+      ];
+
+      const result = await db.collection('access-code-questions').aggregate(pipeline).toArray();
+      return result.length > 0 ? result[0] : null;
+    } catch (error) {
+      console.error('Error getting certificate for access code:', error);
+      return null;
+    }
+  }
+
   parseAnswersToOptions(answersString) {
-    if (!answersString) return { A: '', B: '', C: '', D: '' };
+    if (!answersString) return { A: '', B: '', C: '', D: '', E: '', F: '' };
     
-    const options = { A: '', B: '', C: '', D: '' };
+    const options = { A: '', B: '', C: '', D: '', E: '', F: '' };
     
     // Split by lines and process each line
     const lines = answersString.split('\n').filter(line => line.trim());
@@ -444,7 +516,7 @@ class CertificationBot {
       const trimmedLine = line.trim();
       
       // Match patterns like "- A. Option text" or "A. Option text"
-      const match = trimmedLine.match(/^[-\s]*([A-D])\.\s*(.+)$/);
+      const match = trimmedLine.match(/^[-\s]*([A-F])\.\s*(.+)$/);
       if (match) {
         const [, letter, text] = match;
         options[letter] = text.trim();
@@ -488,14 +560,25 @@ class CertificationBot {
     }
 
     // Format question text
+    let questionOptions = 
+      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+      `D. ${currentQuestion.options.D || 'Option D not available'}`;
+    
+    // Add E and F options if they exist
+    if (currentQuestion.options.E) {
+      questionOptions += `\nE. ${currentQuestion.options.E}`;
+    }
+    if (currentQuestion.options.F) {
+      questionOptions += `\nF. ${currentQuestion.options.F}`;
+    }
+    
     const questionText = 
       `📝 Question ${questionNumber}/${totalQuestions}\n` +
       `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
       `${currentQuestion.question}\n\n` +
-      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
-      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
-      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
-      `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+      questionOptions + `\n\n` +
       (isMultiple ? `⚠️ Multiple answers required: Select ${normalizeAnswer(currentQuestion.correctAnswer).length} options` : '💡 Select one answer');
 
     // Create answer keyboard
@@ -505,14 +588,38 @@ class CertificationBot {
       // Multiple answer layout with confirm/clear buttons
       keyboard
         .text('A', 'answer_A').text('B', 'answer_B').row()
-        .text('C', 'answer_C').text('D', 'answer_D').row()
+        .text('C', 'answer_C').text('D', 'answer_D').row();
+      
+      // Add E and F if they exist
+      if (currentQuestion.options.E || currentQuestion.options.F) {
+        if (currentQuestion.options.E && currentQuestion.options.F) {
+          keyboard.text('E', 'answer_E').text('F', 'answer_F').row();
+        } else if (currentQuestion.options.E) {
+          keyboard.text('E', 'answer_E').row();
+        } else if (currentQuestion.options.F) {
+          keyboard.text('F', 'answer_F').row();
+        }
+      }
+      
+      keyboard
         .text('✅ Confirm Selection', 'confirm_selection').row()
         .text('🔄 Clear All', 'clear_selection');
     } else {
       // Single answer layout
       keyboard
         .text('A', 'answer_A').text('B', 'answer_B').row()
-        .text('C', 'answer_C').text('D', 'answer_D');
+        .text('C', 'answer_C').text('D', 'answer_D').row();
+      
+      // Add E and F if they exist
+      if (currentQuestion.options.E || currentQuestion.options.F) {
+        if (currentQuestion.options.E && currentQuestion.options.F) {
+          keyboard.text('E', 'answer_E').text('F', 'answer_F').row();
+        } else if (currentQuestion.options.E) {
+          keyboard.text('E', 'answer_E').row();
+        } else if (currentQuestion.options.F) {
+          keyboard.text('F', 'answer_F').row();
+        }
+      }
     }
 
     await ctx.reply(questionText, {
@@ -552,25 +659,40 @@ class CertificationBot {
       const questionNumber = session.currentQuestionIndex + 1;
       const totalQuestions = session.questions.length;
       
+      let questionOptions = 
+        `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+        `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+        `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+        `D. ${currentQuestion.options.D || 'Option D not available'}`;
+      
+      // Add E and F options if they exist
+      if (currentQuestion.options.E) {
+        questionOptions += `\nE. ${currentQuestion.options.E}`;
+      }
+      if (currentQuestion.options.F) {
+        questionOptions += `\nF. ${currentQuestion.options.F}`;
+      }
+      
       const questionText = 
         `📝 Question ${questionNumber}/${totalQuestions}\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
         `${currentQuestion.question}\n\n` +
-        `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
-        `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
-        `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
-        `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+        questionOptions + `\n\n` +
         `⚠️ Multiple answers required: Select ${requiredCount} options\n` +
         `✅ Selected: ${userSelections.length > 0 ? userSelections.join(', ') : 'None'} (${selectedCount}/${requiredCount})`;
 
       // Create updated keyboard with selected indicators
       const keyboard = new InlineKeyboard();
       
-      ['A', 'B', 'C', 'D'].forEach((option, index) => {
+      const availableOptions = ['A', 'B', 'C', 'D'];
+      if (currentQuestion.options.E) availableOptions.push('E');
+      if (currentQuestion.options.F) availableOptions.push('F');
+      
+      availableOptions.forEach((option, index) => {
         const isSelected = userSelections.includes(option);
         const buttonText = isSelected ? `✅ ${option}` : option;
         keyboard.text(buttonText, `answer_${option}`);
-        if (index % 2 === 1) keyboard.row();
+        if (index % 2 === 1 || index === availableOptions.length - 1) keyboard.row();
       });
       
       keyboard.text('✅ Confirm Selection', 'confirm_selection').row();
@@ -764,14 +886,25 @@ class CertificationBot {
     const questionNumber = session.currentQuestionIndex + 1;
     const totalQuestions = session.questions.length;
     
+    let questionOptions = 
+      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
+      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
+      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
+      `D. ${currentQuestion.options.D || 'Option D not available'}`;
+    
+    // Add E and F options if they exist
+    if (currentQuestion.options.E) {
+      questionOptions += `\nE. ${currentQuestion.options.E}`;
+    }
+    if (currentQuestion.options.F) {
+      questionOptions += `\nF. ${currentQuestion.options.F}`;
+    }
+    
     const questionText = 
       `📝 Question ${questionNumber}/${totalQuestions}\n` +
       `Score: ${session.correctAnswers}/${session.currentQuestionIndex}\n\n` +
       `${currentQuestion.question}\n\n` +
-      `A. ${currentQuestion.options.A || 'Option A not available'}\n` +
-      `B. ${currentQuestion.options.B || 'Option B not available'}\n` +
-      `C. ${currentQuestion.options.C || 'Option C not available'}\n` +
-      `D. ${currentQuestion.options.D || 'Option D not available'}\n\n` +
+      questionOptions + `\n\n` +
       `⚠️ Multiple answers required: Select ${requiredCount} options\n` +
       `✅ Selected: None (0/${requiredCount})`;
 
@@ -779,7 +912,20 @@ class CertificationBot {
     const keyboard = new InlineKeyboard();
     keyboard
       .text('A', 'answer_A').text('B', 'answer_B').row()
-      .text('C', 'answer_C').text('D', 'answer_D').row()
+      .text('C', 'answer_C').text('D', 'answer_D').row();
+    
+    // Add E and F if they exist
+    if (currentQuestion.options.E || currentQuestion.options.F) {
+      if (currentQuestion.options.E && currentQuestion.options.F) {
+        keyboard.text('E', 'answer_E').text('F', 'answer_F').row();
+      } else if (currentQuestion.options.E) {
+        keyboard.text('E', 'answer_E').row();
+      } else if (currentQuestion.options.F) {
+        keyboard.text('F', 'answer_F').row();
+      }
+    }
+    
+    keyboard
       .text('✅ Confirm Selection', 'confirm_selection').row()
       .text('🔄 Clear All', 'clear_selection');
 
@@ -876,6 +1022,16 @@ class CertificationBot {
     const userId = ctx.from.id;
     const commandText = ctx.message.text;
     
+    // Check if user has an active session with access code
+    const session = this.userSessions.get(userId);
+    if (!session || !session.accessCode) {
+      await ctx.reply(
+        `❌ Please start a quiz session first with a valid access code.\n\n` +
+        `Use /start to begin a new quiz session.`
+      );
+      return;
+    }
+    
     // Extract question number from command
     const parts = commandText.split(' ');
     if (parts.length < 2) {
@@ -896,20 +1052,25 @@ class CertificationBot {
     try {
       const db = await this.connectToDatabase();
       
-      // Check if question exists in access-code-questions collection
+      // Check if question exists in access-code-questions collection for current access code
       const question = await db.collection('access-code-questions').findOne({
-        assignedQuestionNo: questionNumber
+        assignedQuestionNo: questionNumber,
+        generatedAccessCode: session.accessCode  // Filter by current access code
       });
 
       if (!question) {
-        await ctx.reply(`❌ Question ${questionNumber} not found in the system.`);
+        await ctx.reply(
+          `❌ Question ${questionNumber} not found in your current access code (${session.accessCode}).\n\n` +
+          `Please use a question number from your current quiz session.`
+        );
         return;
       }
 
       // Check if bookmark already exists for this user and question
       const existingBookmark = await db.collection('bookmarks').findOne({
         userId: userId,
-        questionNumber: questionNumber
+        questionNumber: questionNumber,
+        generatedAccessCode: session.accessCode  // Also filter bookmarks by access code
       });
 
       if (existingBookmark) {
@@ -917,18 +1078,19 @@ class CertificationBot {
         return;
       }
 
-      // Create new bookmark
+      // Create new bookmark with access code
       const bookmark = {
         userId: userId,
         questionNumber: questionNumber,
         questionId: question.questionId,
         accessCodeQuestionId: question._id,
+        generatedAccessCode: session.accessCode,  // Store the access code
         createdAt: new Date()
       };
 
       await db.collection('bookmarks').insertOne(bookmark);
       
-      await ctx.reply(`✅ Question ${questionNumber} has been bookmarked successfully!`);
+      await ctx.reply(`✅ Question ${questionNumber} has been bookmarked successfully for access code ${session.accessCode}!`);
       
     } catch (error) {
       console.error('Error saving bookmark:', error);
@@ -939,12 +1101,27 @@ class CertificationBot {
   async handleShowBookmarks(ctx) {
     const userId = ctx.from.id;
     
+    // Check if user has an active session with access code
+    const session = this.userSessions.get(userId);
+    if (!session || !session.accessCode) {
+      await ctx.reply(
+        `❌ Please start a quiz session first with a valid access code.\n\n` +
+        `Use /start to begin a new quiz session.`
+      );
+      return;
+    }
+    
     try {
       const db = await this.connectToDatabase();
       
-      // Get user's bookmarks with question details
+      // Get user's bookmarks with question details filtered by current access code
       const pipeline = [
-        { $match: { userId: userId } },
+        { 
+          $match: { 
+            userId: userId,
+            generatedAccessCode: session.accessCode  // Filter by current access code
+          } 
+        },
         {
           $lookup: {
             from: 'access-code-questions',
@@ -978,28 +1155,26 @@ class CertificationBot {
       
       if (bookmarks.length === 0) {
         await ctx.reply(
-          `📝 You haven't bookmarked any questions yet.\n\n` +
+          `📝 You haven't bookmarked any questions yet for access code ${session.accessCode}.\n\n` +
           `Use /bookmark <question_number> to save questions for later review.`
         );
         return;
       }
 
-      let message = `📚 Your Bookmarked Questions (${bookmarks.length}):\n\n`;
+      let message = `📚 Your Bookmarked Questions for ${session.accessCode} (${bookmarks.length}):\n\n`;
       
       bookmarks.forEach((bookmark, index) => {
         const date = bookmark.createdAt.toLocaleDateString();
         const questionPreview = bookmark.questionText ? 
           bookmark.questionText.substring(0, 100) + '...' : 
           'Question text not available';
-        const accessCode = bookmark.generatedAccessCode || 'N/A';
         
         message += `${index + 1}. Question ${bookmark.questionNumber}\n`;
         message += `   📅 Saved: ${date}\n`;
-        message += `   🔑 Access Code: ${accessCode}\n`;
         message += `   📝 Preview: ${questionPreview}\n\n`;
       });
 
-      message += `💡 Tip: Use /bookmark <question_number> to save more questions!`;
+      message += `💡 Tip: Use /bookmark <question_number> to save more questions from your current quiz session!`;
       
       await ctx.reply(message);
       
@@ -1013,11 +1188,12 @@ class CertificationBot {
     try {
       const db = await this.connectToDatabase();
       
-      // Check if this wrong answer already exists for this user and question
+      // Check if this wrong answer already exists for this user, question, and access code
       const existingWrongAnswer = await db.collection('wrong-answers').findOne({
         userId: userId,
         questionId: currentQuestion._id,
-        certificateId: new ObjectId(session.certificateId)
+        certificateId: new ObjectId(session.certificateId),
+        accessCode: session.accessCode  // Also filter by access code for data isolation
       });
 
       if (existingWrongAnswer) {
@@ -1064,12 +1240,27 @@ class CertificationBot {
   async handleRevision(ctx) {
     const userId = ctx.from.id;
     
+    // Check if user has an active session with access code
+    const session = this.userSessions.get(userId);
+    if (!session || !session.accessCode) {
+      await ctx.reply(
+        `❌ Please start a quiz session first with a valid access code.\n\n` +
+        `Use /start to begin a new quiz session.`
+      );
+      return;
+    }
+    
     try {
       const db = await this.connectToDatabase();
       
-      // Get user's wrong answers grouped by certificate
+      // Get user's wrong answers filtered by current access code
       const pipeline = [
-        { $match: { userId: userId } },
+        { 
+          $match: { 
+            userId: userId,
+            accessCode: session.accessCode  // Filter by current access code
+          } 
+        },
         {
           $group: {
             _id: '$certificateId',
@@ -1097,13 +1288,13 @@ class CertificationBot {
       
       if (wrongAnswersByCategory.length === 0) {
         await ctx.reply(
-          `🎯 Great job! You haven't answered any questions incorrectly yet.\n\n` +
+          `🎯 Great job! You haven't answered any questions incorrectly yet for access code ${session.accessCode}.\n\n` +
           `Keep practicing and this section will help you review any mistakes you make in the future.`
         );
         return;
       }
 
-      let message = `📚 Revision Summary - Wrong Answers by Certificate:\n\n`;
+      let message = `📚 Revision Summary for ${session.accessCode} - Wrong Answers by Certificate:\n\n`;
       
       wrongAnswersByCategory.forEach((category, index) => {
         message += `${index + 1}. ${category.certificateName} (${category.certificateCode})\n`;
@@ -1123,7 +1314,7 @@ class CertificationBot {
         message += '\n\n';
       });
 
-      message += `💡 Tip: Focus on reviewing these questions to improve your knowledge!\n\n`;
+      message += `💡 Tip: Focus on reviewing these questions from your current access code to improve your knowledge!\n\n`;
       message += `📊 Detailed breakdown:\n`;
       
       // Show detailed breakdown for each certificate
@@ -1190,18 +1381,36 @@ class CertificationBot {
       await this.connectToDatabase();
       console.log('Connected to MongoDB');
       
-      await this.bot.start();
-      console.log('Bot started successfully!');
+      // Add error handling for bot conflicts
+      await this.bot.start({
+        onStart: () => console.log('Bot started successfully!'),
+        drop_pending_updates: true // This helps clear any pending updates from previous instances
+      });
     } catch (error) {
-      console.error('Error starting bot:', error);
+      if (error.error_code === 409) {
+        console.error('Bot conflict detected! Another instance is already running.');
+        console.error('Please stop any other running bot instances and try again.');
+        console.error('You can also wait a few minutes for the previous instance to timeout.');
+        process.exit(1);
+      } else {
+        console.error('Error starting bot:', error);
+        process.exit(1);
+      }
     }
   }
 
   async stop() {
-    if (this.mongoClient) {
-      await this.mongoClient.close();
+    console.log('Shutting down bot...');
+    try {
+      if (this.mongoClient) {
+        await this.mongoClient.close();
+        console.log('MongoDB connection closed');
+      }
+      await this.bot.stop();
+      console.log('Bot stopped successfully');
+    } catch (error) {
+      console.error('Error during shutdown:', error);
     }
-    await this.bot.stop();
   }
 
   async handleCommandMenu(ctx) {
@@ -1379,21 +1588,47 @@ class CertificationBot {
   }
 }
 
-// Create and start the bot
+// Create and start the bot with better error handling
+console.log('Initializing Telegram Bot...');
+console.log('If you get a 409 conflict error, run: node bot-manager.js kill');
+console.log('Or use: node bot-manager.js start (recommended)');
+console.log('');
+
 const bot = new CertificationBot();
+
+// Add process title for easier identification
+process.title = 'telegram-aws-cert-bot';
+
 bot.start();
 
 // Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Stopping bot...');
-  await bot.stop();
-  process.exit(0);
-});
+let isShuttingDown = false;
 
-process.on('SIGTERM', async () => {
-  console.log('Stopping bot...');
-  await bot.stop();
-  process.exit(0);
-});
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) {
+    console.log('Shutdown already in progress...');
+    return;
+  }
+  
+  isShuttingDown = true;
+  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+  
+  try {
+    await bot.stop();
+    console.log('Bot shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle Windows-specific signals
+if (process.platform === 'win32') {
+  process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
+}
 
 module.exports = CertificationBot;

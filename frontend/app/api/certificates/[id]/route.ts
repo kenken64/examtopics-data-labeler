@@ -52,11 +52,12 @@ const Certificate = mongoose.models.Certificate || mongoose.model('Certificate',
 // GET - Fetch single certificate
 export const GET = withAuth(async (
   request: AuthenticatedRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     await connectDB();
-    const certificate = await Certificate.findById(params.id);
+    const { id } = await params;
+    const certificate = await Certificate.findById(id);
     
     if (!certificate) {
       return NextResponse.json(
@@ -78,10 +79,11 @@ export const GET = withAuth(async (
 // PUT - Update certificate
 export const PUT = withAuth(async (
   request: AuthenticatedRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     await connectDB();
+    const { id } = await params;
     const body = await request.json();
     const { name, code, logoUrl, pdfFileUrl, pdfFileName } = body;
 
@@ -95,7 +97,7 @@ export const PUT = withAuth(async (
     // Check if certificate code already exists for other certificates
     const existingCertificate = await Certificate.findOne({ 
       code: code.trim().toUpperCase(),
-      _id: { $ne: params.id }
+      _id: { $ne: id }
     });
     
     if (existingCertificate) {
@@ -106,7 +108,7 @@ export const PUT = withAuth(async (
     }
 
     const certificate = await Certificate.findByIdAndUpdate(
-      params.id,
+      id,
       {
         name: name.trim(),
         code: code.trim().toUpperCase(),
@@ -137,11 +139,12 @@ export const PUT = withAuth(async (
 // DELETE - Delete certificate
 export const DELETE = withAuth(async (
   request: AuthenticatedRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) => {
   try {
     await connectDB();
-    const certificate = await Certificate.findByIdAndDelete(params.id);
+    const { id } = await params;
+    const certificate = await Certificate.findByIdAndDelete(id);
 
     if (!certificate) {
       return NextResponse.json(

@@ -11,9 +11,9 @@ async function connectToDatabase() {
 }
 
 // GET /api/payees/[id] - Get a specific payee
-export const GET = withAuth(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
+export const GET = withAuth(async (request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid payee ID' }, { status: 400 });
@@ -34,9 +34,9 @@ export const GET = withAuth(async (request: AuthenticatedRequest, { params }: { 
 });
 
 // PUT /api/payees/[id] - Update a specific payee
-export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
+export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid payee ID' }, { status: 400 });
@@ -132,9 +132,9 @@ export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { 
 });
 
 // DELETE /api/payees/[id] - Delete a specific payee
-export const DELETE = withAuth(async (request: AuthenticatedRequest, { params }: { params: { id: string } }) => {
+export const DELETE = withAuth(async (request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) => {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid payee ID' }, { status: 400 });

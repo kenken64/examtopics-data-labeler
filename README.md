@@ -6,7 +6,7 @@
   <img src="screen1.png" alt="ExamBot Web Application Interface" width="800">
   <p><em>Web Application - PDF Data Labeler and Management Interface</em></p>
   
-  <img src="screen2.png" alt="ExamBot Telegram Bot Interface" width="800">
+  <img src="screen2.png" alt="ExamBot Telegram Bot Interface" width="400">
   <p><em>Telegram Bot - Interactive Quiz Session</em></p>
 </div>
 
@@ -19,6 +19,7 @@ This project has evolved into a comprehensive AWS certification preparation and 
 ### Core Functionality
 
 - **PDF Data Labeler**: Upload PDF documents, view them page by page, convert content to Markdown, and label specific sections (questions, answers, explanations) for quiz creation.
+- **Analytics Dashboard**: Comprehensive dashboard with interactive charts and visual analytics showing certificate statistics, quiz performance trends over the last 30 days, user engagement metrics, and access code distribution with real-time data from completed Telegram bot quiz sessions.
 - **User Authentication**: Secure user registration and login using Passkeys (WebAuthn) with JWT for session management.
 - **Role-Based Access**: Protected routes ensure only authenticated users can access certain parts of the application.
 - **Telegram Quiz Bot**: Interactive bot for AWS certification practice with real-time quiz sessions, progress tracking, and detailed explanations.
@@ -61,6 +62,7 @@ This project has evolved into a comprehensive AWS certification preparation and 
 - **shadcn/ui**: A collection of re-usable components built using Radix UI and Tailwind CSS for a modern UI.
 - **Tailwind CSS**: A utility-first CSS framework.
 - **pdfjs-dist**: A PDF rendering library from Mozilla.
+- **Chart.js & react-chartjs-2**: Modern charting library for creating interactive data visualizations and analytics dashboard.
 
 ### Telegram Bot (Node.js - Quiz Bot Service)
 
@@ -199,8 +201,9 @@ Follow these steps to set up and run the project locally.
 1.  Ensure both the backend (Flask) and frontend (Next.js) servers are running.
 2.  Open your web browser and go to `http://localhost:3000`.
 3.  **Login/Register**: You will be greeted by the login page. You can register a new user using a passkey.
-4.  **Navigation**: After successful login, you will be redirected to the dashboard. Use the sliding menu (accessible from the top-left corner) to navigate to different sections:
-    -   **Home**: The PDF Data Labeler interface.
+4.  **Navigation**: After successful login, you will be redirected to the analytics dashboard. Use the sliding menu (accessible from the top-left corner) to navigate to different sections:
+    -   **Home**: Analytics dashboard with interactive charts and key metrics.
+    -   **Exam Q Labeler**: The PDF Data Labeler interface for processing documents.
     -   **Certificates**: Manage certification types.
     -   **Payees**: Manage customer payment records.
     -   **Access Codes**: Generate and view access codes for paid customers.
