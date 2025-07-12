@@ -9,7 +9,7 @@ set MONGO_RESTORE_HOST=metro.proxy.rlwy.net:20769
 
 REM MongoDB authentication  
 set MONGO_RESTORE_USER=mongo
-set MONGO_RESTORE_PASS=LljBYulYQHFmXxYZVFjhYHyJtosRSnaN
+set MONGO_RESTORE_PASS=
 
 REM Target database name (defaults to 'test' if not set)
 set MONGO_RESTORE_DB=test

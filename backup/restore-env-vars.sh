@@ -9,7 +9,7 @@ export MONGO_RESTORE_HOST=metro.proxy.rlwy.net:20769
 
 # MongoDB authentication
 export MONGO_RESTORE_USER=mongo
-export MONGO_RESTORE_PASS=LljBYulYQHFmXxYZVFjhYHyJtosRSnaN
+export MONGO_RESTORE_PASS=
 
 # Target database name (defaults to 'test' if not set)
 export MONGO_RESTORE_DB=test
