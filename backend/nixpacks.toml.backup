@@ -1,6 +1,6 @@
 # Nixpacks configuration for Railway deployment
 [start]
-cmd = "python app.py"
+cmd = "python app-railway.py"
 
 [build]
 nixLibs = ["poppler_utils", "tesseract"]

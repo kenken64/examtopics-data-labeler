@@ -80,6 +80,11 @@ def health():
         }
     }), 200
 
+@app.route('/api/health')
+def api_health():
+    """Alternative health check endpoint for Railway (some configs expect /api/health)."""
+    return health()
+
 @app.route('/convert-pdf', methods=['POST'])
 def convert_pdf():
     """Convert PDF to markdown using available processing methods."""
