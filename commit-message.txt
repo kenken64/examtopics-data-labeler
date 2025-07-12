@@ -1,9 +1,17 @@
-Fix payee status distribution in dashboard analytics
+Fix Telegram bot privacy issue: scope bookmark/revision to current access code
 
-- Fixed field name mismatch: dashboard aggregation was using 'paymentStatus' but database uses 'status'
-- Updated dashboard API aggregation to use correct field name ($ifNull: ['$status', 'Unknown'])
-- Dashboard now correctly shows payment status distribution: Paid (4), Pending (1), Failed (1), Refunded (1)
-- Resolves issue where all payees were showing as "Unknown" in analytics charts
-- Added debug scripts to investigate and verify the fix
+SECURITY FIX: Implement proper data isolation for bookmark and revision features
 
-The dashboard PayeeStatusChart now properly reflects the actual payment status data from the payee management interface.
+- Fixed /bookmark command to only allow bookmarking questions from current access code
+- Fixed /bookmarks command to only show bookmarks for current access code  
+- Fixed /revision command to only show wrong answers for current access code
+- Updated saveWrongAnswer to filter existing records by access code for proper isolation
+- Enhanced user session validation - commands now require active quiz session with access code
+- Updated help text to clarify that features are scoped to current access code
+
+PRIVACY PROTECTION:
+- Users can no longer see other users' bookmarks or revision data
+- Each access code maintains separate bookmark and revision history
+- Prevents data leakage between different payee access codes
+
+This ensures complete data privacy and isolation between different users and access codes.

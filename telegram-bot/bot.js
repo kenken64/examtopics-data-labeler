@@ -195,7 +195,7 @@ class CertificationBot {
       `• /menu - Show interactive command menu\n` +
       `• /bookmark <number> - Save a question for later\n` +
       `• /bookmarks - View your saved bookmarks\n` +
-      `• /revision - Review questions you answered incorrectly\n\n` +
+      `• /revision - Review questions you answered incorrectly for current access code\n\n` +
       `💡 Type /menu for an interactive command menu or /help for detailed instructions!\n\n` +
       `Let's get started by selecting a certificate:`
     );
@@ -233,13 +233,13 @@ class CertificationBot {
       `   • Example: /bookmark 42\n\n` +
       
       `📑 <b>/bookmarks</b>\n` +
-      `   • View all your saved bookmarked questions\n` +
+      `   • View all your saved bookmarked questions for current access code\n` +
       `   • Shows questions organized by certificate\n` +
       `   • Allows you to quickly access saved questions\n` +
       `   • Usage: Simply type /bookmarks\n\n` +
       
       `📖 <b>/revision</b>\n` +
-      `   • Review questions you answered incorrectly\n` +
+      `   • Review questions you answered incorrectly for current access code\n` +
       `   • Shows wrong answers organized by certificate\n` +
       `   • Perfect for focused study on weak areas\n` +
       `   • Usage: Simply type /revision\n\n` +
@@ -261,7 +261,8 @@ class CertificationBot {
       `📊 <b>Progress Tracking:</b>\n` +
       `   • Your answers are automatically saved\n` +
       `   • Wrong answers are stored for revision\n` +
-      `   • Bookmarks are saved across sessions\n` +
+      `   • Bookmarks and revision data are tied to your current access code\n` +
+      `   • Each access code maintains separate bookmark and revision history\n` +
       `   • Track your progress per certificate\n\n` +
       
       `💡 <b>Tips for Best Experience:</b>\n\n` +
@@ -950,6 +951,16 @@ class CertificationBot {
     const userId = ctx.from.id;
     const commandText = ctx.message.text;
     
+    // Check if user has an active session with access code
+    const session = this.userSessions.get(userId);
+    if (!session || !session.accessCode) {
+      await ctx.reply(
+        `❌ Please start a quiz session first with a valid access code.\n\n` +
+        `Use /start to begin a new quiz session.`
+      );
+      return;
+    }
+    
     // Extract question number from command
     const parts = commandText.split(' ');
     if (parts.length < 2) {
@@ -970,20 +981,25 @@ class CertificationBot {
     try {
       const db = await this.connectToDatabase();
       
-      // Check if question exists in access-code-questions collection
+      // Check if question exists in access-code-questions collection for current access code
       const question = await db.collection('access-code-questions').findOne({
-        assignedQuestionNo: questionNumber
+        assignedQuestionNo: questionNumber,
+        generatedAccessCode: session.accessCode  // Filter by current access code
       });
 
       if (!question) {
-        await ctx.reply(`❌ Question ${questionNumber} not found in the system.`);
+        await ctx.reply(
+          `❌ Question ${questionNumber} not found in your current access code (${session.accessCode}).\n\n` +
+          `Please use a question number from your current quiz session.`
+        );
         return;
       }
 
       // Check if bookmark already exists for this user and question
       const existingBookmark = await db.collection('bookmarks').findOne({
         userId: userId,
-        questionNumber: questionNumber
+        questionNumber: questionNumber,
+        generatedAccessCode: session.accessCode  // Also filter bookmarks by access code
       });
 
       if (existingBookmark) {
@@ -991,18 +1007,19 @@ class CertificationBot {
         return;
       }
 
-      // Create new bookmark
+      // Create new bookmark with access code
       const bookmark = {
         userId: userId,
         questionNumber: questionNumber,
         questionId: question.questionId,
         accessCodeQuestionId: question._id,
+        generatedAccessCode: session.accessCode,  // Store the access code
         createdAt: new Date()
       };
 
       await db.collection('bookmarks').insertOne(bookmark);
       
-      await ctx.reply(`✅ Question ${questionNumber} has been bookmarked successfully!`);
+      await ctx.reply(`✅ Question ${questionNumber} has been bookmarked successfully for access code ${session.accessCode}!`);
       
     } catch (error) {
       console.error('Error saving bookmark:', error);
@@ -1013,12 +1030,27 @@ class CertificationBot {
   async handleShowBookmarks(ctx) {
     const userId = ctx.from.id;
     
+    // Check if user has an active session with access code
+    const session = this.userSessions.get(userId);
+    if (!session || !session.accessCode) {
+      await ctx.reply(
+        `❌ Please start a quiz session first with a valid access code.\n\n` +
+        `Use /start to begin a new quiz session.`
+      );
+      return;
+    }
+    
     try {
       const db = await this.connectToDatabase();
       
-      // Get user's bookmarks with question details
+      // Get user's bookmarks with question details filtered by current access code
       const pipeline = [
-        { $match: { userId: userId } },
+        { 
+          $match: { 
+            userId: userId,
+            generatedAccessCode: session.accessCode  // Filter by current access code
+          } 
+        },
         {
           $lookup: {
             from: 'access-code-questions',
@@ -1052,28 +1084,26 @@ class CertificationBot {
       
       if (bookmarks.length === 0) {
         await ctx.reply(
-          `📝 You haven't bookmarked any questions yet.\n\n` +
+          `📝 You haven't bookmarked any questions yet for access code ${session.accessCode}.\n\n` +
           `Use /bookmark <question_number> to save questions for later review.`
         );
         return;
       }
 
-      let message = `📚 Your Bookmarked Questions (${bookmarks.length}):\n\n`;
+      let message = `📚 Your Bookmarked Questions for ${session.accessCode} (${bookmarks.length}):\n\n`;
       
       bookmarks.forEach((bookmark, index) => {
         const date = bookmark.createdAt.toLocaleDateString();
         const questionPreview = bookmark.questionText ? 
           bookmark.questionText.substring(0, 100) + '...' : 
           'Question text not available';
-        const accessCode = bookmark.generatedAccessCode || 'N/A';
         
         message += `${index + 1}. Question ${bookmark.questionNumber}\n`;
         message += `   📅 Saved: ${date}\n`;
-        message += `   🔑 Access Code: ${accessCode}\n`;
         message += `   📝 Preview: ${questionPreview}\n\n`;
       });
 
-      message += `💡 Tip: Use /bookmark <question_number> to save more questions!`;
+      message += `💡 Tip: Use /bookmark <question_number> to save more questions from your current quiz session!`;
       
       await ctx.reply(message);
       
@@ -1087,11 +1117,12 @@ class CertificationBot {
     try {
       const db = await this.connectToDatabase();
       
-      // Check if this wrong answer already exists for this user and question
+      // Check if this wrong answer already exists for this user, question, and access code
       const existingWrongAnswer = await db.collection('wrong-answers').findOne({
         userId: userId,
         questionId: currentQuestion._id,
-        certificateId: new ObjectId(session.certificateId)
+        certificateId: new ObjectId(session.certificateId),
+        accessCode: session.accessCode  // Also filter by access code for data isolation
       });
 
       if (existingWrongAnswer) {
@@ -1138,12 +1169,27 @@ class CertificationBot {
   async handleRevision(ctx) {
     const userId = ctx.from.id;
     
+    // Check if user has an active session with access code
+    const session = this.userSessions.get(userId);
+    if (!session || !session.accessCode) {
+      await ctx.reply(
+        `❌ Please start a quiz session first with a valid access code.\n\n` +
+        `Use /start to begin a new quiz session.`
+      );
+      return;
+    }
+    
     try {
       const db = await this.connectToDatabase();
       
-      // Get user's wrong answers grouped by certificate
+      // Get user's wrong answers filtered by current access code
       const pipeline = [
-        { $match: { userId: userId } },
+        { 
+          $match: { 
+            userId: userId,
+            accessCode: session.accessCode  // Filter by current access code
+          } 
+        },
         {
           $group: {
             _id: '$certificateId',
@@ -1171,13 +1217,13 @@ class CertificationBot {
       
       if (wrongAnswersByCategory.length === 0) {
         await ctx.reply(
-          `🎯 Great job! You haven't answered any questions incorrectly yet.\n\n` +
+          `🎯 Great job! You haven't answered any questions incorrectly yet for access code ${session.accessCode}.\n\n` +
           `Keep practicing and this section will help you review any mistakes you make in the future.`
         );
         return;
       }
 
-      let message = `📚 Revision Summary - Wrong Answers by Certificate:\n\n`;
+      let message = `📚 Revision Summary for ${session.accessCode} - Wrong Answers by Certificate:\n\n`;
       
       wrongAnswersByCategory.forEach((category, index) => {
         message += `${index + 1}. ${category.certificateName} (${category.certificateCode})\n`;
@@ -1197,7 +1243,7 @@ class CertificationBot {
         message += '\n\n';
       });
 
-      message += `💡 Tip: Focus on reviewing these questions to improve your knowledge!\n\n`;
+      message += `💡 Tip: Focus on reviewing these questions from your current access code to improve your knowledge!\n\n`;
       message += `📊 Detailed breakdown:\n`;
       
       // Show detailed breakdown for each certificate
