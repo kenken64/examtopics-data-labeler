@@ -65,108 +65,118 @@ export default function LoginForm() {
         setMessage(verificationJSON.error);
       } else {
         setMessage('Login successful! Redirecting...');
-        
+
         // Debug: Log all available information
         console.log('🎯 Login successful, checking cookies...');
         console.log('Response data:', verificationJSON);
-        
-        // Check if we have a valid token/session
-        const checkAuth = await fetch('/api/auth/verify', {
-          method: 'GET',
-          credentials: 'include'
-        });
-        
-        console.log('Auth check status:', checkAuth.status);
-        if (checkAuth.ok) {
-          const authData = await checkAuth.json();
-          console.log('Auth check data:', authData);
-        }
-        
-        // Redirect after a short delay to let the user see the success message
+
+        // Simple redirect with delay to ensure cookie is processed
         setTimeout(() => {
           console.log('🚀 Redirecting to:', redirectTo);
-          router.push(redirectTo);
-        }, 1000);
+          window.location.href = redirectTo;
+        }, 1500); // Longer delay to ensure cookie is fully processed
       }
     } catch (error: any) {
-      console.error('Authentication error:', error);
-      setMessage(`Error: ${error.message || 'Authentication failed'}`);
+      console.error('Login error:', error);
+      setMessage(error.message || 'An unknown error occurred during login');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg">
-        <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <Image
-              src="/logo.png"
-              alt="Logo"
-              width={80}
-              height={80}
-              className="rounded-lg"
-            />
-          </div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            AWS Certification Quiz
-          </h2>
-          <p className="text-sm text-gray-600">
-            Sign in to access your practice exams
-          </p>
-        </div>
-        
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div>
-            <label htmlFor="username" className="sr-only">
-              Username
-            </label>
-            <Input
-              id="username"
-              name="username"
-              type="text"
-              required
-              className="relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-              placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
+    <div className="min-h-screen flex">
+      {/* Left side - Login Form */}
+      <div className="flex-1 flex items-center justify-center p-8 bg-white">
+        <div className="w-full max-w-md space-y-8">
+          {/* Logo/Brand */}
+          <div className="text-center">
+            <div className="mx-auto mb-6">
+              <Image
+                src="/Applogo.png"
+                alt="Exam CertBot Logo"
+                width={150}
+                height={150}
+                className="mx-auto"
+                priority
+              />
+            </div>
+            <h1 className="text-2xl font-semibold text-gray-900 mb-2">Sign in to Exam CertBot</h1>
           </div>
 
-          <div>
+          {/* Login Form */}
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                Email
+              </label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="capy@scrapybara.com"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
             <Button
               type="submit"
-              disabled={!username.trim()}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 rounded-lg transition-colors"
             >
               Sign in with Passkey
             </Button>
+          </form>
+
+          {/* Sign up link */}
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <button
+                onClick={() => router.push('/register')}
+                className="text-blue-500 hover:text-blue-600 font-medium"
+              >
+                Sign up
+              </button>
+            </p>
           </div>
 
+          {/* Error/Success Message */}
           {message && (
-            <div className={`mt-4 p-3 rounded-md text-sm ${
-              message.includes('Error') || message.includes('failed')
-                ? 'bg-red-50 text-red-700 border border-red-200'
-                : message.includes('successful')
-                ? 'bg-green-50 text-green-700 border border-green-200'
-                : 'bg-blue-50 text-blue-700 border border-blue-200'
+            <div className={`text-center text-sm ${
+              message.includes('successful') ? 'text-green-600' : 'text-red-500'
             }`}>
               {message}
             </div>
           )}
+        </div>
+      </div>
 
-          <div className="text-center">
-            <p className="text-xs text-gray-500">
-              Don't have an account?{' '}
-              <button
-                type="button"
-                onClick={() => router.push('/register')}
-                className="font-medium text-indigo-600 hover:text-indigo-500"
-              >
-                Register here
-              </button>
-            </p>
+      {/* Right side - Image */}
+      <div className="hidden lg:flex lg:flex-1 relative">
+        <div className="w-full h-full relative overflow-hidden bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500">
+          {/* Fallback gradient background if image is not available */}
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-400 via-purple-500 to-pink-500 opacity-90"></div>
+
+          {/* Try to load the image, fall back to gradient if not available */}
+          <Image
+            src="/auth-bg.png"
+            alt="Authentication background"
+            fill
+            className="object-cover"
+            priority
+            onError={(e) => {
+              // Hide image if it fails to load, keeping the gradient background
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+
+          {/* Overlay content - intentionally empty for clean design */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-white text-center">
+              {/* Clean design without text overlay */}
+            </div>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
