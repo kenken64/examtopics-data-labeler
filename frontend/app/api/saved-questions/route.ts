@@ -223,3 +223,50 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
     }, { status: 500 });
   }
 });
+
+// PATCH /api/saved-questions - Update question details
+export const PATCH = withAuth(async (request: AuthenticatedRequest) => {
+  try {
+    const { questionId, correctAnswer, explanation } = await request.json();
+
+    if (!questionId) {
+      return NextResponse.json({
+        success: false,
+        message: 'Question ID is required'
+      }, { status: 400 });
+    }
+
+    const db = await connectToDatabase();
+
+    // Update the question in the quizzes collection
+    const updateResult = await db.collection('quizzes').updateOne(
+      { _id: new ObjectId(questionId) },
+      {
+        $set: {
+          correctAnswer: correctAnswer,
+          explanation: explanation,
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    if (updateResult.matchedCount === 0) {
+      return NextResponse.json({
+        success: false,
+        message: 'Question not found'
+      }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Question updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating question:', error);
+    return NextResponse.json({
+      success: false,
+      message: 'Internal server error'
+    }, { status: 500 });
+  }
+});

@@ -1,4 +1,30 @@
-Clean up: Remove debug script accidentally committed
+Add editing functionality to saved questions: editable correct answer and explanation
 
-- Removed check-access-code-structure.js debug file
-- This was a temporary testing script that shouldn't be in the repository
+FEATURE: Enhanced question management with inline editing capabilities
+
+NEW EDITING FEATURES:
+- Correct answer dropdown selector with option previews
+- Explanation textarea with markdown support for rich text editing
+- Real-time edit/save/cancel controls with loading states
+- Visual feedback during save operations
+
+TECHNICAL IMPLEMENTATION:
+- Added PATCH endpoint to /api/saved-questions for updating questions in quizzes collection
+- Enhanced question detail page with editing state management
+- Added shadcn/ui textarea component for explanation editing
+- Dropdown shows option letters with text preview for easy selection
+- Maintains existing markdown rendering for read-only view
+
+UI/UX IMPROVEMENTS:
+- Toggle between view and edit modes with clear controls
+- Save and cancel buttons with proper disabled states during operations
+- Consistent styling with existing design system
+- Error handling and success notifications for all operations
+
+BACKEND UPDATES:
+- New PATCH route validates question ID and updates MongoDB quizzes collection
+- Adds updatedAt timestamp for change tracking
+- Proper error handling for invalid questions or database issues
+
+This allows admins to easily correct wrong answers and improve explanations
+without needing direct database access.

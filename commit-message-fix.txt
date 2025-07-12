@@ -1,0 +1,9 @@
+fix: remove duplicate edit forms in saved questions detail page
+
+- Removed duplicate "Original Explanation Card" that caused duplicate explanation display
+- Removed separate editing section that created duplicate editing forms
+- Consolidated all editing functionality within the main question card
+- Added save/cancel buttons to main card when in editing mode
+- Ensures single, clean editing interface without UI duplication
+
+Fixes issue where multiple edit forms could appear simultaneously on the question detail page.
