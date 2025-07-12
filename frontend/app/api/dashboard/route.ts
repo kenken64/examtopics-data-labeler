@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 
 export async function GET() {
   const client = new MongoClient(process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert');
@@ -11,9 +11,14 @@ export async function GET() {
     // Get certificates with question counts
     const certificateStats = await db.collection('quizzes').aggregate([
       {
+        $addFields: {
+          certificateObjectId: { $toObjectId: '$certificateId' }
+        }
+      },
+      {
         $lookup: {
           from: 'certificates',
-          localField: 'certificateId',
+          localField: 'certificateObjectId',
           foreignField: '_id',
           as: 'certificate'
         }
@@ -23,7 +28,7 @@ export async function GET() {
       },
       {
         $group: {
-          _id: '$certificateId',
+          _id: '$certificateObjectId',
           name: { $first: '$certificate.name' },
           code: { $first: '$certificate.code' },
           questionCount: { $sum: 1 },
@@ -199,7 +204,7 @@ export async function GET() {
       {
         $group: {
           _id: { 
-            $ifNull: ['$paymentStatus', 'Unknown'] 
+            $ifNull: ['$status', 'Unknown'] 
           },
           count: { $sum: 1 }
         }

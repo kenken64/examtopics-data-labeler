@@ -1,0 +1,9 @@
+Fix payee status distribution in dashboard analytics
+
+- Fixed field name mismatch: dashboard aggregation was using 'paymentStatus' but database uses 'status'
+- Updated dashboard API aggregation to use correct field name ($ifNull: ['$status', 'Unknown'])
+- Dashboard now correctly shows payment status distribution: Paid (4), Pending (1), Failed (1), Refunded (1)
+- Resolves issue where all payees were showing as "Unknown" in analytics charts
+- Added debug scripts to investigate and verify the fix
+
+The dashboard PayeeStatusChart now properly reflects the actual payment status data from the payee management interface.
