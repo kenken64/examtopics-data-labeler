@@ -1,0 +1,11 @@
+fix(frontend): resolve Railway deployment pnpm lockfile sync error
+
+- Add explicit build command with --no-frozen-lockfile flag to railway.json
+- Update nixpacks.toml to handle package installation during build
+- Create update-lockfile scripts for manual lockfile regeneration
+- Update deployment documentation with lockfile management section
+- Addresses ERR_PNPM_OUTDATED_LOCKFILE error during Railway builds
+
+The issue occurred because pnpm-lock.yaml was out of sync with package.json,
+specifically missing chart.js, googleapis, and react-chartjs-2 dependencies.
+Railway deployment now handles this automatically with --no-frozen-lockfile flag.

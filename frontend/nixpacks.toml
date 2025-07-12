@@ -1,4 +1,7 @@
 # Nixpacks configuration for Railway deployment
+[build]
+cmd = "pnpm install --no-frozen-lockfile && pnpm build"
+
 [start]
 cmd = "npm start"
 

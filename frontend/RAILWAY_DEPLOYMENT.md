@@ -9,6 +9,24 @@ This guide will help you deploy the ExamTopics Next.js frontend to Railway.app.
 3. **MongoDB Database**: MongoDB Atlas or Railway MongoDB service
 4. **Backend API**: Deployed backend service (see backend Railway guide)
 
+## Lockfile Management
+
+⚠️ **Important**: Before deploying, ensure your `pnpm-lock.yaml` is synchronized with `package.json`.
+
+If you encounter the error `ERR_PNPM_OUTDATED_LOCKFILE`, use one of these solutions:
+
+```bash
+# Option 1: Update lockfile manually
+rm pnpm-lock.yaml
+pnpm install
+
+# Option 2: Use provided scripts
+./update-lockfile.sh    # On Unix/Linux/macOS
+./update-lockfile.bat   # On Windows
+```
+
+**Note**: The Railway configuration has been updated to use `--no-frozen-lockfile` to handle lockfile mismatches automatically during deployment.
+
 ## Deployment Steps
 
 ### 1. Connect Repository to Railway
