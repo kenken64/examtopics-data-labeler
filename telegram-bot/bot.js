@@ -351,11 +351,24 @@ class CertificationBot {
     try {
       const db = await this.connectToDatabase();
       
-      // Validate access code and get questions
-      const questions = await this.getQuestionsForAccessCode(accessCode);
+      // Validate access code and get questions for the selected certificate
+      const questions = await this.getQuestionsForAccessCode(accessCode, session.certificateId);
       
       if (!questions || questions.length === 0) {
-        await ctx.reply('❌ Invalid access code or no questions available. Please check your access code and try again.');
+        // Check if access code exists but for a different certificate
+        const accessCodeExists = await this.checkAccessCodeExists(accessCode);
+        if (accessCodeExists) {
+          const actualCertificate = await this.getCertificateForAccessCode(accessCode);
+          await ctx.reply(
+            `❌ Access code mismatch!\n\n` +
+            `🔑 Access code: ${accessCode}\n` +
+            `📋 You selected: ${session.certificate.name} (${session.certificate.code})\n` +
+            `📋 Access code is for: ${actualCertificate ? actualCertificate.name + ' (' + actualCertificate.code + ')' : 'Different certificate'}\n\n` +
+            `Please use /start to select the correct certificate or enter a valid access code for ${session.certificate.name}.`
+          );
+        } else {
+          await ctx.reply('❌ Invalid access code or no questions available. Please check your access code and try again.');
+        }
         return;
       }
 
@@ -386,13 +399,25 @@ class CertificationBot {
     }
   }
 
-  async getQuestionsForAccessCode(accessCode) {
+  async getQuestionsForAccessCode(accessCode, certificateId = null) {
     try {
       const db = await this.connectToDatabase();
       
-      // Get questions assigned to this access code
+      // Build match criteria - include certificate validation if provided
+      const matchCriteria = { 
+        generatedAccessCode: accessCode, 
+        isEnabled: true 
+      };
+      
+      // If certificateId is provided, validate that access code belongs to this certificate
+      if (certificateId) {
+        // Ensure certificateId is converted to ObjectId for proper comparison
+        matchCriteria.certificateId = new ObjectId(certificateId);
+      }
+      
+      // Get questions assigned to this access code and certificate
       const pipeline = [
-        { $match: { generatedAccessCode: accessCode, isEnabled: true } },
+        { $match: matchCriteria },
         {
           $lookup: {
             from: 'quizzes',
@@ -429,6 +454,52 @@ class CertificationBot {
       return processedQuestions;
     } catch (error) {
       console.error('Error fetching questions for access code:', error);
+      return null;
+    }
+  }
+
+  async checkAccessCodeExists(accessCode) {
+    try {
+      const db = await this.connectToDatabase();
+      const accessCodeRecord = await db.collection('access-code-questions').findOne({
+        generatedAccessCode: accessCode
+      });
+      return !!accessCodeRecord;
+    } catch (error) {
+      console.error('Error checking access code existence:', error);
+      return false;
+    }
+  }
+
+  async getCertificateForAccessCode(accessCode) {
+    try {
+      const db = await this.connectToDatabase();
+      
+      // Get the certificate associated with this access code
+      const pipeline = [
+        { $match: { generatedAccessCode: accessCode } },
+        {
+          $lookup: {
+            from: 'certificates',
+            localField: 'certificateId',
+            foreignField: '_id',
+            as: 'certificate'
+          }
+        },
+        { $unwind: '$certificate' },
+        { $limit: 1 },
+        {
+          $project: {
+            name: '$certificate.name',
+            code: '$certificate.code'
+          }
+        }
+      ];
+
+      const result = await db.collection('access-code-questions').aggregate(pipeline).toArray();
+      return result.length > 0 ? result[0] : null;
+    } catch (error) {
+      console.error('Error getting certificate for access code:', error);
       return null;
     }
   }

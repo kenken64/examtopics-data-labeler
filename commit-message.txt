@@ -1,17 +1,9 @@
-Fix Telegram bot privacy issue: scope bookmark/revision to current access code
+Fix Telegram bot access code validation for certificate mismatch
 
-SECURITY FIX: Implement proper data isolation for bookmark and revision features
+- Fixed critical security bug where access codes for one certificate could be used with a different certificate
+- Issue: certificateId comparison was failing because session stored string but database has ObjectId
+- Solution: Convert certificateId to ObjectId in getQuestionsForAccessCode method before comparison
+- Now properly validates that access code belongs to selected certificate
+- Users get clear error message when trying to use access code for wrong certificate
 
-- Fixed /bookmark command to only allow bookmarking questions from current access code
-- Fixed /bookmarks command to only show bookmarks for current access code  
-- Fixed /revision command to only show wrong answers for current access code
-- Updated saveWrongAnswer to filter existing records by access code for proper isolation
-- Enhanced user session validation - commands now require active quiz session with access code
-- Updated help text to clarify that features are scoped to current access code
-
-PRIVACY PROTECTION:
-- Users can no longer see other users' bookmarks or revision data
-- Each access code maintains separate bookmark and revision history
-- Prevents data leakage between different payee access codes
-
-This ensures complete data privacy and isolation between different users and access codes.
+Example: AC-BG4F3QA3 is for Solutions Architect but was incorrectly allowing AI Practitioner access
