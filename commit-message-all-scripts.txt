@@ -1,0 +1,11 @@
+enhance: update all git automation scripts to use file-based commit messages
+
+- Updated git-auto.sh (Bash) to read from commit message files instead of parameters
+- Updated git-auto.bat (Windows Batch) to read from commit message files instead of parameters
+- All three scripts (PowerShell, Bash, Batch) now have consistent file-based approach
+- Added proper file existence and empty file validation for all platforms
+- Improved error messages with emojis for better user experience
+- Default to commit-message.txt but allow custom file specification
+- Use git commit -F flag to preserve multi-line messages and formatting
+
+This provides consistent automation workflow across Windows (PowerShell/Batch) and Unix (Bash) environments.
