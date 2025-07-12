@@ -74,6 +74,21 @@ function formatAnswerForDisplay(answer) {
 
 class CertificationBot {
   constructor() {
+    // Validate essential environment variables
+    if (!process.env.BOT_TOKEN) {
+      console.error('❌ BOT_TOKEN environment variable is missing!');
+      this.startupError = new Error('BOT_TOKEN environment variable is required');
+      this.setupHealthCheck();
+      return;
+    }
+
+    if (!process.env.MONGODB_URI) {
+      console.error('❌ MONGODB_URI environment variable is missing!');
+      this.startupError = new Error('MONGODB_URI environment variable is required');
+      this.setupHealthCheck();
+      return;
+    }
+
     this.bot = new Bot(process.env.BOT_TOKEN);
     this.mongoClient = new MongoClient(process.env.MONGODB_URI);
     this.db = null;
@@ -94,11 +109,11 @@ class CertificationBot {
     try {
       console.log('Starting bot initialization...');
       
-      // Set a timeout for initialization
+      // Set a timeout for initialization (reduced for Railway compatibility)
       const timeout = setTimeout(() => {
-        this.startupError = new Error('Bot initialization timeout after 60 seconds');
+        this.startupError = new Error('Bot initialization timeout after 30 seconds');
         console.error('Bot initialization timed out');
-      }, 60000);
+      }, 30000);
       
       this.initializeBot();
       await this.start();
