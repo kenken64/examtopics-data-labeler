@@ -74,21 +74,93 @@ function formatAnswerForDisplay(answer) {
 
 class CertificationBot {
   constructor() {
+    // Validate essential environment variables
+    if (!process.env.BOT_TOKEN) {
+      console.error('❌ BOT_TOKEN environment variable is missing!');
+      this.startupError = new Error('BOT_TOKEN environment variable is required');
+      this.setupHealthCheck();
+      return;
+    }
+
+    if (!process.env.MONGODB_URI) {
+      console.error('❌ MONGODB_URI environment variable is missing!');
+      this.startupError = new Error('MONGODB_URI environment variable is required');
+      this.setupHealthCheck();
+      return;
+    }
+
     this.bot = new Bot(process.env.BOT_TOKEN);
     this.mongoClient = new MongoClient(process.env.MONGODB_URI);
     this.db = null;
     this.userSessions = new Map(); // Store user quiz sessions
     this.userSelections = new Map(); // Store user's current answer selections for multiple choice
     this.healthServer = null; // Health check server for Railway
+    this.isReady = false; // Track if bot is ready
+    this.startupError = null; // Track startup errors
     
-    this.initializeBot();
+    // Start health server immediately for Railway
     this.setupHealthCheck();
+    
+    // Initialize bot asynchronously
+    this.initializeAsync();
+  }
+
+  async initializeAsync() {
+    try {
+      console.log('Starting bot initialization...');
+      
+      // Set a timeout for initialization (reduced for Railway compatibility)
+      const timeout = setTimeout(() => {
+        this.startupError = new Error('Bot initialization timeout after 30 seconds');
+        console.error('Bot initialization timed out');
+      }, 30000);
+      
+      this.initializeBot();
+      await this.start();
+      
+      clearTimeout(timeout);
+      this.isReady = true;
+      console.log('Bot initialization completed successfully');
+    } catch (error) {
+      console.error('Bot initialization failed:', error);
+      this.startupError = error;
+      
+      // For Railway, we want to keep the service running even if bot fails
+      // so that health checks can report the error
+      if (process.env.RAILWAY_ENVIRONMENT) {
+        console.log('Running on Railway - keeping service alive for health checks');
+      }
+    }
   }
 
   async connectToDatabase() {
     if (!this.db) {
-      await this.mongoClient.connect();
-      this.db = this.mongoClient.db('awscert');
+      console.log('Attempting to connect to MongoDB...');
+      
+      try {
+        await this.mongoClient.connect();
+        this.db = this.mongoClient.db(process.env.MONGODB_DB_NAME);
+        console.log('✅ Connected to MongoDB successfully');
+      } catch (error) {
+        console.error('❌ MongoDB connection failed:', error.message);
+        
+        // For Railway, we might need to wait for MongoDB to be ready
+        if (process.env.RAILWAY_ENVIRONMENT) {
+          console.log('Retrying MongoDB connection in 5 seconds...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          try {
+            await this.mongoClient.connect();
+            this.db = this.mongoClient.db(process.env.MONGODB_DB_NAME);
+            console.log('✅ Connected to MongoDB on retry');
+          } catch (retryError) {
+            console.error('❌ MongoDB retry failed:', retryError.message);
+            throw retryError;
+          }
+        } else {
+          throw error;
+        }
+      }
     }
     return this.db;
   }
@@ -218,14 +290,19 @@ class CertificationBot {
     
     this.healthServer = http.createServer((req, res) => {
       if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        const status = this.isReady ? 'healthy' : (this.startupError ? 'error' : 'starting');
+        const statusCode = this.isReady ? 200 : (this.startupError ? 503 : 200);
+        
+        res.writeHead(statusCode, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          status: 'healthy',
+          status: status,
           service: 'examtopics-telegram-bot',
           version: '1.0.0',
           uptime: process.uptime(),
           timestamp: new Date().toISOString(),
-          mongodb: this.db ? 'connected' : 'disconnected'
+          mongodb: this.db ? 'connected' : 'disconnected',
+          bot: this.isReady ? 'ready' : (this.startupError ? 'error' : 'initializing'),
+          error: this.startupError ? this.startupError.message : null
         }));
       } else if (req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -233,7 +310,8 @@ class CertificationBot {
           service: 'ExamTopics Telegram Bot',
           version: '1.0.0',
           description: 'AWS Certification Practice Bot',
-          health: '/health'
+          health: '/health',
+          status: this.isReady ? 'ready' : (this.startupError ? 'error' : 'initializing')
         }));
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -1665,7 +1743,8 @@ const bot = new CertificationBot();
 // Add process title for easier identification
 process.title = 'telegram-aws-cert-bot';
 
-bot.start();
+// The bot will start automatically through initializeAsync()
+console.log('Telegram bot service starting...');
 
 // Handle graceful shutdown
 let isShuttingDown = false;

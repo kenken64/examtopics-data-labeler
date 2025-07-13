@@ -1,21 +1,29 @@
 @echo off
-REM Railway Deployment Script for Next.js Frontend (Windows)
-REM Run this script to prepare and deploy frontend to Railway
+echo Preparing frontend for Railway deployment...
 
-echo ⚡ Preparing ExamTopics Next.js Frontend for Railway Deployment
-echo =============================================================
-
-REM Check if we're in the frontend directory
-if not exist "next.config.ts" if not exist "next.config.js" (
-    echo ❌ Error: Next.js config not found. Please run this script from the frontend directory.
-    exit /b 1
+echo Checking lockfile status...
+if exist pnpm-lock.yaml (
+    echo ✓ pnpm-lock.yaml exists
+) else (
+    echo ❌ pnpm-lock.yaml missing
+    echo Creating lockfile...
+    pnpm install
 )
 
-echo ✅ Found Next.js configuration - proceeding with deployment preparation
+echo.
+echo Testing build locally...
+set MONGODB_URI=mongodb://localhost:27017/awscert
+set JWT_SECRET=dummy-jwt-secret-for-build
+set NEXT_PUBLIC_PDF_CONVERSION_API_URL=http://localhost:5000
 
-REM Check if package.json exists
-if not exist "package.json" (
-    echo ❌ Error: package.json not found
+pnpm build
+
+if %ERRORLEVEL% EQU 0 (
+    echo.
+    echo ✅ Frontend build successful! Ready for Railway deployment.
+) else (
+    echo.
+    echo ❌ Build failed. Please check errors above.
     exit /b 1
 )
 

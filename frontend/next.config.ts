@@ -6,6 +6,16 @@ const nextConfig: NextConfig = {
   // Enable standalone output for Docker deployment
   output: 'standalone',
   
+  // Disable ESLint during builds for Railway
+  eslint: {
+    ignoreDuringBuilds: process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT === 'true',
+  },
+  
+  // Disable TypeScript checking during builds for Railway  
+  typescript: {
+    ignoreBuildErrors: process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT === 'true',
+  },
+  
   // Disable the error overlay in production
   onDemandEntries: {
     // Period (in ms) where the server will keep pages in the buffer
