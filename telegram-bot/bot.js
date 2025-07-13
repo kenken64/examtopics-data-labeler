@@ -483,8 +483,10 @@ class CertificationBot {
         waitingForAccessCode: true
       });
 
-      await ctx.editMessageText(
-        `✅ You selected: ${certificate.name} (${certificate.code})\n\n` +
+      await this.safeEditMessage(ctx, 
+        `✅ You selected: ${certificate.name} (${certificate.code})
+
+` +
         `📝 Please enter your generated access code to begin the quiz:`
       );
 
@@ -853,7 +855,7 @@ class CertificationBot {
       keyboard.text('✅ Confirm Selection', 'confirm_selection').row();
       keyboard.text('🔄 Clear All', 'clear_selection');
 
-      await ctx.editMessageText(questionText, {
+      await this.safeEditMessage(ctx, questionText, {
         reply_markup: keyboard
       });
       
@@ -873,9 +875,12 @@ class CertificationBot {
         session.correctAnswers++;
         
         // Show correct answer message
-        await ctx.editMessageText(
-          `✅ Correct!\n\n` +
-          `Your answer: ${selectedAnswer}\n` +
+        await this.safeEditMessage(ctx, 
+          `✅ Correct!
+
+` +
+          `Your answer: ${selectedAnswer}
+` +
           `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`
         );
 
@@ -904,7 +909,7 @@ class CertificationBot {
           keyboard.text('Show Results 📊', 'next_question');
         }
 
-        await ctx.editMessageText(
+        await this.safeEditMessage(ctx, 
           `❌ Wrong! Your answer: ${selectedAnswer}\n\n` +
           `The correct answer was: ${currentQuestion.correctAnswer}\n\n` +
           `📖 Explanation:\n${explanation}\n\n` +
@@ -937,7 +942,7 @@ class CertificationBot {
 
     // Check if user has made any selections
     if (userSelections.length === 0) {
-      await ctx.editMessageText(
+      await this.safeEditMessage(ctx, 
         '⚠️ Please select at least one answer before confirming.',
         { reply_markup: ctx.msg.reply_markup }
       );
@@ -947,7 +952,7 @@ class CertificationBot {
     // Check if user has selected the correct number of answers
     const requiredCount = normalizeAnswer(currentQuestion.correctAnswer).length;
     if (userSelections.length !== requiredCount) {
-      await ctx.editMessageText(
+      await this.safeEditMessage(ctx, 
         `⚠️ Please select exactly ${requiredCount} answers. You have selected ${userSelections.length}.`,
         { reply_markup: ctx.msg.reply_markup }
       );
@@ -973,7 +978,7 @@ class CertificationBot {
       session.correctAnswers++;
       
       // Show correct answer message
-      await ctx.editMessageText(
+      await this.safeEditMessage(ctx, 
         `✅ Correct!\n\n` +
         `Your answer: ${formatAnswerForDisplay(userAnswer)}\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`
@@ -1004,10 +1009,17 @@ class CertificationBot {
         keyboard.text('Show Results 📊', 'next_question');
       }
 
-      await ctx.editMessageText(
-        `❌ Wrong! Your answer: ${formatAnswerForDisplay(userAnswer)}\n\n` +
-        `The correct answer was: ${formatAnswerForDisplay(currentQuestion.correctAnswer)}\n\n` +
-        `📖 Explanation:\n${explanation}\n\n` +
+      await this.safeEditMessage(ctx, 
+        `❌ Wrong! Your answer: ${formatAnswerForDisplay(userAnswer)}
+
+` +
+        `The correct answer was: ${formatAnswerForDisplay(currentQuestion.correctAnswer)}
+
+` +
+        `📖 Explanation:
+${explanation}
+
+` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`,
         {
           reply_markup: keyboard
@@ -1084,7 +1096,7 @@ class CertificationBot {
       .text('✅ Confirm Selection', 'confirm_selection').row()
       .text('🔄 Clear All', 'clear_selection');
 
-    await ctx.editMessageText(questionText, {
+    await this.safeEditMessage(ctx, questionText, {
       reply_markup: keyboard
     });
   }
@@ -1602,61 +1614,59 @@ class CertificationBot {
     try {
       switch (action) {
         case 'start':
-          await ctx.editMessageText('🚀 Starting new quiz...');
+          await this.safeEditMessage(ctx, '🚀 Starting new quiz...');
           setTimeout(async () => {
             await this.handleStart(ctx);
           }, 1000);
           break;
 
         case 'help':
-          await ctx.editMessageText('📚 Loading help guide...');
+          await this.safeEditMessage(ctx, '📚 Loading help guide...');
           setTimeout(async () => {
             await this.handleHelp(ctx);
           }, 1000);
           break;
 
-        case 'bookmark':
-          await ctx.editMessageText(
-            `💾 <b>Add Bookmark</b>\n\n` +
-            `To bookmark a question, type:\n` +
-            `<code>/bookmark [question_number]</code>\n\n` +
-            `Example: <code>/bookmark 15</code>\n\n` +
-            `This will save question #15 for later review.`,
-            { parse_mode: 'HTML' }
-          );
-          break;
+        case 'bookmark':          await this.safeEditMessage(ctx,             `💾 <b>Add Bookmark</b>
+
+` +            `To bookmark a question, type:
+` +            `<code>/bookmark [question_number]</code>
+
+` +            `Example: <code>/bookmark 15</code>
+
+` +            `This will save question #15 for later review.`,            { parse_mode: 'HTML' }          );          break;
 
         case 'bookmarks':
-          await ctx.editMessageText('📑 Loading your bookmarks...');
+          await this.safeEditMessage(ctx, '📑 Loading your bookmarks...');
           setTimeout(async () => {
             await this.handleShowBookmarks(ctx);
           }, 1000);
           break;
 
         case 'revision':
-          await ctx.editMessageText('🔄 Loading revision mode...');
+          await this.safeEditMessage(ctx, '🔄 Loading revision mode...');
           setTimeout(async () => {
             await this.handleRevision(ctx);
           }, 1000);
           break;
 
         case 'close':
-          await ctx.editMessageText('✅ Menu closed. Type /menu to open it again.');
+          await this.safeEditMessage(ctx, '✅ Menu closed. Type /menu to open it again.');
           break;
 
         case 'current_question':
           if (this.userSessions.has(ctx.from.id)) {
-            await ctx.editMessageText('📝 Loading current question...');
+            await this.safeEditMessage(ctx, '📝 Loading current question...');
             setTimeout(async () => {
               await this.showCurrentQuestion(ctx);
             }, 1000);
           } else {
-            await ctx.editMessageText('❌ No active quiz session. Start a new quiz first.');
+            await this.safeEditMessage(ctx, '❌ No active quiz session. Start a new quiz first.');
           }
           break;
 
         case 'restart':
-          await ctx.editMessageText('🔄 Restarting quiz...');
+          await this.safeEditMessage(ctx, '🔄 Restarting quiz...');
           setTimeout(async () => {
             await this.handleStart(ctx);
           }, 1000);
@@ -1667,9 +1677,9 @@ class CertificationBot {
           if (this.userSessions.has(userId)) {
             this.userSessions.delete(userId);
             this.userSelections.delete(userId);
-            await ctx.editMessageText('🏁 Quiz session ended. Type /start to begin a new quiz.');
+            await this.safeEditMessage(ctx, '🏁 Quiz session ended. Type /start to begin a new quiz.');
           } else {
-            await ctx.editMessageText('❌ No active quiz session to end.');
+            await this.safeEditMessage(ctx, '❌ No active quiz session to end.');
           }
           break;
 
@@ -1679,17 +1689,17 @@ class CertificationBot {
             const currentQuestion = session.questions[session.currentQuestionIndex];
             if (currentQuestion) {
               await this.saveBookmark(ctx.from.id, session, currentQuestion);
-              await ctx.editMessageText(`💾 Current question #${currentQuestion.question_no} bookmarked successfully!`);
+              await this.safeEditMessage(ctx, `💾 Current question #${currentQuestion.question_no} bookmarked successfully!`);
             } else {
-              await ctx.editMessageText('❌ No current question to bookmark.');
+              await this.safeEditMessage(ctx, '❌ No current question to bookmark.');
             }
           } else {
-            await ctx.editMessageText('❌ No active quiz session. Start a quiz first.');
+            await this.safeEditMessage(ctx, '❌ No active quiz session. Start a quiz first.');
           }
           break;
 
         default:
-          await ctx.editMessageText('❌ Unknown command. Type /menu to see available options.');
+          await this.safeEditMessage(ctx, '❌ Unknown command. Type /menu to see available options.');
       }
     } catch (error) {
       console.error('Error handling menu action:', error);
@@ -1719,7 +1729,7 @@ class CertificationBot {
         .text('📑 View Bookmarks', 'menu_bookmarks').text('🔄 Revision Mode', 'menu_revision').row()
         .text('📚 Help', 'menu_help').text('❌ Close', 'menu_close');
       
-      await ctx.editMessageText(menuMessage, {
+      await this.safeEditMessage(ctx, menuMessage, {
         reply_markup: keyboard,
         parse_mode: 'HTML'
       });
@@ -1735,10 +1745,42 @@ class CertificationBot {
         .text('📚 Help Guide', 'menu_help').row()
         .text('❌ Close', 'menu_close');
       
-      await ctx.editMessageText(menuMessage, {
+      await this.safeEditMessage(ctx, menuMessage, {
         reply_markup: keyboard,
         parse_mode: 'HTML'
       });
+    }
+  }
+
+  /**
+   * Safely edits a message, checking if the content has actually changed.
+   * @param {object} ctx - The Grammy context object.
+   * @param {string} newText - The new text for the message.
+   * @param {object} newOptions - The new options for the message (e.g., reply_markup).
+   */
+  async safeEditMessage(ctx, newText, newOptions) {
+    try {
+      // Get the current message content
+      const currentMessage = ctx.callbackQuery?.message;
+      const currentText = currentMessage?.text;
+      const currentReplyMarkup = currentMessage?.reply_markup;
+
+      // Normalize and compare content to avoid unnecessary API calls
+      const isTextChanged = newText.trim() !== (currentText || '').trim();
+      const isMarkupChanged = JSON.stringify(newOptions?.reply_markup) !== JSON.stringify(currentReplyMarkup);
+
+      if (isTextChanged || isMarkupChanged) {
+        await ctx.editMessageText(newText, newOptions);
+      } else {
+        console.log('Skipping message edit because content is identical.');
+      }
+    } catch (error) {
+      // Log the error, but don't crash the bot
+      if (error.message.includes('message is not modified')) {
+        console.warn('Attempted to edit message with same content, which was caught by safeEditMessage.');
+      } else {
+        console.error('Error in safeEditMessage:', error);
+      }
     }
   }
 }
