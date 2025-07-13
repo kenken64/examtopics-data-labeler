@@ -133,7 +133,7 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen p-8 pl-14 sm:pl-16 lg:pl-20 flex items-center justify-center">
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-12 sm:pl-16 lg:pl-20 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading dashboard...</p>
@@ -144,7 +144,7 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="min-h-screen p-8 pl-14 sm:pl-16 lg:pl-20 flex items-center justify-center">
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-12 sm:pl-16 lg:pl-20 flex items-center justify-center">
         <div className="text-center">
           <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Error Loading Dashboard</h2>
@@ -164,13 +164,13 @@ export default function Dashboard() {
   const totalQuestions = data.certificates.reduce((sum, cert) => sum + cert.questionCount, 0);
 
   return (
-    <div className="min-h-screen p-8 pl-14 sm:pl-16 lg:pl-20">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground mt-2">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">
               AWS Certification Management System Overview
             </p>
           </div>

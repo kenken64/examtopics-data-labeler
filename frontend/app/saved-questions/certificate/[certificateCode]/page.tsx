@@ -99,7 +99,7 @@ const CertificateQuestionsPage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
         <div className="max-w-4xl mx-auto">
           <div className="flex justify-center items-center py-12">
             <Loader2 className="h-8 w-8 animate-spin" />
@@ -111,27 +111,27 @@ const CertificateQuestionsPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <Button 
             variant="ghost" 
             onClick={handleBackClick}
-            className="mb-4 -ml-2"
+            className="mb-4 min-h-[44px]"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Saved Questions
           </Button>
           
-          <div className="flex items-center gap-3 mb-2">
-            <BookOpen className="h-8 w-8 text-blue-600" />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
+            <BookOpen className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
                 {certificateInfo?.certificateTitle || `Certificate ${certificateCode}`}
               </h1>
-              <p className="text-gray-600">
-                Questions for certificate code: <code className="bg-gray-200 px-2 py-1 rounded">{certificateCode}</code>
+              <p className="text-sm sm:text-base text-gray-600">
+                Questions for certificate code: <code className="bg-gray-200 px-2 py-1 rounded text-xs break-all">{certificateCode}</code>
               </p>
             </div>
           </div>

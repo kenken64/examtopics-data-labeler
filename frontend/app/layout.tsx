@@ -16,6 +16,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AWS Certification Web App",
   description: "Comprehensive AWS certification preparation and management platform featuring PDF data labeling, question management, and AI-powered explanations.",
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
 };
 
 export default function RootLayout({
