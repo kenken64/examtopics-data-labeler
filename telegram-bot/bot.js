@@ -139,7 +139,7 @@ class CertificationBot {
       
       try {
         await this.mongoClient.connect();
-        this.db = this.mongoClient.db('awscert');
+        this.db = this.mongoClient.db(process.env.MONGODB_DB_NAME);
         console.log('✅ Connected to MongoDB successfully');
       } catch (error) {
         console.error('❌ MongoDB connection failed:', error.message);
@@ -151,7 +151,7 @@ class CertificationBot {
           
           try {
             await this.mongoClient.connect();
-            this.db = this.mongoClient.db('awscert');
+            this.db = this.mongoClient.db(process.env.MONGODB_DB_NAME);
             console.log('✅ Connected to MongoDB on retry');
           } catch (retryError) {
             console.error('❌ MongoDB retry failed:', retryError.message);
