@@ -173,18 +173,29 @@ class CertificationBot {
    */
   async getExplanationForQuestion(questionId, regularExplanation) {
     try {
+      console.log(`🔍 Getting explanation for question ID: ${questionId}`);
       const db = await this.connectToDatabase();
       
       // Try to get the question with AI explanation
       const question = await db.collection('quizzes').findOne(
         { _id: new ObjectId(questionId) },
-        { projection: { aiExplanation: 1 } }
+        { projection: { aiExplanation: 1, explanation: 1 } }
       );
+      
+      console.log(`📋 Question found:`, {
+        hasQuestion: !!question,
+        hasAiExplanation: !!(question && question.aiExplanation),
+        aiExplanationLength: question?.aiExplanation?.length || 0,
+        hasRegularExplanation: !!(question && question.explanation),
+        regularExplanationLength: question?.explanation?.length || 0
+      });
       
       // Return AI explanation if it exists, otherwise return regular explanation
       if (question && question.aiExplanation) {
+        console.log(`✅ Returning AI explanation (${question.aiExplanation.length} chars)`);
         return `🤖 AI Second Opinion:\n${question.aiExplanation}`;
       } else {
+        console.log(`📖 Returning regular explanation (${regularExplanation?.length || 0} chars)`);
         return regularExplanation || 'No explanation available.';
       }
     } catch (error) {

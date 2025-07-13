@@ -4,33 +4,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 // Authentication middleware for protecting API endpoints
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
+// Standard MongoDB connection utility
+import { connectToDatabase } from '@/lib/mongodb';
 
 /**
  * MongoDB Connection Manager for Certificates API
  * 
- * Establishes connection to MongoDB database with connection state checking.
- * This function ensures we don't create multiple connections in serverless environments.
- * 
- * Connection Strategy:
- * - Check existing connection state before attempting new connection
- * - Use environment variable for connection string with fallback
- * - Handle connection errors gracefully with proper error logging
+ * Uses the standard MongoDB connection from lib/mongodb.ts to ensure consistency.
+ * This prevents connection URI conflicts and namespace issues.
  * 
  * @throws {Error} If database connection fails
  */
 const connectDB = async () => {
   try {
-    // Check if we already have an active connection
-    // readyState 1 means connected, 0 means disconnected
-    if (mongoose.connections[0].readyState) {
-      return; // Connection already established, no action needed
+    // Use the standard MongoDB connection utility
+    const db = await connectToDatabase();
+    
+    // Ensure mongoose is also connected for the Certificate model
+    if (!mongoose.connections[0].readyState) {
+      const uri = process.env.MONGODB_URI;
+      if (!uri) {
+        throw new Error('MONGODB_URI environment variable is not defined');
+      }
+      await mongoose.connect(uri);
     }
     
-    // Establish new connection using environment variable or fallback
-    const baseUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-    const dbName = process.env.MONGODB_DB_NAME || 'awscert';
-    const mongoUri = baseUri.endsWith('/') ? `${baseUri}${dbName}` : `${baseUri}/${dbName}`;
-    await mongoose.connect(mongoUri);
+    return db;
   } catch (error) {
     // Log connection errors for debugging and monitoring
     console.error('MongoDB connection error:', error);

@@ -71,11 +71,28 @@ export default function Certificates() {
       if (response.ok) {
         const data = await response.json();
         setCertificates(data);
+        setError(null); // Clear any previous errors
       } else {
-        setError('Failed to fetch certificates');
+        // Get the actual error message from the API
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        
+        if (response.status === 401) {
+          setError('Authentication required. Please log in to view certificates.');
+        } else {
+          setError(`Failed to fetch certificates: ${errorMessage}`);
+        }
+        
+        console.error('Certificates API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
       }
     } catch (err) {
-      setError('Error fetching certificates');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Network error: ${errorMessage}`);
+      console.error('Network error fetching certificates:', err);
     } finally {
       setLoading(false);
     }

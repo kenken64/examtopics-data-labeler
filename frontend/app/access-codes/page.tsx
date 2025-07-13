@@ -71,9 +71,18 @@ export default function AccessCodesPage() {
               if (payee.generatedAccessCode) {
                 try {
                   const linkCheckResponse = await fetch(`/api/access-code-questions?generatedAccessCode=${encodeURIComponent(payee.generatedAccessCode)}`);
-                  const isLinked = linkCheckResponse.ok;
+                  // Consider only 200 OK as linked, 404 means no questions assigned yet
+                  const isLinked = linkCheckResponse.status === 200;
+                  if (linkCheckResponse.status === 404) {
+                    // 404 is expected when no questions are assigned yet
+                    console.log(`No questions linked yet for access code: ${payee.generatedAccessCode}`);
+                  } else if (!linkCheckResponse.ok) {
+                    // Log other errors (auth, server errors, etc.)
+                    console.warn(`Error checking questions for ${payee.generatedAccessCode}:`, linkCheckResponse.status, linkCheckResponse.statusText);
+                  }
                   return { ...payee, isLinkedToQuestions: isLinked };
-                } catch {
+                } catch (error) {
+                  console.warn(`Network error checking questions for ${payee.generatedAccessCode}:`, error);
                   return { ...payee, isLinkedToQuestions: false };
                 }
               }
