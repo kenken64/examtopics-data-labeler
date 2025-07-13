@@ -454,7 +454,7 @@ export default function Certificates() {
                           </div>
                           <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
-                              Created: {new Date(certificate.createdAt).toLocaleDateString()}
+                              Created: {new Date(certificate.createdAt).toISOString().split('T')[0]}
                             </p>
                             {certificate.pdfFileName && certificate.pdfFileUrl && (
                               <p className="text-sm text-muted-foreground">

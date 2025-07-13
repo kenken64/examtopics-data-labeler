@@ -27,7 +27,10 @@ const connectDB = async () => {
     }
     
     // Establish new connection using environment variable or fallback
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/aws-cert-web');
+    const baseUri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+    const dbName = process.env.MONGODB_DB_NAME || 'awscert';
+    const mongoUri = baseUri.endsWith('/') ? `${baseUri}${dbName}` : `${baseUri}/${dbName}`;
+    await mongoose.connect(mongoUri);
   } catch (error) {
     // Log connection errors for debugging and monitoring
     console.error('MongoDB connection error:', error);

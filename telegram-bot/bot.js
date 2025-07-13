@@ -93,6 +93,35 @@ class CertificationBot {
     return this.db;
   }
 
+  /**
+   * Retrieves AI explanation for a question, with fallback to regular explanation
+   * @param {string} questionId - The MongoDB ObjectId of the question
+   * @param {string} regularExplanation - The regular explanation as fallback
+   * @returns {Promise<string>} The explanation to show (AI if available, otherwise regular)
+   */
+  async getExplanationForQuestion(questionId, regularExplanation) {
+    try {
+      const db = await this.connectToDatabase();
+      
+      // Try to get the question with AI explanation
+      const question = await db.collection('quizzes').findOne(
+        { _id: new ObjectId(questionId) },
+        { projection: { aiExplanation: 1 } }
+      );
+      
+      // Return AI explanation if it exists, otherwise return regular explanation
+      if (question && question.aiExplanation) {
+        return `🤖 AI Second Opinion:\n${question.aiExplanation}`;
+      } else {
+        return regularExplanation || 'No explanation available.';
+      }
+    } catch (error) {
+      console.error('Error retrieving AI explanation:', error);
+      // Return regular explanation as fallback if there's an error
+      return regularExplanation || 'No explanation available.';
+    }
+  }
+
   initializeBot() {
     // Start command - greet user and show certificates
     this.bot.command('start', async (ctx) => {
@@ -775,8 +804,8 @@ class CertificationBot {
         // Save wrong answer to database
         await this.saveWrongAnswer(userId, session, currentQuestion, selectedAnswer);
         
-        // Show wrong answer with explanation
-        const explanation = currentQuestion.explanation || 'No explanation available.';
+        // Get explanation (AI if available, otherwise regular)
+        const explanation = await this.getExplanationForQuestion(currentQuestion._id, currentQuestion.explanation);
         
         const keyboard = new InlineKeyboard();
         
@@ -875,8 +904,8 @@ class CertificationBot {
       // Save wrong answer to database
       await this.saveWrongAnswer(userId, session, currentQuestion, userAnswer);
       
-      // Show wrong answer with explanation
-      const explanation = currentQuestion.explanation || 'No explanation available.';
+      // Get explanation (AI if available, otherwise regular)
+      const explanation = await this.getExplanationForQuestion(currentQuestion._id, currentQuestion.explanation);
       
       const keyboard = new InlineKeyboard();
       
