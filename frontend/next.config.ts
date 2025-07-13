@@ -32,8 +32,7 @@ const nextConfig: NextConfig = {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },
   
-  // Disable telemetry
-  telemetry: false,
+  
   
   // Configure domains for images (if using next/image)
   images: {
