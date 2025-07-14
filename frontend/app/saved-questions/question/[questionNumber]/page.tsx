@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { getQuestionOptions, getCorrectAnswer, getAllCorrectAnswers } from '../../../utils/questionTransform';
-import { isMultipleAnswerQuestion, validateMultipleAnswers, formatAnswerForDisplay, getAnswerInfo } from '../../../utils/multipleAnswerUtils';
+import { isMultipleAnswerQuestion, validateMultipleAnswers, formatAnswerForDisplay, getAnswerInfo, answerToArray } from '../../../utils/multipleAnswerUtils';
 import ReactMarkdown from 'react-markdown';
 
 interface Question {
@@ -47,6 +47,7 @@ const QuestionDetailPage = () => {
   // Editing states
   const [isEditing, setIsEditing] = useState(false);
   const [editingCorrectAnswer, setEditingCorrectAnswer] = useState<string>('');
+  const [editingMultipleAnswers, setEditingMultipleAnswers] = useState<string[]>([]);
   const [editingExplanation, setEditingExplanation] = useState<string>('');
   const [saving, setSaving] = useState(false);
   
@@ -61,7 +62,20 @@ const QuestionDetailPage = () => {
   // Initialize editing values when question loads
   useEffect(() => {
     if (question) {
-      setEditingCorrectAnswer(String(question.correctAnswer || ''));
+      const isMultiple = question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string);
+      
+      if (isMultiple && typeof question.correctAnswer === 'string') {
+        // Multiple answer question - convert letters to indices
+        const letters = answerToArray(question.correctAnswer);
+        const indices = letters.map(letter => String(letter.charCodeAt(0) - 65));
+        setEditingMultipleAnswers(indices);
+        setEditingCorrectAnswer(''); // Clear single answer field
+      } else {
+        // Single answer question
+        setEditingCorrectAnswer(String(question.correctAnswer || ''));
+        setEditingMultipleAnswers([]); // Clear multiple answers field
+      }
+      
       setEditingExplanation(question.explanation || '');
     }
   }, [question]);
@@ -195,8 +209,21 @@ const QuestionDetailPage = () => {
   const handleEditToggle = () => {
     if (isEditing) {
       // Cancel editing - reset values
-      setEditingCorrectAnswer(String(question?.correctAnswer || ''));
-      setEditingExplanation(question?.explanation || '');
+      if (question) {
+        const isMultiple = question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string);
+        
+        if (isMultiple && typeof question.correctAnswer === 'string') {
+          const letters = answerToArray(question.correctAnswer);
+          const indices = letters.map(letter => String(letter.charCodeAt(0) - 65));
+          setEditingMultipleAnswers(indices);
+          setEditingCorrectAnswer('');
+        } else {
+          setEditingCorrectAnswer(String(question.correctAnswer || ''));
+          setEditingMultipleAnswers([]);
+        }
+        
+        setEditingExplanation(question.explanation || '');
+      }
     }
     setIsEditing(!isEditing);
   };
@@ -207,6 +234,39 @@ const QuestionDetailPage = () => {
     try {
       setSaving(true);
       
+      // Determine the correct answer to save
+      let answerToSave: string | number;
+      const isMultiple = question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string);
+      
+      if (isMultiple) {
+        if (editingMultipleAnswers.length === 0) {
+          toast({
+            title: "Validation Error",
+            description: "Please select at least one correct answer for this multiple-answer question.",
+            variant: "destructive",
+          });
+          setSaving(false);
+          return;
+        }
+        // Convert indices back to letters
+        const letters = editingMultipleAnswers
+          .map(index => String.fromCharCode(65 + parseInt(index)))
+          .sort()
+          .join('');
+        answerToSave = letters;
+      } else {
+        if (!editingCorrectAnswer) {
+          toast({
+            title: "Validation Error",
+            description: "Please select a correct answer.",
+            variant: "destructive",
+          });
+          setSaving(false);
+          return;
+        }
+        answerToSave = editingCorrectAnswer;
+      }
+      
       const response = await fetch('/api/saved-questions', {
         method: 'PATCH',
         headers: {
@@ -214,7 +274,7 @@ const QuestionDetailPage = () => {
         },
         body: JSON.stringify({
           questionId: question._id,
-          correctAnswer: editingCorrectAnswer,
+          correctAnswer: answerToSave,
           explanation: editingExplanation.trim(),
         }),
       });
@@ -227,7 +287,7 @@ const QuestionDetailPage = () => {
       // Update local question state
       setQuestion(prev => prev ? {
         ...prev,
-        correctAnswer: editingCorrectAnswer,
+        correctAnswer: answerToSave,
         explanation: editingExplanation.trim()
       } : null);
 
@@ -262,7 +322,7 @@ const QuestionDetailPage = () => {
     return correctIndices.includes(optionIndex);
   };
 
-  const isSelectedAnswer = (option: string, index: number) => {
+  const isSelectedAnswer = (_option: string, index: number) => {
     const optionLabel = getOptionLabel(index);
     return selectedAnswers.includes(optionLabel);
   };
@@ -320,6 +380,33 @@ const QuestionDetailPage = () => {
       value: String(index),
       label: `${getOptionLabel(index)}: ${option.substring(0, 50)}${option.length > 50 ? '...' : ''}`
     }));
+  };
+
+  const handleMultipleAnswerToggle = (optionIndex: string) => {
+    setEditingMultipleAnswers(prev => {
+      if (prev.includes(optionIndex)) {
+        return prev.filter(index => index !== optionIndex);
+      } else {
+        return [...prev, optionIndex].sort();
+      }
+    });
+  };
+
+  const getCorrectAnswerDisplayText = () => {
+    if (!question) return '';
+    
+    const isMultiple = question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string);
+    
+    if (isMultiple && typeof question.correctAnswer === 'string') {
+      // Multiple answer - show letters
+      return formatAnswerForDisplay(question.correctAnswer);
+    } else {
+      // Single answer - show option text
+      const options = getQuestionOptions(question);
+      const index = parseInt(String(question.correctAnswer));
+      const option = options[index];
+      return option ? `${getOptionLabel(index)}: ${option.substring(0, 100)}${option.length > 100 ? '...' : ''}` : '';
+    }
   };
 
   if (loading) {
@@ -560,32 +647,63 @@ const QuestionDetailPage = () => {
             {/* Correct Answer Editor */}
             <div>
               <label className="text-sm font-medium text-gray-700 mb-2 block">
-                Correct Answer
+                Correct Answer{question && (question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string)) ? 's' : ''}
+                {question && (question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string)) && (
+                  <Badge variant="secondary" className="ml-2 text-xs">
+                    Multiple Answers
+                  </Badge>
+                )}
               </label>
               {isEditing ? (
-                <Select 
-                  value={editingCorrectAnswer} 
-                  onValueChange={setEditingCorrectAnswer}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select correct answer" />
-                  </SelectTrigger>
-                  <SelectContent>
+                question && (question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string)) ? (
+                  /* Multiple Answer Selection */
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600 mb-3">Select all correct answers:</p>
                     {getAnswerOptions().map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
+                      <div key={option.value} className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          id={`answer-${option.value}`}
+                          checked={editingMultipleAnswers.includes(option.value)}
+                          onChange={() => handleMultipleAnswerToggle(option.value)}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label 
+                          htmlFor={`answer-${option.value}`}
+                          className="text-sm text-gray-700 cursor-pointer flex-1"
+                        >
+                          {option.label}
+                        </label>
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
+                    {editingMultipleAnswers.length > 0 && (
+                      <div className="mt-2 p-2 bg-blue-50 rounded border text-sm text-blue-800">
+                        Selected: {editingMultipleAnswers.map(index => getOptionLabel(parseInt(index))).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Single Answer Selection */
+                  <Select 
+                    value={editingCorrectAnswer} 
+                    onValueChange={setEditingCorrectAnswer}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select correct answer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getAnswerOptions().map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )
               ) : (
                 <div className="p-3 bg-gray-50 rounded-md border">
                   <span className="font-medium">
-                    {getOptionLabel(parseInt(String(question.correctAnswer)))}: 
-                  </span>
-                  <span className="ml-2">
-                    {getQuestionOptions(question)[parseInt(String(question.correctAnswer))]?.substring(0, 100)}
-                    {(getQuestionOptions(question)[parseInt(String(question.correctAnswer))]?.length || 0) > 100 ? '...' : ''}
+                    {getCorrectAnswerDisplayText()}
                   </span>
                 </div>
               )}

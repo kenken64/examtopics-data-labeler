@@ -28,6 +28,7 @@ import QuizAttemptsChart from "@/components/charts/QuizAttemptsChart";
 import AccessCodeStatusChart from "@/components/charts/AccessCodeStatusChart";
 import UserEngagementChart from "@/components/charts/UserEngagementChart";
 import PayeeStatusChart from "@/components/charts/PayeeStatusChart";
+import PdfAttachmentChart from "@/components/charts/PdfAttachmentChart";
 
 interface DashboardData {
   certificates: Array<{
@@ -72,6 +73,16 @@ interface DashboardData {
   payees: Array<{
     paymentStatus: string;
     count: number;
+  }>;
+  pdfAttachments: Array<{
+    _id: boolean;
+    count: number;
+    certificates: Array<{
+      _id: string;
+      name: string;
+      code: string;
+      pdfFileName: string;
+    }>;
   }>;
   lastUpdated: string;
 }
@@ -327,6 +338,22 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             )}
+
+            {/* PDF Attachment Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <FileText className="mr-2 h-5 w-5" />
+                  PDF Attachments
+                </CardTitle>
+                <CardDescription>
+                  Certificate PDF attachment distribution
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PdfAttachmentChart data={data.pdfAttachments || []} />
+              </CardContent>
+            </Card>
           </div>
         </div>
 
