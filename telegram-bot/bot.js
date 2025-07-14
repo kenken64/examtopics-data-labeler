@@ -1864,8 +1864,12 @@ ${explanation}
 
       // Check if quiz room exists and is active
       try {
-        const db = await this.connectToMongoDB();
-        const quizRoom = await db.collection('quizRooms').findOne({
+        if (!this.db) {
+          await ctx.reply('❌ Database connection not available. Please try again later.');
+          return;
+        }
+        
+        const quizRoom = await this.db.collection('quizRooms').findOne({
           quizCode: cleanCode,
           status: { $in: ['waiting', 'active'] }
         });
@@ -1981,10 +1985,12 @@ ${explanation}
   // Join quiz room helper
   async joinQuizRoom(quizCode, player) {
     try {
-      const db = await this.connectToMongoDB();
+      if (!this.db) {
+        throw new Error('Database connection not available');
+      }
       
       // Check if room exists and is accepting players
-      const quizRoom = await db.collection('quizRooms').findOne({
+      const quizRoom = await this.db.collection('quizRooms').findOne({
         quizCode: quizCode.toUpperCase(),
         status: 'waiting'
       });
@@ -2009,7 +2015,7 @@ ${explanation}
       }
 
       // Add player to room
-      const updateResult = await db.collection('quizRooms').updateOne(
+      const updateResult = await this.db.collection('quizRooms').updateOne(
         { quizCode: quizCode.toUpperCase() },
         { 
           $push: { 
@@ -2020,7 +2026,7 @@ ${explanation}
 
       if (updateResult.modifiedCount > 0) {
         // Get updated player count
-        const updatedRoom = await db.collection('quizRooms').findOne({
+        const updatedRoom = await this.db.collection('quizRooms').findOne({
           quizCode: quizCode.toUpperCase()
         });
 
@@ -2049,9 +2055,12 @@ ${explanation}
     try {
       // This would typically use WebSocket or server-sent events
       // For now, we'll store the notification in the database
-      const db = await this.connectToMongoDB();
+      if (!this.db) {
+        console.error('Database connection not available for quiz notifications');
+        return;
+      }
       
-      await db.collection('quizNotifications').insertOne({
+      await this.db.collection('quizNotifications').insertOne({
         type: 'player_joined',
         quizCode: quizCode.toUpperCase(),
         player,
@@ -2193,10 +2202,13 @@ ${explanation}
   // Process quiz notifications from frontend
   async processQuizNotifications() {
     try {
-      const db = await this.connectToMongoDB();
+      if (!this.db) {
+        console.error('Database connection not available for processing notifications');
+        return;
+      }
       
       // Get unprocessed notifications
-      const notifications = await db.collection('telegramNotifications')
+      const notifications = await this.db.collection('telegramNotifications')
         .find({ 
           type: 'quiz_notification',
           processed: false
@@ -2208,7 +2220,7 @@ ${explanation}
         await this.handleQuizNotification(notification);
         
         // Mark as processed
-        await db.collection('telegramNotifications').updateOne(
+        await this.db.collection('telegramNotifications').updateOne(
           { _id: notification._id },
           { $set: { processed: true, processedAt: new Date() } }
         );

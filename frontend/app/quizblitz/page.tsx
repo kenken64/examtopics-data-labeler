@@ -1,19 +1,43 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Zap, Timer, Users, ArrowRight } from 'lucide-react';
+import { Zap, Timer, Users, ArrowRight, QrCode } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import QRCode from 'qrcode';
 
 export default function QuizBlitzPage() {
   const [accessCode, setAccessCode] = useState('');
   const [timerDuration, setTimerDuration] = useState(30);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
   const router = useRouter();
+
+  useEffect(() => {
+    // Generate QR code for Telegram bot
+    generateQRCode();
+  }, []);
+
+  const generateQRCode = async () => {
+    try {
+      const telegramBotUrl = 'https://t.me/CertDevBot';
+      const qrDataURL = await QRCode.toDataURL(telegramBotUrl, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#7C3AED', // Purple color
+          light: '#FFFFFF'
+        }
+      });
+      setQrCodeUrl(qrDataURL);
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+    }
+  };
 
   const handleContinue = async () => {
     if (!accessCode.trim()) {
@@ -29,12 +53,13 @@ export default function QuizBlitzPage() {
     setIsVerifying(true);
 
     try {
-      // Verify access code
+      // Verify access code with authentication
       const response = await fetch(`/api/access-codes/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Include cookies for authentication
         body: JSON.stringify({ accessCode }),
       });
 
@@ -56,7 +81,7 @@ export default function QuizBlitzPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
@@ -72,21 +97,81 @@ export default function QuizBlitzPage() {
           </p>
         </div>
 
-        {/* Main Setup Card */}
-        <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-          <CardHeader className="text-center pb-6">
-            <CardTitle className="text-2xl font-semibold">Host a Quiz Session</CardTitle>
-            <CardDescription className="text-base">
-              Enter your access code and configure the quiz settings
-            </CardDescription>
-          </CardHeader>
+        <div className="grid lg:grid-cols-2 gap-8 items-start">
+          {/* Left Side - QR Code and Telegram Bot Info */}
+          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+            <CardHeader className="text-center">
+              <CardTitle className="flex items-center justify-center gap-2 text-xl">
+                <QrCode className="h-6 w-6" />
+                Join via Telegram Bot
+              </CardTitle>
+              <CardDescription>
+                Scan to access our Telegram bot for joining quizzes
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center space-y-4">
+              {/* QR Code */}
+              <div className="flex justify-center">
+                {qrCodeUrl ? (
+                  <img 
+                    src={qrCodeUrl} 
+                    alt="Telegram Bot QR Code" 
+                    className="rounded-lg shadow-md"
+                  />
+                ) : (
+                  <div className="w-48 h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <div className="text-center text-gray-500">
+                      <QrCode className="h-12 w-12 mx-auto mb-2" />
+                      <p>Generating QR Code...</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Telegram Bot Link */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <p className="text-sm font-medium text-blue-800 mb-2">
+                  Telegram Bot Link:
+                </p>
+                <a 
+                  href="https://t.me/CertDevBot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 font-mono text-sm break-all"
+                >
+                  t.me/CertDevBot
+                </a>
+              </div>
+
+              {/* Instructions */}
+              <div className="text-left space-y-2 text-sm text-muted-foreground">
+                <p className="font-medium text-gray-700">How to join via Telegram:</p>
+                <ol className="list-decimal list-inside space-y-1 pl-2">
+                  <li>Scan QR code or click the link above</li>
+                  <li>Start a chat with @CertDevBot</li>
+                  <li>Type <code className="bg-gray-200 px-1 rounded">/quizblitz</code></li>
+                  <li>Enter the 6-digit quiz code when prompted</li>
+                  <li>Join the live quiz session!</li>
+                </ol>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Right Side - Quiz Setup Form */}
+          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+            <CardHeader className="text-center pb-6">
+              <CardTitle className="text-2xl font-semibold">Host a Quiz Session</CardTitle>
+              <CardDescription className="text-base">
+                Enter your access code and configure the quiz settings
+              </CardDescription>
+            </CardHeader>
 
           <CardContent className="space-y-6">
-            {/* Access Code Input */}
+            {/* Generated Access Code Input */}
             <div className="space-y-2">
               <Label htmlFor="accessCode" className="text-sm font-medium flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                Access Code
+                Generated Access Code
               </Label>
               <Input
                 id="accessCode"
@@ -167,6 +252,7 @@ export default function QuizBlitzPage() {
             </Button>
           </CardFooter>
         </Card>
+        </div>
 
         {/* Feature Cards */}
         <div className="grid md:grid-cols-3 gap-4 mt-8">

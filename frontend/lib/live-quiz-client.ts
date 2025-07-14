@@ -231,7 +231,7 @@ export function useLiveQuiz(serverUrl?: string) {
     clientRef.current = client;
 
     // Set up event listeners
-    client.on('room-joined', (data) => {
+    client.on('room-joined', (data: any) => {
       setCurrentRoom(data.room);
       setError(null);
     });
@@ -240,12 +240,12 @@ export function useLiveQuiz(serverUrl?: string) {
       setCurrentRoom(room);
     });
 
-    client.on('room-created', (data) => {
+    client.on('room-created', (data: any) => {
       setCurrentRoom(data.room);
       setError(null);
     });
 
-    client.on('quiz-started', (data) => {
+    client.on('quiz-started', (data: any) => {
       setCurrentRoom(data.room);
       setFinalResults(null);
     });
@@ -278,25 +278,25 @@ export function useLiveQuiz(serverUrl?: string) {
       }
     });
 
-    client.on('quiz-ended', (results) => {
+    client.on('quiz-ended', (results: any) => {
       setFinalResults(results);
       setCurrentQuestion(null);
       setCurrentRoom(prev => prev ? { ...prev, status: 'finished' } : null);
     });
 
-    client.on('error', (error) => {
+    client.on('error', (error: any) => {
       setError(error.message);
     });
 
-    client.on('join-error', (error) => {
+    client.on('join-error', (error: any) => {
       setError(error.message);
     });
 
-    client.on('creation-error', (error) => {
+    client.on('creation-error', (error: any) => {
       setError(error.message);
     });
 
-    client.on('answer-error', (error) => {
+    client.on('answer-error', (error: any) => {
       setError(error.message);
     });
 

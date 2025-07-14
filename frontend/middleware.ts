@@ -66,6 +66,7 @@ const PUBLIC_ROUTES = [
   '/api/auth/logout',
   '/api/auth/verify',
   '/api/debug-auth',
+  '/api/health',
 ];
 
 // Define static file extensions that should be allowed
@@ -128,9 +129,21 @@ function isApiRoute(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // Get token once for both debug and auth logic
-  const token = request.cookies.get('token')?.value;
-  console.log(`🔍 Middleware: ${pathname} | Token present: ${!!token} | Cookies:`, request.cookies.getAll().map(c => c.name));
+  // Get token from cookies first, then Authorization header
+  let token = request.cookies.get('token')?.value;
+  
+  // If no token in cookies, try Authorization header
+  if (!token) {
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+  
+  console.log(`🔍 Middleware: ${pathname} | Token present: ${!!token} | Source: ${
+    request.cookies.get('token')?.value ? 'Cookie' : 
+    request.headers.get('Authorization') ? 'Authorization Header' : 'None'
+  }`);
   
   if (token) {
     console.log('🔍 Token preview:', token.substring(0, 50) + '...');

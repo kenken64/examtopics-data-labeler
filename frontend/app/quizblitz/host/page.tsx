@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Play, Timer, Hash, QrCode, Copy, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
+import QRCode from 'qrcode';
 
 interface Player {
   id: string;
@@ -22,6 +23,7 @@ export default function QuizHostPage() {
   const [connectedPlayers, setConnectedPlayers] = useState<Player[]>([]);
   const [isStarting, setIsStarting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
   const socketRef = useRef<Socket | null>(null);
 
   const accessCode = searchParams.get('accessCode');
@@ -37,6 +39,9 @@ export default function QuizHostPage() {
     // Generate 6-digit quiz code
     const code = Math.random().toString().slice(2, 8);
     setQuizCode(code);
+
+    // Generate QR code for the quiz URL
+    generateQRCode(code);
 
     // Initialize quiz room
     initializeQuizRoom(code);
@@ -105,6 +110,29 @@ export default function QuizHostPage() {
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       toast.error('Failed to copy quiz code');
+    }
+  };
+
+  const generateQRCode = async (code: string) => {
+    try {
+      // Create Telegram bot URL with the quiz code
+      const telegramBotUrl = `https://t.me/CertDevBot?start=quiz_${code}`;
+      
+      // Generate QR code with purple color scheme
+      const qrDataUrl = await QRCode.toDataURL(telegramBotUrl, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: '#7C3AED', // Purple color
+          light: '#FFFFFF'
+        },
+        errorCorrectionLevel: 'M'
+      });
+      
+      setQrCodeUrl(qrDataUrl);
+    } catch (error) {
+      console.error('Failed to generate QR code:', error);
+      toast.error('Failed to generate QR code');
     }
   };
 
@@ -198,13 +226,24 @@ export default function QuizHostPage() {
                 )}
               </Button>
 
-              {/* QR Code Placeholder */}
-              <div className="bg-gray-100 rounded-lg p-8 flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <QrCode className="h-16 w-16 mx-auto mb-2" />
-                  <p className="text-sm">QR Code</p>
-                  <p className="text-xs">Coming Soon</p>
-                </div>
+              {/* QR Code */}
+              <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-center">
+                {qrCodeUrl ? (
+                  <div className="text-center">
+                    <img 
+                      src={qrCodeUrl} 
+                      alt="Quiz QR Code" 
+                      className="mx-auto mb-2 rounded-lg"
+                      style={{ maxWidth: '200px', height: 'auto' }}
+                    />
+                    <p className="text-sm text-gray-600">Scan to join via Telegram bot</p>
+                  </div>
+                ) : (
+                  <div className="text-center text-gray-500">
+                    <QrCode className="h-16 w-16 mx-auto mb-2" />
+                    <p className="text-sm">Generating QR Code...</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

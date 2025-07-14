@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { authenticateRequest } from '@/lib/auth-helpers';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🚀 Quiz start endpoint called');
+    
+    // Check authentication first
+    const { user, error } = await authenticateRequest(request);
+    
+    if (error || !user) {
+      console.log('❌ Authentication failed:', error);
+      return NextResponse.json(
+        { error: 'Authentication required to start quiz.' },
+        { status: 401 }
+      );
+    }
+    
+    console.log('✅ User authenticated:', user.email);
+    
     const { quizCode, accessCode, timerDuration, players } = await request.json();
 
     if (!quizCode || !accessCode || !timerDuration) {
@@ -122,14 +138,5 @@ async function notifyTelegramBot(quizCode: string, data: any) {
   } catch (error) {
     console.error('Error storing Telegram notification:', error);
     throw error;
-  }
-}
-
-  } catch (error) {
-    console.error('Quiz start error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
   }
 }
