@@ -68,19 +68,33 @@ export default function QuizHostPage() {
         throw new Error('Failed to create quiz room');
       }
 
-      // For now, simulate player joins without WebSocket
-      // In production, you would set up WebSocket connection here
-      setTimeout(() => {
-        setConnectedPlayers([
-          { id: '1', name: 'Demo Player 1', joinedAt: new Date() },
-          { id: '2', name: 'Demo Player 2', joinedAt: new Date() }
-        ]);
-      }, 3000);
+      // Start polling for player updates
+      startPlayerPolling(code);
 
     } catch (error) {
       console.error('Failed to initialize quiz room:', error);
       toast.error('Failed to create quiz room');
     }
+  };
+
+  const startPlayerPolling = (code: string) => {
+    const pollForPlayers = async () => {
+      try {
+        const response = await fetch(`/api/quizblitz/room/${code}`);
+        if (response.ok) {
+          const data = await response.json();
+          setConnectedPlayers(data.players || []);
+        }
+      } catch (error) {
+        console.error('Error polling for players:', error);
+      }
+    };
+
+    // Poll every 2 seconds
+    const interval = setInterval(pollForPlayers, 2000);
+    
+    // Cleanup on unmount
+    return () => clearInterval(interval);
   };
 
   const copyQuizCode = async () => {

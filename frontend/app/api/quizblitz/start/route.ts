@@ -74,12 +74,56 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection('quizSessions').insertOne(quizSession);
 
+    // Notify Telegram bot about quiz start
+    try {
+      await notifyTelegramBot(quizCode.toUpperCase(), {
+        type: 'quiz_started',
+        question: questions[0],
+        questionIndex: 0,
+        timerDuration,
+        players: players || []
+      });
+    } catch (error) {
+      console.error('Error notifying Telegram bot:', error);
+      // Don't fail the quiz start if Telegram notification fails
+    }
+
     return NextResponse.json({
       success: true,
       sessionId: result.insertedId,
       questionCount: questions.length,
       firstQuestion: questions[0]
     });
+
+  } catch (error) {
+    console.error('Quiz start error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// Helper function to notify Telegram bot
+async function notifyTelegramBot(quizCode: string, data: any) {
+  try {
+    // Store notification in database for Telegram bot to pick up
+    const db = await connectToDatabase();
+    
+    await db.collection('telegramNotifications').insertOne({
+      type: 'quiz_notification',
+      quizCode,
+      data,
+      timestamp: new Date(),
+      processed: false
+    });
+
+    console.log(`Telegram notification stored for quiz ${quizCode}`);
+  } catch (error) {
+    console.error('Error storing Telegram notification:', error);
+    throw error;
+  }
+}
 
   } catch (error) {
     console.error('Quiz start error:', error);

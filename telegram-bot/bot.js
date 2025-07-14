@@ -120,6 +120,10 @@ class CertificationBot {
       
       clearTimeout(timeout);
       this.isReady = true;
+      
+      // Start polling for quiz notifications
+      this.startNotificationPolling();
+      
       console.log('Bot initialization completed successfully');
     } catch (error) {
       console.error('Bot initialization failed:', error);
@@ -241,6 +245,11 @@ class CertificationBot {
       await this.handleCommandMenu(ctx);
     });
 
+    // QuizBlitz command - join live multiplayer quiz
+    this.bot.command('quizblitz', async (ctx) => {
+      await this.handleQuizBlitz(ctx);
+    });
+
     // Handle certificate selection
     this.bot.callbackQuery(/^cert_(.+)$/, async (ctx) => {
       const certificateId = ctx.match[1];
@@ -254,6 +263,10 @@ class CertificationBot {
       
       if (session && session.waitingForAccessCode) {
         await this.handleAccessCodeSubmission(ctx, ctx.message.text);
+      } else if (session && session.waitingForQuizCode) {
+        await this.handleQuizCodeSubmission(ctx, ctx.message.text);
+      } else if (session && session.waitingForPlayerName) {
+        await this.handlePlayerNameSubmission(ctx, ctx.message.text);
       }
     });
 
@@ -292,6 +305,13 @@ class CertificationBot {
     // Handle quick action menu
     this.bot.callbackQuery('quick_menu', async (ctx) => {
       await this.handleQuickMenu(ctx);
+    });
+
+    // Handle QuizBlitz answer selection
+    this.bot.callbackQuery(/^quiz_answer_([A-F])_(.+)$/, async (ctx) => {
+      const selectedAnswer = ctx.match[1];
+      const quizCode = ctx.match[2];
+      await this.handleQuizBlitzAnswer(ctx, selectedAnswer, quizCode);
     });
   }
 
@@ -398,6 +418,12 @@ class CertificationBot {
       `   • Shows wrong answers organized by certificate\n` +
       `   • Perfect for focused study on weak areas\n` +
       `   • Usage: Simply type /revision\n\n` +
+      
+      `🎮 <b>/quizblitz</b>\n` +
+      `   • Join live multiplayer quiz sessions\n` +
+      `   • Enter 6-digit quiz code from host's screen\n` +
+      `   • Compete with other players in real-time\n` +
+      `   • Usage: Simply type /quizblitz\n\n` +
       
       `🎯 <b>Quiz Features:</b>\n\n` +
       
@@ -1586,6 +1612,7 @@ ${explanation}
       `Choose a command to execute:\n\n` +
       `📋 <b>Quiz Commands</b>\n` +
       `🚀 Start New Quiz - Begin a fresh quiz session\n` +
+      `🎮 QuizBlitz - Join live multiplayer quiz\n` +
       `📚 Show Help Guide - Detailed instructions and tips\n\n` +
       `🔖 <b>Bookmark Commands</b>\n` +
       `💾 Add Bookmark - Save a specific question by number\n` +
@@ -1595,10 +1622,11 @@ ${explanation}
       `⚡ <b>Quick Actions</b>\n` +
       `🎯 Quick Menu - Fast access to common actions\n\n` +
       `💡 <i>Tip: You can also type these commands directly:</i>\n` +
-      `<code>/start</code> • <code>/help</code> • <code>/bookmarks</code> • <code>/revision</code>`;
+      `<code>/start</code> • <code>/help</code> • <code>/quizblitz</code> • <code>/bookmarks</code> • <code>/revision</code>`;
 
     const keyboard = new InlineKeyboard()
-      .text('🚀 Start Quiz', 'menu_start').text('📚 Help Guide', 'menu_help').row()
+      .text('🚀 Start Quiz', 'menu_start').text('🎮 QuizBlitz', 'menu_quizblitz').row()
+      .text('📚 Help Guide', 'menu_help').row()
       .text('💾 Add Bookmark', 'menu_bookmark').text('📑 View Bookmarks', 'menu_bookmarks').row()
       .text('🔄 Revision Mode', 'menu_revision').row()
       .text('⚡ Quick Menu', 'quick_menu').row()
@@ -1624,6 +1652,13 @@ ${explanation}
           await this.safeEditMessage(ctx, '📚 Loading help guide...');
           setTimeout(async () => {
             await this.handleHelp(ctx);
+          }, 1000);
+          break;
+
+        case 'quizblitz':
+          await this.safeEditMessage(ctx, '🎮 Launching QuizBlitz...');
+          setTimeout(async () => {
+            await this.handleQuizBlitz(ctx);
           }, 1000);
           break;
 
@@ -1781,6 +1816,492 @@ ${explanation}
       } else {
         console.error('Error in safeEditMessage:', error);
       }
+    }
+  }
+
+  // QuizBlitz command handler
+  async handleQuizBlitz(ctx) {
+    try {
+      const userId = ctx.from.id;
+      
+      // Reset any existing session
+      this.userSessions.set(userId, {
+        waitingForQuizCode: true,
+        quizBlitzFlow: true
+      });
+
+      await ctx.reply(
+        '🎮 *QuizBlitz - Live Multiplayer Quiz*\n\n' +
+        '⚡ Join a live quiz session!\n\n' +
+        'Please enter the *6-digit quiz code* shown on the host\'s screen:',
+        { parse_mode: 'Markdown' }
+      );
+    } catch (error) {
+      console.error('Error in handleQuizBlitz:', error);
+      await ctx.reply('❌ Sorry, there was an error. Please try again.');
+    }
+  }
+
+  // Handle quiz code submission
+  async handleQuizCodeSubmission(ctx, quizCode) {
+    try {
+      const userId = ctx.from.id;
+      const session = this.userSessions.get(userId);
+
+      if (!session || !session.waitingForQuizCode) {
+        return;
+      }
+
+      // Validate quiz code format (6 digits/letters)
+      const cleanCode = quizCode.trim().toUpperCase();
+      if (!/^[A-Z0-9]{6}$/.test(cleanCode)) {
+        await ctx.reply(
+          '❌ Invalid quiz code format!\n\n' +
+          'Please enter a valid 6-digit quiz code (letters and numbers only):'
+        );
+        return;
+      }
+
+      // Check if quiz room exists and is active
+      try {
+        const db = await this.connectToMongoDB();
+        const quizRoom = await db.collection('quizRooms').findOne({
+          quizCode: cleanCode,
+          status: { $in: ['waiting', 'active'] }
+        });
+
+        if (!quizRoom) {
+          await ctx.reply(
+            '❌ Quiz room not found or no longer active!\n\n' +
+            'Please check the quiz code and try again:'
+          );
+          return;
+        }
+
+        // Update session with quiz code
+        session.quizCode = cleanCode;
+        session.waitingForQuizCode = false;
+        session.waitingForPlayerName = true;
+        this.userSessions.set(userId, session);
+
+        await ctx.reply(
+          '✅ Quiz room found!\n\n' +
+          `🎯 *Quiz Code:* ${cleanCode}\n` +
+          `📊 *Status:* ${quizRoom.status === 'waiting' ? 'Waiting for players' : 'In progress'}\n\n` +
+          '👤 Please enter your *player name* for the quiz:',
+          { parse_mode: 'Markdown' }
+        );
+
+      } catch (error) {
+        console.error('Error validating quiz code:', error);
+        await ctx.reply(
+          '❌ Error checking quiz room. Please try again:\n\n' +
+          'Enter the 6-digit quiz code:'
+        );
+      }
+    } catch (error) {
+      console.error('Error in handleQuizCodeSubmission:', error);
+      await ctx.reply('❌ Sorry, there was an error. Please try again.');
+    }
+  }
+
+  // Handle player name submission
+  async handlePlayerNameSubmission(ctx, playerName) {
+    try {
+      const userId = ctx.from.id;
+      const session = this.userSessions.get(userId);
+
+      if (!session || !session.waitingForPlayerName || !session.quizCode) {
+        return;
+      }
+
+      // Validate player name
+      const cleanName = playerName.trim();
+      if (!cleanName || cleanName.length < 2 || cleanName.length > 20) {
+        await ctx.reply(
+          '❌ Invalid player name!\n\n' +
+          'Please enter a name between 2-20 characters:'
+        );
+        return;
+      }
+
+      try {
+        // Join the quiz room
+        const joinResult = await this.joinQuizRoom(session.quizCode, {
+          id: userId.toString(),
+          name: cleanName,
+          telegramId: userId,
+          joinedAt: new Date()
+        });
+
+        if (joinResult.success) {
+          // Update session
+          session.waitingForPlayerName = false;
+          session.playerName = cleanName;
+          session.quizJoined = true;
+          this.userSessions.set(userId, session);
+
+          await ctx.reply(
+            '🎉 *Successfully joined the quiz!*\n\n' +
+            `👤 *Player Name:* ${cleanName}\n` +
+            `🎯 *Quiz Code:* ${session.quizCode}\n` +
+            `👥 *Players in room:* ${joinResult.playerCount}\n\n` +
+            '⏳ *Waiting for the host to start the quiz...*\n\n' +
+            'You\'ll receive questions here when the quiz begins!',
+            { parse_mode: 'Markdown' }
+          );
+
+          // Notify frontend about new player
+          await this.notifyFrontendPlayerJoined(session.quizCode, {
+            id: userId.toString(),
+            name: cleanName,
+            telegramId: userId
+          });
+
+        } else {
+          await ctx.reply(
+            `❌ ${joinResult.error}\n\n` +
+            'Please try a different name:'
+          );
+        }
+
+      } catch (error) {
+        console.error('Error joining quiz room:', error);
+        await ctx.reply(
+          '❌ Error joining quiz room. The quiz may have started or is full.\n\n' +
+          'Please try again or use /quizblitz to join a different quiz.'
+        );
+      }
+    } catch (error) {
+      console.error('Error in handlePlayerNameSubmission:', error);
+      await ctx.reply('❌ Sorry, there was an error. Please try again.');
+    }
+  }
+
+  // Join quiz room helper
+  async joinQuizRoom(quizCode, player) {
+    try {
+      const db = await this.connectToMongoDB();
+      
+      // Check if room exists and is accepting players
+      const quizRoom = await db.collection('quizRooms').findOne({
+        quizCode: quizCode.toUpperCase(),
+        status: 'waiting'
+      });
+
+      if (!quizRoom) {
+        return { 
+          success: false, 
+          error: 'Quiz room not found or already started' 
+        };
+      }
+
+      // Check if player name is already taken
+      const existingPlayer = quizRoom.players?.find(p => 
+        p.name.toLowerCase() === player.name.toLowerCase()
+      );
+
+      if (existingPlayer) {
+        return { 
+          success: false, 
+          error: 'Player name already taken in this quiz' 
+        };
+      }
+
+      // Add player to room
+      const updateResult = await db.collection('quizRooms').updateOne(
+        { quizCode: quizCode.toUpperCase() },
+        { 
+          $push: { 
+            players: player
+          }
+        }
+      );
+
+      if (updateResult.modifiedCount > 0) {
+        // Get updated player count
+        const updatedRoom = await db.collection('quizRooms').findOne({
+          quizCode: quizCode.toUpperCase()
+        });
+
+        return { 
+          success: true, 
+          playerCount: updatedRoom.players?.length || 1 
+        };
+      } else {
+        return { 
+          success: false, 
+          error: 'Failed to join quiz room' 
+        };
+      }
+
+    } catch (error) {
+      console.error('Error in joinQuizRoom:', error);
+      return { 
+        success: false, 
+        error: 'Database error while joining quiz' 
+      };
+    }
+  }
+
+  // Notify frontend about player joining
+  async notifyFrontendPlayerJoined(quizCode, player) {
+    try {
+      // This would typically use WebSocket or server-sent events
+      // For now, we'll store the notification in the database
+      const db = await this.connectToMongoDB();
+      
+      await db.collection('quizNotifications').insertOne({
+        type: 'player_joined',
+        quizCode: quizCode.toUpperCase(),
+        player,
+        timestamp: new Date()
+      });
+
+      console.log(`Player ${player.name} joined quiz ${quizCode}`);
+    } catch (error) {
+      console.error('Error notifying frontend:', error);
+    }
+  }
+
+  // Handle QuizBlitz answer selection
+  async handleQuizBlitzAnswer(ctx, selectedAnswer, quizCode) {
+    try {
+      const userId = ctx.from.id;
+      const session = this.userSessions.get(userId);
+
+      if (!session || !session.quizJoined || session.quizCode !== quizCode) {
+        await ctx.reply('❌ You are not part of this quiz session.');
+        return;
+      }
+
+      // Submit answer to quiz system
+      try {
+        const submitResult = await this.submitQuizAnswer(
+          quizCode, 
+          userId.toString(), 
+          selectedAnswer
+        );
+
+        if (submitResult.success) {
+          await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+          
+          const resultText = submitResult.isCorrect
+            ? `✅ *Correct!* +${submitResult.points} points`
+            : `❌ *Incorrect.* Correct answer: ${submitResult.correctAnswer}`;
+
+          await ctx.reply(
+            `${resultText}\n\n` +
+            `📊 *Your Score:* ${submitResult.totalScore} points\n` +
+            `⏳ *Waiting for next question...*`,
+            { parse_mode: 'Markdown' }
+          );
+        } else {
+          await ctx.reply('❌ Error submitting answer. Please try again.');
+        }
+
+      } catch (error) {
+        console.error('Error submitting quiz answer:', error);
+        await ctx.reply('❌ Error submitting answer.');
+      }
+
+    } catch (error) {
+      console.error('Error in handleQuizBlitzAnswer:', error);
+      await ctx.reply('❌ Sorry, there was an error processing your answer.');
+    }
+  }
+
+  // Submit quiz answer helper
+  async submitQuizAnswer(quizCode, playerId, answer) {
+    try {
+      // This would call your frontend API endpoint
+      const response = await fetch(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/quizblitz/submit-answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quizCode: quizCode.toUpperCase(),
+          playerId,
+          answer,
+          timestamp: Date.now()
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        return {
+          success: true,
+          isCorrect: result.isCorrect,
+          points: result.score,
+          correctAnswer: result.correctAnswer,
+          totalScore: result.newScore || 0
+        };
+      } else {
+        return { success: false };
+      }
+
+    } catch (error) {
+      console.error('Error submitting answer to frontend:', error);
+      return { success: false };
+    }
+  }
+
+  // Send quiz question to player
+  async sendQuizQuestion(telegramId, questionData, quizCode) {
+    try {
+      const session = this.userSessions.get(telegramId);
+      if (!session || !session.quizJoined) {
+        return;
+      }
+
+      const keyboard = new InlineKeyboard();
+      
+      // Add answer options
+      Object.entries(questionData.options).forEach(([key, value]) => {
+        keyboard.text(`${key}. ${value}`, `quiz_answer_${key}_${quizCode}`).row();
+      });
+
+      const questionText = 
+        `🎯 *Question ${questionData.index + 1}*\n\n` +
+        `${questionData.question}\n\n` +
+        `⏱️ *Time remaining: ${questionData.timeLimit} seconds*\n` +
+        `🏆 *Points: ${questionData.points}*`;
+
+      await this.bot.api.sendMessage(telegramId, questionText, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+
+    } catch (error) {
+      console.error('Error sending quiz question:', error);
+    }
+  }
+
+  // Start polling for notifications from frontend
+  startNotificationPolling() {
+    // Poll every 3 seconds for new notifications
+    setInterval(async () => {
+      try {
+        await this.processQuizNotifications();
+      } catch (error) {
+        console.error('Error in notification polling:', error);
+      }
+    }, 3000);
+  }
+
+  // Process quiz notifications from frontend
+  async processQuizNotifications() {
+    try {
+      const db = await this.connectToMongoDB();
+      
+      // Get unprocessed notifications
+      const notifications = await db.collection('telegramNotifications')
+        .find({ 
+          type: 'quiz_notification',
+          processed: false
+        })
+        .sort({ timestamp: 1 })
+        .toArray();
+
+      for (const notification of notifications) {
+        await this.handleQuizNotification(notification);
+        
+        // Mark as processed
+        await db.collection('telegramNotifications').updateOne(
+          { _id: notification._id },
+          { $set: { processed: true, processedAt: new Date() } }
+        );
+      }
+
+    } catch (error) {
+      console.error('Error processing quiz notifications:', error);
+    }
+  }
+
+  // Handle individual quiz notification
+  async handleQuizNotification(notification) {
+    try {
+      const { quizCode, data } = notification;
+      
+      if (data.type === 'quiz_started') {
+        // Send first question to all Telegram players
+        await this.sendQuestionToTelegramPlayers(quizCode, data.question, 0, data.timerDuration);
+      } else if (data.type === 'next_question') {
+        // Send next question
+        await this.sendQuestionToTelegramPlayers(quizCode, data.question, data.questionIndex, data.timerDuration);
+      } else if (data.type === 'quiz_ended') {
+        // Send final results
+        await this.sendQuizResults(quizCode, data.results);
+      }
+
+    } catch (error) {
+      console.error('Error handling quiz notification:', error);
+    }
+  }
+
+  // Send question to all Telegram players in a quiz
+  async sendQuestionToTelegramPlayers(quizCode, question, questionIndex, timerDuration) {
+    try {
+      // Get all Telegram players for this quiz
+      const telegramPlayers = [];
+      
+      for (const [telegramId, session] of this.userSessions.entries()) {
+        if (session.quizJoined && session.quizCode === quizCode) {
+          telegramPlayers.push(telegramId);
+        }
+      }
+
+      // Send question to each player
+      for (const telegramId of telegramPlayers) {
+        await this.sendQuizQuestion(telegramId, {
+          ...question,
+          index: questionIndex,
+          timeLimit: timerDuration,
+          points: 1000 // Base points
+        }, quizCode);
+      }
+
+      console.log(`Sent question ${questionIndex + 1} to ${telegramPlayers.length} Telegram players`);
+
+    } catch (error) {
+      console.error('Error sending question to Telegram players:', error);
+    }
+  }
+
+  // Send quiz results to Telegram players
+  async sendQuizResults(quizCode, results) {
+    try {
+      for (const [telegramId, session] of this.userSessions.entries()) {
+        if (session.quizJoined && session.quizCode === quizCode) {
+          const player = results.leaderboard.find(p => p.id === telegramId.toString());
+          const playerScore = player ? player.score : 0;
+          const playerRank = player ? player.rank : results.leaderboard.length;
+
+          const resultText = 
+            `🏁 *Quiz Complete!*\n\n` +
+            `🎯 *Your Score:* ${playerScore} points\n` +
+            `🏆 *Your Rank:* ${playerRank}/${results.leaderboard.length}\n\n` +
+            `📊 *Top 3 Players:*\n` +
+            results.leaderboard.slice(0, 3).map((p, i) => 
+              `${i + 1}. ${p.name} - ${p.score} pts`
+            ).join('\n') +
+            `\n\n🎮 Thanks for playing QuizBlitz!`;
+
+          await this.bot.api.sendMessage(telegramId, resultText, {
+            parse_mode: 'Markdown'
+          });
+
+          // Clear quiz session
+          session.quizJoined = false;
+          session.quizCode = null;
+          session.playerName = null;
+          this.userSessions.set(telegramId, session);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error sending quiz results:', error);
     }
   }
 }
