@@ -277,10 +277,10 @@ export default function PayeesPage() {
   };
 
   return (
-    <div className="min-h-screen p-8 pl-14 sm:pl-16 lg:pl-20">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
       <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">Payee Management</h1>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Payee Management</h1>
           <Button 
             onClick={() => setIsAddingPayee(true)}
             className="flex items-center gap-2"

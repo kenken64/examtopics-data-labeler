@@ -77,6 +77,9 @@ export default function Labeler() {
 
   // New state for highlighting
   const [activeHighlightType, setActiveHighlightType] = useState<string | null>(null);
+  
+  // Mobile tab state
+  const [activeTab, setActiveTab] = useState<'pdf' | 'markdown'>('pdf');
   const [questionText, setQuestionText] = useState<string>("");
   const [listOfQuestionsText, setListOfQuestionsText] = useState<string>("");
   const [correctAnswerText, setCorrectAnswerText] = useState<string>("");
@@ -579,14 +582,14 @@ export default function Labeler() {
   }, [currentPage, highlights, originalContentByPage]);
 
   return (
-    <div className="min-h-screen p-8 pl-14 sm:pl-16 lg:pl-20 flex flex-col items-center">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24 flex flex-col items-center">
       <Toaster position="top-right" richColors />
-      <h1 className="text-3xl font-bold mb-8">Exam Q Labeler</h1>
+      <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-6 sm:mb-8">Exam Q Labeler</h1>
 
-      {/* Main button row */}
-      <div className="mb-4 flex items-center space-x-4">
-        <Button asChild>
-          <label>
+      {/* Main button row - Responsive layout */}
+      <div className="mb-6 flex flex-wrap items-center gap-3 sm:gap-4">
+        <Button asChild size="sm" className="min-h-[44px]">
+          <label className="cursor-pointer">
             Choose PDF File
             <input
               type="file"
@@ -602,7 +605,8 @@ export default function Labeler() {
           onClick={convertToMarkdownOCR}
           disabled={!pdfFile || ocrLoading}
           variant="outline"
-          className="bg-blue-50 hover:bg-blue-100"
+          size="sm"
+          className="bg-blue-50 hover:bg-blue-100 min-h-[44px]"
         >
           {ocrLoading ? "Converting..." : "AI OCR Conversion"}
         </Button>
@@ -612,7 +616,8 @@ export default function Labeler() {
           onClick={() => handleHighlightButtonClick("question")}
           disabled={!pdfFile || !markdownContent}
           variant={activeHighlightType === 'question' ? 'default' : 'outline'}
-          className="relative"
+          size="sm"
+          className="relative min-h-[44px]"
         >
           Question
           {highlights[currentPage]?.some(h => h.type === 'question') && (
@@ -626,7 +631,8 @@ export default function Labeler() {
           onClick={() => handleHighlightButtonClick("list")}
           disabled={!pdfFile || !markdownContent}
           variant={activeHighlightType === 'list' ? 'default' : 'outline'}
-          className="relative"
+          size="sm"
+          className="relative min-h-[44px]"
         >
           List of Answer
           {highlights[currentPage]?.some(h => h.type === 'list') && (
@@ -640,7 +646,8 @@ export default function Labeler() {
           onClick={() => handleHighlightButtonClick("answer")}
           disabled={!pdfFile || !markdownContent}
           variant={activeHighlightType === 'answer' ? 'default' : 'outline'}
-          className="relative"
+          size="sm"
+          className="relative min-h-[44px]"
         >
           Correct Answer
           {highlights[currentPage]?.some(h => h.type === 'answer') && (
@@ -654,7 +661,8 @@ export default function Labeler() {
           onClick={() => handleHighlightButtonClick("explanation")}
           disabled={!pdfFile || !markdownContent}
           variant={activeHighlightType === 'explanation' ? 'default' : 'outline'}
-          className="relative"
+          size="sm"
+          className="relative min-h-[44px]"
         >
           Explanation
           {highlights[currentPage]?.some(h => h.type === 'explanation') && (
@@ -717,32 +725,69 @@ export default function Labeler() {
         </div>
       )}
 
-      <div className="flex space-x-4 w-full h-[80vh]">
-        <PdfViewer
-          pdfUrl={pdfUrl}
-          currentPage={currentPage}
-          numPages={numPages}
-          setCurrentPage={setCurrentPage}
-          goToPreviousPage={goToPreviousPage}
-          goToNextPage={goToNextPage}
-          setError={setError}
-          onNumPagesLoad={handleNumPagesLoad}
-        />
+      {/* Mobile-first responsive layout */}
+      <div className="w-full">
+        {/* Mobile Tab Navigation */}
+        <div className="block lg:hidden mb-4">
+          <div className="flex border-b bg-white rounded-t-lg shadow-sm">
+            <button
+              className={`flex-1 py-4 px-4 text-center font-medium text-sm transition-colors min-h-[48px] ${
+                activeTab === 'pdf' 
+                  ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50' 
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+              onClick={() => setActiveTab('pdf')}
+            >
+              📄 PDF Viewer
+            </button>
+            <button
+              className={`flex-1 py-4 px-4 text-center font-medium text-sm transition-colors min-h-[48px] ${
+                activeTab === 'markdown' 
+                  ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50' 
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              }`}
+              onClick={() => setActiveTab('markdown')}
+            >
+              📝 Markdown Output
+            </button>
+          </div>
+        </div>
 
-        {/* Markdown Output Section */}
-        <div className="w-1/2 border p-4 rounded-lg shadow-md bg-white flex flex-col">
-          <h2 className="text-xl font-semibold mb-4">Markdown Output</h2>
-          {markdownContent ? (
-            <div
-              ref={markdownOutputDivRef}
-              contentEditable={true}
-              onMouseUp={handleMouseUp}
-              className="w-full flex-1 p-2 border rounded-md bg-gray-50 font-mono text-sm overflow-auto"
-              dangerouslySetInnerHTML={{ __html: markdownContent || '' }}
-            ></div>
-          ) : (
-            <p>Click "Convert to Markdown" to see the output.</p>
-          )}
+        {/* Content Area */}
+        <div className="lg:flex lg:gap-4 w-full">
+          {/* PDF Viewer - Mobile: show/hide based on tab, Desktop: always show */}
+          <div className={`${activeTab === 'pdf' ? 'block' : 'hidden'} lg:block lg:w-1/2 mb-4 lg:mb-0`}>
+            <div className="h-[60vh] lg:h-[80vh]">
+              <PdfViewer
+                pdfUrl={pdfUrl}
+                currentPage={currentPage}
+                numPages={numPages}
+                setCurrentPage={setCurrentPage}
+                goToPreviousPage={goToPreviousPage}
+                goToNextPage={goToNextPage}
+                setError={setError}
+                onNumPagesLoad={handleNumPagesLoad}
+              />
+            </div>
+          </div>
+
+          {/* Markdown Output Section - Mobile: show/hide based on tab, Desktop: always show */}
+          <div className={`${activeTab === 'markdown' ? 'block' : 'hidden'} lg:block lg:w-1/2`}>
+            <div className="border p-4 rounded-lg shadow-md bg-white flex flex-col h-[60vh] lg:h-[80vh]">
+              <h2 className="text-lg lg:text-xl font-semibold mb-4">Markdown Output</h2>
+              {markdownContent ? (
+                <div
+                  ref={markdownOutputDivRef}
+                  contentEditable={true}
+                  onMouseUp={handleMouseUp}
+                  className="w-full flex-1 p-2 border rounded-md bg-gray-50 font-mono text-xs sm:text-sm overflow-auto"
+                  dangerouslySetInnerHTML={{ __html: markdownContent || '' }}
+                ></div>
+              ) : (
+                <p className="text-sm lg:text-base text-gray-600">Click "AI OCR Conversion" to see the output.</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

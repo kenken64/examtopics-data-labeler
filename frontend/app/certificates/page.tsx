@@ -71,11 +71,28 @@ export default function Certificates() {
       if (response.ok) {
         const data = await response.json();
         setCertificates(data);
+        setError(null); // Clear any previous errors
       } else {
-        setError('Failed to fetch certificates');
+        // Get the actual error message from the API
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        
+        if (response.status === 401) {
+          setError('Authentication required. Please log in to view certificates.');
+        } else {
+          setError(`Failed to fetch certificates: ${errorMessage}`);
+        }
+        
+        console.error('Certificates API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
       }
     } catch (err) {
-      setError('Error fetching certificates');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Network error: ${errorMessage}`);
+      console.error('Network error fetching certificates:', err);
     } finally {
       setLoading(false);
     }
@@ -241,12 +258,12 @@ export default function Certificates() {
   };
 
   return (
-    <div className="min-h-screen p-8 pl-14 sm:pl-16 lg:pl-20">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-3">
-            <Award className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">Certificate Management</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            <Award className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Certificate Management</h1>
           </div>
           <Button 
             onClick={() => setIsAddingNew(true)}
@@ -411,11 +428,11 @@ export default function Certificates() {
                       </div>
                     ) : (
                       // View mode
-                      <div className="flex items-start justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                         <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-3 mb-2">
                             {certificate.logoUrl ? (
-                              <div className="w-50 h-50 flex-shrink-0" style={{ width: '200px', height: '200px' }}>
+                              <div className="w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 flex-shrink-0 mx-auto sm:mx-0">
                                 <img 
                                   src={certificate.logoUrl} 
                                   alt={`${certificate.name} logo`}
@@ -429,32 +446,32 @@ export default function Certificates() {
                                     const target = e.currentTarget as HTMLImageElement;
                                     target.style.display = 'none';
                                     target.parentElement!.innerHTML = `
-                                      <div class="bg-gradient-to-br from-blue-500 to-purple-600 rounded-md flex items-center justify-center" style="width: 200px; height: 200px;">
-                                        <svg class="text-white" style="width: 80px; height: 80px;" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                      <div class="bg-gradient-to-br from-blue-500 to-purple-600 rounded-md flex items-center justify-center w-full h-full">
+                                        <svg class="text-white w-8 h-8 sm:w-12 sm:h-12 lg:w-16 lg:h-16" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                           <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M9.497 14.25v2.25M16.5 14.25v2.25" />
                                         </svg>
                                       </div>
                                     `;
                                   }}
                                   style={{ 
-                                    maxWidth: '200px', 
-                                    maxHeight: '200px',
                                     backgroundColor: '#f8f9fa'
                                   }}
                                 />
                               </div>
                             ) : (
                               // Default fallback logo when no URL is provided
-                              <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-md flex items-center justify-center flex-shrink-0" style={{ width: '200px', height: '200px' }}>
-                                <Award className="text-white" style={{ width: '80px', height: '80px' }} />
+                              <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-md flex items-center justify-center flex-shrink-0 w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 mx-auto sm:mx-0">
+                                <Award className="text-white w-8 h-8 sm:w-12 sm:h-12 lg:w-16 lg:h-16" />
                               </div>
                             )}
-                            <h3 className="text-lg font-medium">{certificate.name}</h3>
-                            <Badge variant="outline">{certificate.code}</Badge>
+                            <div className="text-center sm:text-left">
+                              <h3 className="text-lg font-medium mb-2">{certificate.name}</h3>
+                              <Badge variant="outline">{certificate.code}</Badge>
+                            </div>
                           </div>
                           <div className="space-y-1">
                             <p className="text-sm text-muted-foreground">
-                              Created: {new Date(certificate.createdAt).toLocaleDateString()}
+                              Created: {new Date(certificate.createdAt).toISOString().split('T')[0]}
                             </p>
                             {certificate.pdfFileName && certificate.pdfFileUrl && (
                               <p className="text-sm text-muted-foreground">

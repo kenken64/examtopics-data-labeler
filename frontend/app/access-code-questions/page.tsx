@@ -226,13 +226,14 @@ export default function AccessCodeQuestionsManagement() {
   }, [includeDisabled]);
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Access Code Questions Management</h1>
-        <p className="text-muted-foreground">
-          Manage question assignments for generated access codes. Reorder questions and enable/disable them as needed.
-        </p>
-      </div>
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2">Access Code Questions Management</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Manage question assignments for generated access codes. Reorder questions and enable/disable them as needed.
+          </p>
+        </div>
 
       {/* Search Section */}
       <Card className="mb-6">
@@ -246,26 +247,28 @@ export default function AccessCodeQuestionsManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 items-end">
+          <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-end">
             <div className="flex-1">
               <Input
                 placeholder="Enter generated access code (e.g., AC-9K363CQ4)"
                 value={generatedAccessCode}
                 onChange={(e) => setGeneratedAccessCode(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && loadAssignment()}
+                className="min-h-[44px]"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-h-[44px]">
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
                   checked={includeDisabled}
                   onChange={(e) => setIncludeDisabled(e.target.checked)}
+                  className="min-h-[20px] min-w-[20px]"
                 />
                 Include disabled
               </label>
             </div>
-            <Button onClick={loadAssignment} disabled={loading}>
+            <Button onClick={loadAssignment} disabled={loading} className="min-h-[44px] w-full sm:w-auto">
               {loading ? 'Loading...' : 'Load Assignment'}
             </Button>
           </div>
@@ -311,18 +314,22 @@ export default function AccessCodeQuestionsManagement() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div>
                   <h3 className="font-semibold mb-2">Access Code Information</h3>
-                  <p><strong>Generated Code:</strong> {assignment.generatedAccessCode}</p>
-                  <p><strong>Payee:</strong> {assignment.payee.payeeName}</p>
-                  <p><strong>Original Code:</strong> {assignment.payee.originalAccessCode}</p>
+                  <div className="space-y-1 text-sm">
+                    <p><strong>Generated Code:</strong> <span className="break-all">{assignment.generatedAccessCode}</span></p>
+                    <p><strong>Payee:</strong> {assignment.payee.payeeName}</p>
+                    <p><strong>Original Code:</strong> <span className="break-all">{assignment.payee.originalAccessCode}</span></p>
+                  </div>
                 </div>
                 <div>
                   <h3 className="font-semibold mb-2">Certificate & Statistics</h3>
-                  <p><strong>Certificate:</strong> {assignment.certificate.name}</p>
-                  <p><strong>Code:</strong> {assignment.certificate.code}</p>
-                  <div className="flex gap-2 mt-2">
+                  <div className="space-y-1 text-sm">
+                    <p><strong>Certificate:</strong> {assignment.certificate.name}</p>
+                    <p><strong>Code:</strong> {assignment.certificate.code}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
                     <Badge variant="secondary">
                       {assignment.stats.enabledQuestions} Enabled
                     </Badge>
@@ -353,13 +360,13 @@ export default function AccessCodeQuestionsManagement() {
                     key={question._id}
                     className={`border rounded-lg p-4 ${!question.isEnabled ? 'bg-gray-50 opacity-75' : 'bg-white'}`}
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                       <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
                           <Badge variant={question.isEnabled ? "default" : "secondary"}>
                             Q{question.assignedQuestionNo}
                           </Badge>
-                          <Badge variant="outline">
+                          <Badge variant="outline" className="text-xs">
                             Original: Q{question.originalQuestionNo}
                           </Badge>
                           {!question.isEnabled && (
@@ -368,21 +375,22 @@ export default function AccessCodeQuestionsManagement() {
                             </Badge>
                           )}
                         </div>
-                        <h4 className="font-medium mb-2">{question.question.question}</h4>
-                        <div className="text-sm text-gray-600">
+                        <h4 className="font-medium mb-3 text-sm sm:text-base break-words">{question.question.question}</h4>
+                        <div className="text-xs sm:text-sm text-gray-600 space-y-1">
                           <p><strong>Options:</strong> {getQuestionOptions(question.question).length} choices</p>
                           <p><strong>Correct Answer:</strong> Option {getCorrectAnswer(question.question) + 1}</p>
                         </div>
                       </div>
                       
-                      <div className="flex flex-col gap-2">
+                      <div className="flex sm:flex-col gap-2 justify-end sm:justify-start">
                         {/* Move buttons */}
-                        <div className="flex gap-1">
+                        <div className="flex sm:flex-row gap-1">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => moveQuestion(question._id, 'up')}
                             disabled={index === 0}
+                            className="min-h-[44px] min-w-[44px] p-2"
                           >
                             <ArrowUp className="h-4 w-4" />
                           </Button>
@@ -391,6 +399,7 @@ export default function AccessCodeQuestionsManagement() {
                             size="sm"
                             onClick={() => moveQuestion(question._id, 'down')}
                             disabled={index === assignment.questions.length - 1}
+                            className="min-h-[44px] min-w-[44px] p-2"
                           >
                             <ArrowDown className="h-4 w-4" />
                           </Button>
@@ -401,6 +410,7 @@ export default function AccessCodeQuestionsManagement() {
                           variant={question.isEnabled ? "outline" : "default"}
                           size="sm"
                           onClick={() => toggleQuestionStatus(question._id)}
+                          className="min-h-[44px] min-w-[44px] p-2"
                         >
                           {question.isEnabled ? (
                             <EyeOff className="h-4 w-4" />
@@ -417,6 +427,7 @@ export default function AccessCodeQuestionsManagement() {
           </Card>
         </>
       )}
+      </div>
     </div>
   );
 }

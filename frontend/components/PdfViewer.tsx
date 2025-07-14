@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import * as pdfjs from "pdfjs-dist";
 
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -27,46 +27,44 @@ export default function PdfViewer({
   onNumPagesLoad,
 }: PdfViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const pdfDocumentRef = useRef<pdfjs.PDFDocumentProxy | null>(null); // To store the PDF document
-  const renderTaskRef = useRef<pdfjs.RenderTask | null>(null); // To store the current render task
-  const currentPdfUrlRef = useRef<string | null>(null); // To track current PDF URL
+  const pdfDocumentRef = useRef<pdfjs.PDFDocumentProxy | null>(null);
+  const renderTaskRef = useRef<pdfjs.RenderTask | null>(null);
+  const currentPdfUrlRef = useRef<string | null>(null);
+  const popupWindowRef = useRef<Window | null>(null);
 
-  useEffect(() => {
-    const renderPdf = async () => {
-      if (!pdfUrl || !canvasRef.current) {
-        return;
-      }
+  const renderPdf = useCallback(async () => {
+    if (!pdfUrl || !canvasRef.current) {
+      return;
+    }
 
-      const canvas = canvasRef.current;
-      const context = canvas.getContext("2d");
+    const canvas = canvasRef.current;
+    const context = canvas.getContext("2d");
 
-      if (!context) {
-        setError("Failed to get 2D rendering context for canvas.");
-        return;
-      }
+    if (!context) {
+      setError("Failed to get 2D rendering context for canvas.");
+      return;
+    }
 
-      // Cancel any ongoing render task before starting a new one
-      if (renderTaskRef.current) {
-        renderTaskRef.current.cancel();
-        renderTaskRef.current = null;
-      }
+    // Cancel any ongoing render task before starting a new one
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+      renderTaskRef.current = null;
+    }
 
+    try {
       let pdf: pdfjs.PDFDocumentProxy;
 
-      // If pdfUrl changes, or if pdfDocumentRef is null (first load), fetch the document
-      if (!pdfDocumentRef.current || currentPdfUrlRef.current !== pdfUrl) {
-        try {
-          const loadingTask = pdfjs.getDocument(pdfUrl);
-          pdf = await loadingTask.promise;
-          pdfDocumentRef.current = pdf; // Store the document
-          currentPdfUrlRef.current = pdfUrl; // Store the current URL
-          onNumPagesLoad(pdf.numPages); // Update parent with total pages
-        } catch (err) {
-          console.error("Error loading PDF document:", err);
-          setError(`Failed to load PDF document: ${(err as Error).message}. Please try another file.`);
-          return;
-        }
+      // Check if we need to load a new PDF or can reuse the existing one
+      if (currentPdfUrlRef.current !== pdfUrl || !pdfDocumentRef.current) {
+        // Load new PDF
+        pdf = await pdfjs.getDocument(pdfUrl).promise;
+        pdfDocumentRef.current = pdf;
+        currentPdfUrlRef.current = pdfUrl;
+
+        // Update number of pages only when loading a new PDF
+        onNumPagesLoad(pdf.numPages);
       } else {
+        // Reuse existing PDF
         pdf = pdfDocumentRef.current;
       }
 
@@ -80,51 +78,71 @@ export default function PdfViewer({
         return;
       }
 
-      try {
-        const page = await pdf.getPage(currentPage);
-        const viewport = page.getViewport({ scale: 1.5, rotation: page.rotate });
+      const page = await pdf.getPage(currentPage);
+      
+      // Get the container dimensions
+      const containerWidth = canvas.parentElement?.clientWidth || 400;
+      const containerHeight = canvas.parentElement?.clientHeight || 600;
+      
+      // Calculate scale to fit the container while maintaining aspect ratio
+      const baseViewport = page.getViewport({ scale: 1, rotation: page.rotate });
+      const scaleX = (containerWidth - 40) / baseViewport.width; // -40 for padding
+      const scaleY = (containerHeight - 100) / baseViewport.height; // -100 for header/controls
+      const scale = Math.min(scaleX, scaleY, 2); // Max scale of 2 for readability
+      
+      const viewport = page.getViewport({ scale, rotation: page.rotate });
 
-        // Set canvas dimensions to match viewport
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+      // Set canvas dimensions to match viewport
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
 
-        // Clear the canvas before drawing a new page
-        context.clearRect(0, 0, canvas.width, canvas.height);
+      // Clear the canvas before drawing a new page
+      context.clearRect(0, 0, canvas.width, canvas.height);
 
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport,
-        };
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+      };
 
-        renderTaskRef.current = page.render(renderContext);
-        await renderTaskRef.current.promise;
-        console.log("PDF page rendered successfully.");
-        setError(null); // Clear error on successful render
-      } catch (err) {
-        // Check if the error is due to cancellation
-        if (err && (err as any).name === 'RenderingCancelledException') {
-          console.log('PDF rendering cancelled.');
-          return; // Do not set error for cancellations
-        }
-        console.error("Error rendering PDF page:", err);
+      renderTaskRef.current = page.render(renderContext);
+      await renderTaskRef.current.promise;
+
+      setError(null); // Clear any previous errors
+
+    } catch (err) {
+      if ((err as any).name === 'RenderingCancelledException') {
+        console.log('Rendering was cancelled');
+      } else {
+        console.error("Error rendering PDF:", err);
         setError(`Failed to render PDF page: ${(err as Error).message}. Please try another file.`);
-      } finally {
-        renderTaskRef.current = null; // Clear the render task reference after completion or error
       }
-    };
+    } finally {
+      renderTaskRef.current = null;
+    }
+  }, [pdfUrl, currentPage, setError, onNumPagesLoad, setCurrentPage]);
 
+  useEffect(() => {
     renderPdf();
 
-    // Cleanup function for useEffect
     return () => {
       if (renderTaskRef.current) {
         renderTaskRef.current.cancel();
         renderTaskRef.current = null;
       }
     };
-  }, [pdfUrl, currentPage]);
+  }, [renderPdf]);
 
-  const popupWindowRef = useRef<Window | null>(null);
+  // Add resize listener to re-render PDF when container size changes  
+  useEffect(() => {
+    const handleResize = () => {
+      setTimeout(() => {
+        renderPdf();
+      }, 100);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [renderPdf]);
 
   const handleViewerClick = () => {
     if (pdfUrl) {
@@ -136,25 +154,24 @@ export default function PdfViewer({
 
       const newWindow = window.open(
         `/fullscreen-pdf?pdfUrl=${encodeURIComponent(pdfUrl)}&page=${currentPage}`,
-        "FullScreenPdfViewer", // Give the window a unique name
+        "FullScreenPdfViewer",
         "width=800,height=600,resizable=yes,scrollbars=yes"
       );
 
       if (newWindow) {
-        popupWindowRef.current = newWindow; // Store reference to the new window
+        popupWindowRef.current = newWindow;
         newWindow.focus();
       }
     }
   };
 
   return (
-    <div className="w-1/2 border p-4 rounded-lg shadow-md bg-white flex flex-col items-center h-full overflow-auto" onClick={handleViewerClick}>
-      <h2 className="text-xl font-semibold mb-4">PDF Viewer</h2>
+    <div className="w-full border p-4 rounded-lg shadow-md bg-white flex flex-col items-center h-full overflow-auto" onClick={handleViewerClick}>
+      <h2 className="text-lg lg:text-xl font-semibold mb-4">PDF Viewer</h2>
       {pdfUrl ? (
         <>
-          {/* The canvas will now dynamically size itself */}
-          <canvas ref={canvasRef} className="border mb-4 max-w-full max-h-full h-auto object-contain"></canvas>
-          <div className="flex items-center space-x-2 mt-auto"> {/* mt-auto to push buttons to bottom */}
+          <canvas ref={canvasRef} className="border mb-4 max-w-full flex-1 w-full object-contain"></canvas>
+          <div className="flex items-center space-x-2 flex-shrink-0">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -181,7 +198,9 @@ export default function PdfViewer({
           </div>
         </>
       ) : (
-        <p>Upload a PDF to view it here.</p>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-gray-500 text-center">Upload a PDF to view it here.</p>
+        </div>
       )}
     </div>
   );

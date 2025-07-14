@@ -71,9 +71,18 @@ export default function AccessCodesPage() {
               if (payee.generatedAccessCode) {
                 try {
                   const linkCheckResponse = await fetch(`/api/access-code-questions?generatedAccessCode=${encodeURIComponent(payee.generatedAccessCode)}`);
-                  const isLinked = linkCheckResponse.ok;
+                  // Consider only 200 OK as linked, 404 means no questions assigned yet
+                  const isLinked = linkCheckResponse.status === 200;
+                  if (linkCheckResponse.status === 404) {
+                    // 404 is expected when no questions are assigned yet
+                    console.log(`No questions linked yet for access code: ${payee.generatedAccessCode}`);
+                  } else if (!linkCheckResponse.ok) {
+                    // Log other errors (auth, server errors, etc.)
+                    console.warn(`Error checking questions for ${payee.generatedAccessCode}:`, linkCheckResponse.status, linkCheckResponse.statusText);
+                  }
                   return { ...payee, isLinkedToQuestions: isLinked };
-                } catch {
+                } catch (error) {
+                  console.warn(`Network error checking questions for ${payee.generatedAccessCode}:`, error);
                   return { ...payee, isLinkedToQuestions: false };
                 }
               }
@@ -258,7 +267,7 @@ export default function AccessCodesPage() {
 
   if (loading && payees.length === 0) {
     return (
-      <div className="min-h-screen p-8 pl-14 sm:pl-16 lg:pl-20">
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-3xl font-bold mb-8">Access Codes</h1>
           <div className="text-center py-8">Loading...</div>
@@ -268,7 +277,7 @@ export default function AccessCodesPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 lg:p-8 pl-14 sm:pl-16 lg:pl-20">
+    <div className="min-h-screen p-4 lg:p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
       <div className="max-w-full mx-auto">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
           <h1 className="text-2xl lg:text-3xl font-bold">Access Codes</h1>

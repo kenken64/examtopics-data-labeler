@@ -218,6 +218,37 @@ export async function GET() {
       }
     ]).toArray();
 
+    // Get PDF attachment statistics
+    const pdfStats = await db.collection('certificates').aggregate([
+      {
+        $addFields: {
+          hasPdf: {
+            $and: [
+              { $ne: ['$pdfFileUrl', null] },
+              { $ne: ['$pdfFileUrl', ''] }
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$hasPdf',
+          count: { $sum: 1 },
+          certificates: {
+            $push: {
+              _id: '$_id',
+              name: '$name',
+              code: '$code',
+              pdfFileName: '$pdfFileName'
+            }
+          }
+        }
+      },
+      {
+        $sort: { _id: -1 } // true first, then false
+      }
+    ]).toArray();
+
     const response = {
       certificates: certificateStats,
       accessCodes: accessCodeStats[0] || {
@@ -238,6 +269,7 @@ export async function GET() {
       bookmarks: bookmarkStats[0] || { totalBookmarks: 0, uniqueUsers: 0 },
       wrongAnswers: wrongAnswerStats[0] || { totalWrongAnswers: 0, uniqueUsers: 0 },
       payees: payeeStats,
+      pdfAttachments: pdfStats,
       lastUpdated: new Date().toISOString()
     };
 

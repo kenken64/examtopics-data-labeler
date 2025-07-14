@@ -180,12 +180,12 @@ const SavedQuestionsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Saved Questions</h1>
-          <p className="text-gray-600">Search and browse your saved exam questions</p>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Saved Questions</h1>
+          <p className="text-gray-600 text-sm sm:text-base">Search and browse your saved exam questions</p>
         </div>
 
         {/* Search Section */}
@@ -200,20 +200,20 @@ const SavedQuestionsPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Input
                 placeholder="Enter original or generated access code..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="flex-1"
+                className="flex-1 min-h-[44px]"
               />
-              <Button onClick={handleSearch} disabled={loading}>
+              <Button onClick={handleSearch} disabled={loading} className="min-h-[44px]">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                 Search
               </Button>
               {searchMode === 'search' && (
-                <Button variant="outline" onClick={handleBackToBrowse}>
+                <Button variant="outline" onClick={handleBackToBrowse} className="min-h-[44px]">
                   Back to Browse
                 </Button>
               )}

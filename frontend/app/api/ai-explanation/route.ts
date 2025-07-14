@@ -4,14 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { MongoClient, ObjectId } from 'mongodb';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
-
-const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
-
-async function connectToDatabase() {
-  const client = new MongoClient(uri);
-  await client.connect();
-  return client.db('awscert');
-}
+import { connectToDatabase } from '@/lib/mongodb';
 
 export const POST = withAuth(async (request: AuthenticatedRequest) => {
   try {

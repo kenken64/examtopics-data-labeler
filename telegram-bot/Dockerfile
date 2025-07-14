@@ -1,5 +1,8 @@
 FROM node:18-alpine
 
+# Install wget for health checks
+RUN apk add --no-cache wget
+
 # Set working directory
 WORKDIR /app
 
@@ -25,9 +28,9 @@ ENV PORT=8080
 # Expose port (Railway will override this)
 EXPOSE 8080
 
-# Health check (for Docker environments)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "console.log('Bot is running')" || exit 1
+# Health check - check if health server is responding
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Start the bot
 CMD ["npm", "start"]

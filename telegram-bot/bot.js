@@ -74,23 +74,135 @@ function formatAnswerForDisplay(answer) {
 
 class CertificationBot {
   constructor() {
+    // Validate essential environment variables
+    if (!process.env.BOT_TOKEN) {
+      console.error('❌ BOT_TOKEN environment variable is missing!');
+      this.startupError = new Error('BOT_TOKEN environment variable is required');
+      this.setupHealthCheck();
+      return;
+    }
+
+    if (!process.env.MONGODB_URI) {
+      console.error('❌ MONGODB_URI environment variable is missing!');
+      this.startupError = new Error('MONGODB_URI environment variable is required');
+      this.setupHealthCheck();
+      return;
+    }
+
     this.bot = new Bot(process.env.BOT_TOKEN);
     this.mongoClient = new MongoClient(process.env.MONGODB_URI);
     this.db = null;
     this.userSessions = new Map(); // Store user quiz sessions
     this.userSelections = new Map(); // Store user's current answer selections for multiple choice
     this.healthServer = null; // Health check server for Railway
+    this.isReady = false; // Track if bot is ready
+    this.startupError = null; // Track startup errors
     
-    this.initializeBot();
+    // Start health server immediately for Railway
     this.setupHealthCheck();
+    
+    // Initialize bot asynchronously
+    this.initializeAsync();
+  }
+
+  async initializeAsync() {
+    try {
+      console.log('Starting bot initialization...');
+      
+      // Set a timeout for initialization (reduced for Railway compatibility)
+      const timeout = setTimeout(() => {
+        this.startupError = new Error('Bot initialization timeout after 30 seconds');
+        console.error('Bot initialization timed out');
+      }, 30000);
+      
+      this.initializeBot();
+      await this.start();
+      
+      clearTimeout(timeout);
+      this.isReady = true;
+      console.log('Bot initialization completed successfully');
+    } catch (error) {
+      console.error('Bot initialization failed:', error);
+      this.startupError = error;
+      
+      // For Railway, we want to keep the service running even if bot fails
+      // so that health checks can report the error
+      if (process.env.RAILWAY_ENVIRONMENT) {
+        console.log('Running on Railway - keeping service alive for health checks');
+      }
+    }
   }
 
   async connectToDatabase() {
     if (!this.db) {
-      await this.mongoClient.connect();
-      this.db = this.mongoClient.db('awscert');
+      console.log('Attempting to connect to MongoDB...');
+      
+      try {
+        await this.mongoClient.connect();
+        this.db = this.mongoClient.db(process.env.MONGODB_DB_NAME);
+        console.log('✅ Connected to MongoDB successfully');
+      } catch (error) {
+        console.error('❌ MongoDB connection failed:', error.message);
+        
+        // For Railway, we might need to wait for MongoDB to be ready
+        if (process.env.RAILWAY_ENVIRONMENT) {
+          console.log('Retrying MongoDB connection in 5 seconds...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          try {
+            await this.mongoClient.connect();
+            this.db = this.mongoClient.db(process.env.MONGODB_DB_NAME);
+            console.log('✅ Connected to MongoDB on retry');
+          } catch (retryError) {
+            console.error('❌ MongoDB retry failed:', retryError.message);
+            throw retryError;
+          }
+        } else {
+          throw error;
+        }
+      }
     }
     return this.db;
+  }
+
+  /**
+   * Retrieves AI explanation for a question, with fallback to regular explanation
+   * @param {string} questionId - The MongoDB ObjectId of the question
+   * @param {string} regularExplanation - The regular explanation as fallback
+   * @returns {Promise<string>} The explanation to show (AI if available, otherwise regular)
+   */
+  async getExplanationForQuestion(questionId, regularExplanation) {
+    try {
+      console.log(`🔍 Getting explanation for question ID: ${questionId}`);
+      const db = await this.connectToDatabase();
+      
+      // Try to get the question with AI explanation
+      const question = await db.collection('quizzes').findOne(
+        { _id: new ObjectId(questionId) },
+        { projection: { aiExplanation: 1, explanation: 1 } }
+      );
+      
+      console.log(`📋 Question found:`, {
+        hasQuestion: !!question,
+        hasAiExplanation: !!(question && question.aiExplanation),
+        aiExplanationLength: question?.aiExplanation?.length || 0,
+        hasRegularExplanation: !!(question && question.explanation),
+        regularExplanationLength: question?.explanation?.length || 0
+      });
+      
+      // Return AI explanation if it exists, otherwise return regular explanation
+      if (question && question.aiExplanation) {
+        console.log(`✅ Returning AI explanation (${question.aiExplanation.length} chars)`);
+        return `🤖 AI Second Opinion:\n${question.aiExplanation}`;
+      } else {
+        console.log(`📖 Returning regular explanation (${regularExplanation?.length || 0} chars)`);
+        return regularExplanation || 'No explanation available.';
+      }
+    } catch (error) {
+      console.error('Error retrieving AI explanation:', error);
+      // Return regular explanation as fallback if there's an error
+      return regularExplanation || 'No explanation available.';
+    }
   }
 
   initializeBot() {
@@ -189,14 +301,19 @@ class CertificationBot {
     
     this.healthServer = http.createServer((req, res) => {
       if (req.url === '/health') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        const status = this.isReady ? 'healthy' : (this.startupError ? 'error' : 'starting');
+        const statusCode = this.isReady ? 200 : (this.startupError ? 503 : 200);
+        
+        res.writeHead(statusCode, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          status: 'healthy',
+          status: status,
           service: 'examtopics-telegram-bot',
           version: '1.0.0',
           uptime: process.uptime(),
           timestamp: new Date().toISOString(),
-          mongodb: this.db ? 'connected' : 'disconnected'
+          mongodb: this.db ? 'connected' : 'disconnected',
+          bot: this.isReady ? 'ready' : (this.startupError ? 'error' : 'initializing'),
+          error: this.startupError ? this.startupError.message : null
         }));
       } else if (req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -204,7 +321,8 @@ class CertificationBot {
           service: 'ExamTopics Telegram Bot',
           version: '1.0.0',
           description: 'AWS Certification Practice Bot',
-          health: '/health'
+          health: '/health',
+          status: this.isReady ? 'ready' : (this.startupError ? 'error' : 'initializing')
         }));
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -365,8 +483,10 @@ class CertificationBot {
         waitingForAccessCode: true
       });
 
-      await ctx.editMessageText(
-        `✅ You selected: ${certificate.name} (${certificate.code})\n\n` +
+      await this.safeEditMessage(ctx, 
+        `✅ You selected: ${certificate.name} (${certificate.code})
+
+` +
         `📝 Please enter your generated access code to begin the quiz:`
       );
 
@@ -735,7 +855,7 @@ class CertificationBot {
       keyboard.text('✅ Confirm Selection', 'confirm_selection').row();
       keyboard.text('🔄 Clear All', 'clear_selection');
 
-      await ctx.editMessageText(questionText, {
+      await this.safeEditMessage(ctx, questionText, {
         reply_markup: keyboard
       });
       
@@ -755,9 +875,12 @@ class CertificationBot {
         session.correctAnswers++;
         
         // Show correct answer message
-        await ctx.editMessageText(
-          `✅ Correct!\n\n` +
-          `Your answer: ${selectedAnswer}\n` +
+        await this.safeEditMessage(ctx, 
+          `✅ Correct!
+
+` +
+          `Your answer: ${selectedAnswer}
+` +
           `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`
         );
 
@@ -775,8 +898,8 @@ class CertificationBot {
         // Save wrong answer to database
         await this.saveWrongAnswer(userId, session, currentQuestion, selectedAnswer);
         
-        // Show wrong answer with explanation
-        const explanation = currentQuestion.explanation || 'No explanation available.';
+        // Get explanation (AI if available, otherwise regular)
+        const explanation = await this.getExplanationForQuestion(currentQuestion._id, currentQuestion.explanation);
         
         const keyboard = new InlineKeyboard();
         
@@ -786,7 +909,7 @@ class CertificationBot {
           keyboard.text('Show Results 📊', 'next_question');
         }
 
-        await ctx.editMessageText(
+        await this.safeEditMessage(ctx, 
           `❌ Wrong! Your answer: ${selectedAnswer}\n\n` +
           `The correct answer was: ${currentQuestion.correctAnswer}\n\n` +
           `📖 Explanation:\n${explanation}\n\n` +
@@ -819,7 +942,7 @@ class CertificationBot {
 
     // Check if user has made any selections
     if (userSelections.length === 0) {
-      await ctx.editMessageText(
+      await this.safeEditMessage(ctx, 
         '⚠️ Please select at least one answer before confirming.',
         { reply_markup: ctx.msg.reply_markup }
       );
@@ -829,7 +952,7 @@ class CertificationBot {
     // Check if user has selected the correct number of answers
     const requiredCount = normalizeAnswer(currentQuestion.correctAnswer).length;
     if (userSelections.length !== requiredCount) {
-      await ctx.editMessageText(
+      await this.safeEditMessage(ctx, 
         `⚠️ Please select exactly ${requiredCount} answers. You have selected ${userSelections.length}.`,
         { reply_markup: ctx.msg.reply_markup }
       );
@@ -855,7 +978,7 @@ class CertificationBot {
       session.correctAnswers++;
       
       // Show correct answer message
-      await ctx.editMessageText(
+      await this.safeEditMessage(ctx, 
         `✅ Correct!\n\n` +
         `Your answer: ${formatAnswerForDisplay(userAnswer)}\n` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`
@@ -875,8 +998,8 @@ class CertificationBot {
       // Save wrong answer to database
       await this.saveWrongAnswer(userId, session, currentQuestion, userAnswer);
       
-      // Show wrong answer with explanation
-      const explanation = currentQuestion.explanation || 'No explanation available.';
+      // Get explanation (AI if available, otherwise regular)
+      const explanation = await this.getExplanationForQuestion(currentQuestion._id, currentQuestion.explanation);
       
       const keyboard = new InlineKeyboard();
       
@@ -886,10 +1009,17 @@ class CertificationBot {
         keyboard.text('Show Results 📊', 'next_question');
       }
 
-      await ctx.editMessageText(
-        `❌ Wrong! Your answer: ${formatAnswerForDisplay(userAnswer)}\n\n` +
-        `The correct answer was: ${formatAnswerForDisplay(currentQuestion.correctAnswer)}\n\n` +
-        `📖 Explanation:\n${explanation}\n\n` +
+      await this.safeEditMessage(ctx, 
+        `❌ Wrong! Your answer: ${formatAnswerForDisplay(userAnswer)}
+
+` +
+        `The correct answer was: ${formatAnswerForDisplay(currentQuestion.correctAnswer)}
+
+` +
+        `📖 Explanation:
+${explanation}
+
+` +
         `Score: ${session.correctAnswers}/${session.currentQuestionIndex + 1}`,
         {
           reply_markup: keyboard
@@ -966,7 +1096,7 @@ class CertificationBot {
       .text('✅ Confirm Selection', 'confirm_selection').row()
       .text('🔄 Clear All', 'clear_selection');
 
-    await ctx.editMessageText(questionText, {
+    await this.safeEditMessage(ctx, questionText, {
       reply_markup: keyboard
     });
   }
@@ -1484,61 +1614,59 @@ class CertificationBot {
     try {
       switch (action) {
         case 'start':
-          await ctx.editMessageText('🚀 Starting new quiz...');
+          await this.safeEditMessage(ctx, '🚀 Starting new quiz...');
           setTimeout(async () => {
             await this.handleStart(ctx);
           }, 1000);
           break;
 
         case 'help':
-          await ctx.editMessageText('📚 Loading help guide...');
+          await this.safeEditMessage(ctx, '📚 Loading help guide...');
           setTimeout(async () => {
             await this.handleHelp(ctx);
           }, 1000);
           break;
 
-        case 'bookmark':
-          await ctx.editMessageText(
-            `💾 <b>Add Bookmark</b>\n\n` +
-            `To bookmark a question, type:\n` +
-            `<code>/bookmark [question_number]</code>\n\n` +
-            `Example: <code>/bookmark 15</code>\n\n` +
-            `This will save question #15 for later review.`,
-            { parse_mode: 'HTML' }
-          );
-          break;
+        case 'bookmark':          await this.safeEditMessage(ctx,             `💾 <b>Add Bookmark</b>
+
+` +            `To bookmark a question, type:
+` +            `<code>/bookmark [question_number]</code>
+
+` +            `Example: <code>/bookmark 15</code>
+
+` +            `This will save question #15 for later review.`,            { parse_mode: 'HTML' }          );          break;
 
         case 'bookmarks':
-          await ctx.editMessageText('📑 Loading your bookmarks...');
+          await this.safeEditMessage(ctx, '📑 Loading your bookmarks...');
           setTimeout(async () => {
             await this.handleShowBookmarks(ctx);
           }, 1000);
           break;
 
         case 'revision':
-          await ctx.editMessageText('🔄 Loading revision mode...');
+          await this.safeEditMessage(ctx, '🔄 Loading revision mode...');
           setTimeout(async () => {
             await this.handleRevision(ctx);
           }, 1000);
           break;
 
         case 'close':
-          await ctx.editMessageText('✅ Menu closed. Type /menu to open it again.');
+          await this.safeEditMessage(ctx, '✅ Menu closed. Type /menu to open it again.');
           break;
 
         case 'current_question':
           if (this.userSessions.has(ctx.from.id)) {
-            await ctx.editMessageText('📝 Loading current question...');
+            await this.safeEditMessage(ctx, '📝 Loading current question...');
             setTimeout(async () => {
               await this.showCurrentQuestion(ctx);
             }, 1000);
           } else {
-            await ctx.editMessageText('❌ No active quiz session. Start a new quiz first.');
+            await this.safeEditMessage(ctx, '❌ No active quiz session. Start a new quiz first.');
           }
           break;
 
         case 'restart':
-          await ctx.editMessageText('🔄 Restarting quiz...');
+          await this.safeEditMessage(ctx, '🔄 Restarting quiz...');
           setTimeout(async () => {
             await this.handleStart(ctx);
           }, 1000);
@@ -1549,9 +1677,9 @@ class CertificationBot {
           if (this.userSessions.has(userId)) {
             this.userSessions.delete(userId);
             this.userSelections.delete(userId);
-            await ctx.editMessageText('🏁 Quiz session ended. Type /start to begin a new quiz.');
+            await this.safeEditMessage(ctx, '🏁 Quiz session ended. Type /start to begin a new quiz.');
           } else {
-            await ctx.editMessageText('❌ No active quiz session to end.');
+            await this.safeEditMessage(ctx, '❌ No active quiz session to end.');
           }
           break;
 
@@ -1561,17 +1689,17 @@ class CertificationBot {
             const currentQuestion = session.questions[session.currentQuestionIndex];
             if (currentQuestion) {
               await this.saveBookmark(ctx.from.id, session, currentQuestion);
-              await ctx.editMessageText(`💾 Current question #${currentQuestion.question_no} bookmarked successfully!`);
+              await this.safeEditMessage(ctx, `💾 Current question #${currentQuestion.question_no} bookmarked successfully!`);
             } else {
-              await ctx.editMessageText('❌ No current question to bookmark.');
+              await this.safeEditMessage(ctx, '❌ No current question to bookmark.');
             }
           } else {
-            await ctx.editMessageText('❌ No active quiz session. Start a quiz first.');
+            await this.safeEditMessage(ctx, '❌ No active quiz session. Start a quiz first.');
           }
           break;
 
         default:
-          await ctx.editMessageText('❌ Unknown command. Type /menu to see available options.');
+          await this.safeEditMessage(ctx, '❌ Unknown command. Type /menu to see available options.');
       }
     } catch (error) {
       console.error('Error handling menu action:', error);
@@ -1601,7 +1729,7 @@ class CertificationBot {
         .text('📑 View Bookmarks', 'menu_bookmarks').text('🔄 Revision Mode', 'menu_revision').row()
         .text('📚 Help', 'menu_help').text('❌ Close', 'menu_close');
       
-      await ctx.editMessageText(menuMessage, {
+      await this.safeEditMessage(ctx, menuMessage, {
         reply_markup: keyboard,
         parse_mode: 'HTML'
       });
@@ -1617,10 +1745,42 @@ class CertificationBot {
         .text('📚 Help Guide', 'menu_help').row()
         .text('❌ Close', 'menu_close');
       
-      await ctx.editMessageText(menuMessage, {
+      await this.safeEditMessage(ctx, menuMessage, {
         reply_markup: keyboard,
         parse_mode: 'HTML'
       });
+    }
+  }
+
+  /**
+   * Safely edits a message, checking if the content has actually changed.
+   * @param {object} ctx - The Grammy context object.
+   * @param {string} newText - The new text for the message.
+   * @param {object} newOptions - The new options for the message (e.g., reply_markup).
+   */
+  async safeEditMessage(ctx, newText, newOptions) {
+    try {
+      // Get the current message content
+      const currentMessage = ctx.callbackQuery?.message;
+      const currentText = currentMessage?.text;
+      const currentReplyMarkup = currentMessage?.reply_markup;
+
+      // Normalize and compare content to avoid unnecessary API calls
+      const isTextChanged = newText.trim() !== (currentText || '').trim();
+      const isMarkupChanged = JSON.stringify(newOptions?.reply_markup) !== JSON.stringify(currentReplyMarkup);
+
+      if (isTextChanged || isMarkupChanged) {
+        await ctx.editMessageText(newText, newOptions);
+      } else {
+        console.log('Skipping message edit because content is identical.');
+      }
+    } catch (error) {
+      // Log the error, but don't crash the bot
+      if (error.message.includes('message is not modified')) {
+        console.warn('Attempted to edit message with same content, which was caught by safeEditMessage.');
+      } else {
+        console.error('Error in safeEditMessage:', error);
+      }
     }
   }
 }
@@ -1636,7 +1796,8 @@ const bot = new CertificationBot();
 // Add process title for easier identification
 process.title = 'telegram-aws-cert-bot';
 
-bot.start();
+// The bot will start automatically through initializeAsync()
+console.log('Telegram bot service starting...');
 
 // Handle graceful shutdown
 let isShuttingDown = false;

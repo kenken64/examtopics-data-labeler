@@ -119,4 +119,21 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Mobile-friendly touch targets */
+  @media (max-width: 640px) {
+    button, a, input, textarea, select {
+      @apply min-h-[44px] min-w-[44px];
+    }
+    
+    /* Ensure text is readable on mobile */
+    body {
+      font-size: 16px; /* Prevents zoom on iOS */
+    }
+    
+    /* Better spacing for mobile */
+    .container {
+      @apply px-4;
+    }
+  }
 }
