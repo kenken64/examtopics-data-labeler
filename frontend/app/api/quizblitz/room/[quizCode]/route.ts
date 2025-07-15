@@ -1,23 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
-import { authenticateRequest } from '@/lib/auth-helpers';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 
-export async function GET(
-  request: NextRequest,
+export const GET = withAuth(async (
+  request: AuthenticatedRequest,
   { params }: { params: Promise<{ quizCode: string }> }
-) {
+) => {
   try {
-    // Check authentication first
-    const { user, error } = await authenticateRequest(request);
-    
-    if (error || !user) {
-      console.log('❌ Authentication failed for room access:', error);
-      return NextResponse.json(
-        { error: 'Authentication required to access quiz room.' },
-        { status: 401 }
-      );
-    }
-    
     const { quizCode } = await params;
 
     if (!quizCode) {
@@ -66,4 +55,4 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});

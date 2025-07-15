@@ -52,6 +52,7 @@ export default function LiveQuizPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [quizFinished, setQuizFinished] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [quizStatus, setQuizStatus] = useState<string>('waiting');
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -63,12 +64,20 @@ export default function LiveQuizPage() {
 
     loadQuizSession();
     
+    // Poll for quiz status changes every 3 seconds when waiting
+    const pollInterval = setInterval(() => {
+      if (quizStatus === 'waiting') {
+        loadQuizSession();
+      }
+    }, 3000);
+    
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      clearInterval(pollInterval);
     };
-  }, [quizCode, router]);
+  }, [quizCode, router, quizStatus]);
 
   const loadQuizSession = async () => {
     try {
@@ -83,10 +92,13 @@ export default function LiveQuizPage() {
       setTotalQuestions(data.totalQuestions);
       setTimeRemaining(data.timerDuration);
       setPlayers(data.players || []);
+      setQuizStatus(data.status || 'waiting');
       setLoading(false);
 
-      // Start timer
-      startTimer(data.timerDuration);
+      // Only start timer if quiz has actually started and we have a question
+      if (data.status !== 'waiting' && data.currentQuestion && data.timerDuration) {
+        startTimer(data.timerDuration);
+      }
 
     } catch (error) {
       console.error('Failed to load quiz session:', error);
@@ -223,6 +235,104 @@ export default function LiveQuizPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-lg font-medium">Loading quiz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading quiz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Waiting room state - show players waiting for host to start
+  if (quizStatus === 'waiting') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <Badge variant="outline" className="font-mono mb-4">
+              Quiz Code: {quizCode}
+            </Badge>
+            <h1 className="text-3xl font-bold mb-2">Waiting for Host</h1>
+            <p className="text-muted-foreground">
+              The quiz will start when the host begins the session
+            </p>
+          </div>
+
+          {/* Players Waiting */}
+          <Card className="bg-white/80 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                Players Ready ({players.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {players.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No players have joined yet</p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {players.map((player, index) => (
+                    <div 
+                      key={player.id} 
+                      className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border"
+                    >
+                      <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-bold text-blue-600">
+                          {player.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <span className="font-medium text-sm">{player.name}</span>
+                      <div className="ml-auto">
+                        <Badge variant="outline" className="text-xs">
+                          Ready
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Waiting Animation */}
+          <div className="text-center mt-8">
+            <div className="inline-flex items-center gap-2 text-muted-foreground">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
+              <span className="text-sm">Waiting for quiz to start...</span>
+            </div>
+          </div>
+
+          {/* Host Instructions */}
+          {isHost && (
+            <Card className="mt-6 bg-blue-50 border-blue-200">
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-blue-800 font-medium mb-2">
+                    You are the host!
+                  </p>
+                  <p className="text-blue-600 text-sm">
+                    Start the quiz from your host dashboard when ready
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     );
