@@ -66,6 +66,10 @@ const PUBLIC_ROUTES = [
   '/api/auth/logout',
   '/api/auth/verify',
   '/api/debug-auth',
+  '/api/health',
+  '/api/quizblitz/join',
+  '/api/quizblitz/session',
+  '/api/quizblitz/events/session', // SSE endpoint for session updates (public)
 ];
 
 // Define static file extensions that should be allowed
@@ -105,6 +109,16 @@ function isPublicRoute(pathname: string): boolean {
     return true;
   }
 
+  // Check QuizBlitz session API pattern (dynamic route)
+  if (pathname.startsWith('/api/quizblitz/session/')) {
+    return true;
+  }
+
+  // Check QuizBlitz SSE session events API pattern (dynamic route, public)
+  if (pathname.startsWith('/api/quizblitz/events/session/')) {
+    return true;
+  }
+
   // Check if it's a static file
   const hasStaticExtension = STATIC_FILE_EXTENSIONS.some(ext => 
     pathname.toLowerCase().endsWith(ext)
@@ -127,23 +141,51 @@ function isApiRoute(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const method = request.method;
+  const userAgent = request.headers.get('user-agent')?.substring(0, 50) || 'Unknown';
   
-  // Get token once for both debug and auth logic
-  const token = request.cookies.get('token')?.value;
-  console.log(`🔍 Middleware: ${pathname} | Token present: ${!!token} | Cookies:`, request.cookies.getAll().map(c => c.name));
+  console.log(`\n🔍 === MIDDLEWARE START ===`);
+  console.log(`📍 Request: ${method} ${pathname}`);
+  console.log(`🌐 User Agent: ${userAgent}...`);
+  
+  // Get token from cookies first, then Authorization header
+  let token = request.cookies.get('token')?.value;
+  let tokenSource = 'None';
+  
+  // If no token in cookies, try Authorization header
+  if (!token) {
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+      tokenSource = 'Authorization Header';
+    }
+  } else {
+    tokenSource = 'Cookie';
+  }
+  
+  console.log(`🔑 Token Status: ${!!token ? '✅ Present' : '❌ Missing'} | Source: ${tokenSource}`);
   
   if (token) {
-    console.log('🔍 Token preview:', token.substring(0, 50) + '...');
+    console.log(`🔍 Token Preview: ${token.substring(0, 50)}...`);
   }
 
-  // Allow public routes
-  if (isPublicRoute(pathname)) {
+  // Check if route is public
+  const isPublic = isPublicRoute(pathname);
+  console.log(`🌍 Route Type: ${isPublic ? '🌐 PUBLIC' : '🔒 PROTECTED'}`);
+  
+  if (isPublic) {
+    console.log(`✅ ALLOWING: Public route - ${pathname}`);
+    console.log(`🔍 === MIDDLEWARE END: ALLOWED ===\n`);
     return NextResponse.next();
   }
 
   // For API routes, check JWT token
   if (isApiRoute(pathname)) {
+    console.log(`🔌 Processing API Route: ${pathname}`);
+    
     if (!token) {
+      console.log(`❌ REJECTING: API route requires authentication - ${pathname}`);
+      console.log(`🔍 === MIDDLEWARE END: REJECTED (401) ===\n`);
       return NextResponse.json(
         { error: 'Authentication required. Please log in.' },
         { status: 401 }
@@ -152,11 +194,16 @@ export async function middleware(request: NextRequest) {
 
     try {
       const decoded = await verifyJWTEdgeRuntime(token, JWT_SECRET);
-      console.log('🔍 JWT verification successful for API route');
+      console.log(`✅ JWT Valid: userId=${decoded.userId}, username=${decoded.username}`);
+      console.log(`✅ ALLOWING: Authenticated API request - ${pathname}`);
+      console.log(`🔍 === MIDDLEWARE END: ALLOWED ===\n`);
       // Token is valid, continue
       return NextResponse.next();
     } catch (error: any) {
-      console.log('🔍 JWT verification failed for API route:', error.message);
+      console.log(`❌ JWT Invalid: ${error.message}`);
+      console.log(`❌ REJECTING: Invalid/expired token for API - ${pathname}`);
+      console.log(`🔍 === MIDDLEWARE END: REJECTED (401) ===\n`);
+      
       if (error.message.includes('expired')) {
         return NextResponse.json(
           { error: 'Token expired. Please log in again.' },
@@ -172,22 +219,30 @@ export async function middleware(request: NextRequest) {
   }
 
   // For non-API routes (pages), redirect to login if not authenticated
+  console.log(`📄 Processing Page Route: ${pathname}`);
+  
   if (!token) {
     const loginUrl = new URL('/', request.url);
     loginUrl.searchParams.set('redirect', pathname);
+    console.log(`❌ REDIRECTING: No token for page route - ${pathname} → ${loginUrl.pathname}${loginUrl.search}`);
+    console.log(`🔍 === MIDDLEWARE END: REDIRECTED ===\n`);
     return NextResponse.redirect(loginUrl);
   }
 
   try {
     const decoded = await verifyJWTEdgeRuntime(token, JWT_SECRET);
-    console.log('🔍 JWT verification successful for page route');
+    console.log(`✅ JWT Valid: userId=${decoded.userId}, username=${decoded.username}`);
+    console.log(`✅ ALLOWING: Authenticated page request - ${pathname}`);
+    console.log(`🔍 === MIDDLEWARE END: ALLOWED ===\n`);
     // Token is valid, continue
     return NextResponse.next();
   } catch (error: any) {
-    console.log('🔍 JWT verification failed for page route:', error.message);
     // Token is invalid, redirect to login
     const loginUrl = new URL('/', request.url);
     loginUrl.searchParams.set('redirect', pathname);
+    console.log(`❌ JWT Invalid: ${error.message}`);
+    console.log(`❌ REDIRECTING: Invalid/expired token for page - ${pathname} → ${loginUrl.pathname}${loginUrl.search}`);
+    console.log(`🔍 === MIDDLEWARE END: REDIRECTED ===\n`);
     return NextResponse.redirect(loginUrl);
   }
 }

@@ -24,7 +24,8 @@ import {
   User,
   Settings,
   CreditCard,
-  KeySquare
+  KeySquare,
+  Zap
 } from "lucide-react";
 
 const SlidingMenu = () => {
@@ -137,6 +138,15 @@ const SlidingMenu = () => {
             >
               <KeySquare className="mr-3 h-5 w-5" />
               Access codes
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start h-12 px-4 text-left font-normal hover:bg-accent hover:text-accent-foreground"
+              onClick={() => handleNavigation('/quizblitz')}
+            >
+              <Zap className="mr-3 h-5 w-5" />
+              QuizBlitz
             </Button>
 
             <Button 
