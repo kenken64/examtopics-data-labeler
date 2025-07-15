@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
-import { authenticateRequest } from '@/lib/auth-helpers';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: AuthenticatedRequest) => {
   try {
     console.log('🚀 Quiz start endpoint called');
-    
-    // Check authentication first
-    const { user, error } = await authenticateRequest(request);
-    
-    if (error || !user) {
-      console.log('❌ Authentication failed:', error);
-      return NextResponse.json(
-        { error: 'Authentication required to start quiz.' },
-        { status: 401 }
-      );
-    }
-    
-    console.log('✅ User authenticated:', user.email);
+    console.log('✅ User authenticated:', request.user?.username);
     
     const { quizCode, accessCode, timerDuration, players } = await request.json();
 
@@ -118,7 +106,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 // Helper function to notify Telegram bot
 async function notifyTelegramBot(quizCode: string, data: any) {

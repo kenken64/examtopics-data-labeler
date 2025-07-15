@@ -151,6 +151,7 @@ export default function QuizHostPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Include cookies for authentication
         body: JSON.stringify({
           quizCode,
           accessCode,
