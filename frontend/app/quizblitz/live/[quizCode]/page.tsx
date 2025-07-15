@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Trophy, Timer, Users, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSessionSSE } from '@/lib/use-sse';
 
 interface Question {
   _id: string;
@@ -33,7 +34,7 @@ interface QuestionResult {
   leaderboard: Player[];
 }
 
-export default function LiveQuizPage() {
+function LiveQuizPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -56,59 +57,51 @@ export default function LiveQuizPage() {
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Use SSE for real-time quiz session updates instead of polling
+  const { sessionData, isConnected: sseConnected, error: sseError } = useSessionSSE(quizCode || null);
+
+  // Update component state when SSE data changes
+  useEffect(() => {
+    if (sessionData) {
+      setCurrentQuestion(sessionData.currentQuestion);
+      setQuestionIndex(sessionData.currentQuestionIndex);
+      setTotalQuestions(sessionData.totalQuestions);
+      setPlayers(sessionData.players || []);
+      setQuizStatus(sessionData.status);
+      setQuizFinished(sessionData.isQuizCompleted || false);
+      setLoading(false);
+
+      // Handle quiz status transitions
+      if (sessionData.status === 'active' && sessionData.currentQuestion) {
+        // Quiz has started with an active question
+        if (sessionData.timerDuration) {
+          setTimeRemaining(sessionData.timerDuration);
+          startTimer();
+        }
+      }
+    }
+  }, [sessionData]);
+
   useEffect(() => {
     if (!quizCode) {
       router.push('/quizblitz');
       return;
     }
 
-    loadQuizSession();
-    
-    // Poll for quiz status changes every 3 seconds when waiting
-    const pollInterval = setInterval(() => {
-      if (quizStatus === 'waiting') {
-        loadQuizSession();
-      }
-    }, 3000);
-    
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      clearInterval(pollInterval);
     };
-  }, [quizCode, router, quizStatus]);
+    }, [quizCode, router]);
 
-  const loadQuizSession = async () => {
-    try {
-      const response = await fetch(`/api/quizblitz/session/${quizCode}`);
-      if (!response.ok) {
-        throw new Error('Quiz session not found');
-      }
+  const startTimer = (duration?: number) => {
+    const initialTime = duration || timeRemaining;
+    setTimeRemaining(initialTime);
 
-      const data = await response.json();
-      setCurrentQuestion(data.currentQuestion);
-      setQuestionIndex(data.currentQuestionIndex);
-      setTotalQuestions(data.totalQuestions);
-      setTimeRemaining(data.timerDuration);
-      setPlayers(data.players || []);
-      setQuizStatus(data.status || 'waiting');
-      setLoading(false);
-
-      // Only start timer if quiz has actually started and we have a question
-      if (data.status !== 'waiting' && data.currentQuestion && data.timerDuration) {
-        startTimer(data.timerDuration);
-      }
-
-    } catch (error) {
-      console.error('Failed to load quiz session:', error);
-      toast.error('Failed to load quiz session');
-      router.push('/quizblitz');
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
     }
-  };
-
-  const startTimer = (duration: number) => {
-    setTimeRemaining(duration);
     
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
@@ -562,5 +555,26 @@ export default function LiveQuizPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function LiveQuizPageLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-lg font-medium">Loading quiz...</p>
+      </div>
+    </div>
+  );
+}
+
+// Main component wrapped with Suspense
+export default function LiveQuizPage() {
+  return (
+    <Suspense fallback={<LiveQuizPageLoading />}>
+      <LiveQuizPageContent />
+    </Suspense>
   );
 }

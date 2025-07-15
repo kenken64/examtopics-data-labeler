@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { Users, Play, Timer, Hash, QrCode, Copy, CheckCircle } from 'lucide-reac
 import { toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
 import QRCode from 'qrcode';
+import { useRoomSSE } from '@/lib/use-sse';
 
 interface Player {
   id: string;
@@ -16,11 +17,10 @@ interface Player {
   joinedAt: Date;
 }
 
-export default function QuizHostPage() {
+function QuizHostPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [quizCode, setQuizCode] = useState('');
-  const [connectedPlayers, setConnectedPlayers] = useState<Player[]>([]);
   const [isStarting, setIsStarting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState('');
@@ -29,6 +29,9 @@ export default function QuizHostPage() {
   const accessCode = searchParams.get('accessCode');
   const timer = searchParams.get('timer');
   const questionCount = searchParams.get('questions');
+
+  // Use SSE for real-time player updates instead of polling
+  const { players: connectedPlayers, isConnected: sseConnected, error: sseError } = useRoomSSE(quizCode || null);
 
   useEffect(() => {
     if (!accessCode || !timer) {
@@ -73,33 +76,12 @@ export default function QuizHostPage() {
         throw new Error('Failed to create quiz room');
       }
 
-      // Start polling for player updates
-      startPlayerPolling(code);
+      // SSE will now handle real-time player updates automatically
 
     } catch (error) {
       console.error('Failed to initialize quiz room:', error);
       toast.error('Failed to create quiz room');
     }
-  };
-
-  const startPlayerPolling = (code: string) => {
-    const pollForPlayers = async () => {
-      try {
-        const response = await fetch(`/api/quizblitz/room/${code}`);
-        if (response.ok) {
-          const data = await response.json();
-          setConnectedPlayers(data.players || []);
-        }
-      } catch (error) {
-        console.error('Error polling for players:', error);
-      }
-    };
-
-    // Poll every 2 seconds
-    const interval = setInterval(pollForPlayers, 2000);
-    
-    // Cleanup on unmount
-    return () => clearInterval(interval);
   };
 
   const copyQuizCode = async () => {
@@ -337,5 +319,26 @@ export default function QuizHostPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function QuizHostPageLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-lg font-medium">Loading quiz setup...</p>
+      </div>
+    </div>
+  );
+}
+
+// Main component wrapped with Suspense
+export default function QuizHostPage() {
+  return (
+    <Suspense fallback={<QuizHostPageLoading />}>
+      <QuizHostPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, BookOpen, Loader2, CheckCircle, XCircle, Info, Brain, Edit, Save, X } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ interface Question {
   [key: string]: string | number | string[] | number[] | boolean | undefined | unknown;
 }
 
-const QuestionDetailPage = () => {
+const QuestionDetailPageContent = () => {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -905,5 +905,26 @@ const QuestionDetailPage = () => {
     </div>
   );
 };
+
+// Loading component for Suspense fallback
+function QuestionDetailPageLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-lg font-medium">Loading question...</p>
+      </div>
+    </div>
+  );
+}
+
+// Main component wrapped with Suspense
+function QuestionDetailPage() {
+  return (
+    <Suspense fallback={<QuestionDetailPageLoading />}>
+      <QuestionDetailPageContent />
+    </Suspense>
+  );
+}
 
 export default QuestionDetailPage;
