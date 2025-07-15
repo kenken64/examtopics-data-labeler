@@ -64,11 +64,12 @@ function QuizHostPageContent() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Include cookies for authentication
         body: JSON.stringify({
           quizCode: code,
           accessCode,
-          timerDuration: parseInt(timer || '30'),
-          hostId: 'current-user-id' // Replace with actual user ID
+          timerDuration: parseInt(timer || '30')
+          // hostUserId will be set automatically from authenticated user
         }),
       });
 

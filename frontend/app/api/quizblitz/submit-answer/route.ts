@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { getQuizTimerService } from '@/lib/quiz-timer-service';
 
 export async function POST(request: NextRequest) {
   try {
-    const { quizCode, questionIndex, answer, playerId, timestamp } = await request.json();
+    const { quizCode, questionIndex, answer, playerId, playerName, timestamp } = await request.json();
 
     if (!quizCode || questionIndex === undefined || !answer || !playerId) {
       return NextResponse.json(
@@ -12,6 +13,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Try using the timer service first (for real-time quizzes)
+    const timerService = getQuizTimerService();
+    const timerSuccess = await timerService.submitAnswer(
+      quizCode,
+      playerId,
+      playerName || `Player-${playerId}`,
+      answer
+    );
+
+    if (timerSuccess) {
+      return NextResponse.json({
+        success: true,
+        message: 'Answer submitted via timer service'
+      });
+    }
+
+    // Fallback to direct database storage (for non-real-time quizzes)
     const db = await connectToDatabase();
     
     // Find quiz session

@@ -18,9 +18,9 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('✅ User authenticated:', user.email);
-    const { quizCode, accessCode, timerDuration, hostId } = await request.json();
+    const { quizCode, accessCode, timerDuration } = await request.json();
 
-    if (!quizCode || !accessCode || !timerDuration || !hostId) {
+    if (!quizCode || !accessCode || !timerDuration) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     const quizRoom = {
       quizCode: quizCode.toUpperCase(),
       accessCode: accessCode.toUpperCase(),
-      hostId,
+      hostUserId: user.userId, // ✅ Use authenticated user ID with correct field name
       timerDuration,
       status: 'waiting', // waiting, active, finished
       players: [],
