@@ -2274,19 +2274,42 @@ ${explanation}
     try {
       const session = this.userSessions.get(telegramId);
       if (!session || !session.quizJoined) {
+        console.log(`⚠️ User ${telegramId} not in quiz session`);
         return;
       }
 
+      console.log(`📤 Sending question to Telegram user ${telegramId}`);
+      console.log('Question data:', JSON.stringify(questionData, null, 2));
+
       const keyboard = new InlineKeyboard();
       
-      // Add answer options
+      // Check if options exist and format them properly
+      if (!questionData.options) {
+        console.error('No options provided for question:', questionData);
+        return;
+      }
+
+      // Add answer options - handle both object and direct format
+      const optionsToShow = [];
       Object.entries(questionData.options).forEach(([key, value]) => {
-        keyboard.text(`${key}. ${value}`, `quiz_answer_${key}_${quizCode}`).row();
+        if (value && value.trim()) {
+          optionsToShow.push({ key, value: value.trim() });
+          keyboard.text(`${key}. ${value.trim()}`, `quiz_answer_${key}_${quizCode}`).row();
+        }
+      });
+
+      console.log(`📝 Question has ${optionsToShow.length} options:`, optionsToShow);
+
+      // Format the question text with options displayed
+      let questionOptionsText = '';
+      optionsToShow.forEach(({ key, value }) => {
+        questionOptionsText += `${key}. ${value}\n`;
       });
 
       const questionText = 
         `🎯 *Question ${questionData.index + 1}*\n\n` +
         `${questionData.question}\n\n` +
+        `📋 *Options:*\n${questionOptionsText}\n` +
         `⏱️ *Time remaining: ${questionData.timeLimit} seconds*\n` +
         `🏆 *Points: ${questionData.points}*`;
 
@@ -2295,8 +2318,11 @@ ${explanation}
         reply_markup: keyboard
       });
 
+      console.log(`✅ Question sent successfully to user ${telegramId}`);
+
     } catch (error) {
       console.error('Error sending quiz question:', error);
+      console.error('Error details:', error.stack);
     }
   }
 
@@ -2320,26 +2346,39 @@ ${explanation}
         return;
       }
       
-      // Check for active quiz sessions that need Telegram bot sync
+      // Check for active quiz sessions
       const activeSessions = await this.db.collection('quizSessions')
         .find({ 
-          status: 'active',
-          // Only process sessions that have Telegram players
-          $or: [
-            { telegramPlayersNotified: { $ne: true } },
-            { telegramPlayersNotified: { $exists: false } }
-          ]
+          status: 'active'
         })
         .toArray();
 
       for (const session of activeSessions) {
-        // Check if there are Telegram players for this quiz
+        console.log(`🔍 Processing quiz session: ${session.quizCode}`);
+        
+        // Check if there are Telegram players for this quiz from the database
+        const quizRoom = await this.db.collection('quizRooms').findOne({ 
+          quizCode: session.quizCode 
+        });
+        
         const telegramPlayers = [];
-        for (const [telegramId, userSession] of this.userSessions.entries()) {
-          if (userSession.quizJoined && userSession.quizCode === session.quizCode) {
-            telegramPlayers.push(telegramId);
+        if (quizRoom && quizRoom.players) {
+          // Find players that joined via Telegram (check for Telegram ID format or source)
+          for (const player of quizRoom.players) {
+            // Telegram IDs are typically large numbers (7+ digits)
+            if (player.id && (String(player.id).length >= 7 || player.source === 'telegram')) {
+              telegramPlayers.push({
+                id: player.id,
+                name: player.name
+              });
+            }
           }
         }
+        
+        console.log(`👥 Found ${telegramPlayers.length} Telegram players for quiz ${session.quizCode}`);
+        telegramPlayers.forEach(player => {
+          console.log(`   - ${player.name} (ID: ${player.id})`);
+        });
 
         if (telegramPlayers.length > 0) {
           // Send current question to Telegram players
@@ -2347,24 +2386,40 @@ ${explanation}
           if (session.questions && session.questions[currentQuestionIndex]) {
             const currentQuestion = session.questions[currentQuestionIndex];
             
-            for (const telegramId of telegramPlayers) {
-              await this.sendQuizQuestion(telegramId, {
-                index: currentQuestionIndex,
-                question: currentQuestion.question,
-                options: currentQuestion.options,
-                timeLimit: session.timerDuration,
-                points: 1000
-              }, session.quizCode);
+            // Check if we need to send this question (based on lastNotifiedQuestionIndex)
+            const lastNotifiedIndex = session.lastNotifiedQuestionIndex || -1;
+            
+            console.log(`📝 Question check: current=${currentQuestionIndex}, lastNotified=${lastNotifiedIndex}`);
+            
+            if (currentQuestionIndex > lastNotifiedIndex) {
+              console.log(`📤 Sending question ${currentQuestionIndex + 1} to ${telegramPlayers.length} Telegram players for quiz ${session.quizCode}`);
+              
+              for (const player of telegramPlayers) {
+                console.log(`📱 Sending question to ${player.name} (${player.id})`);
+                await this.sendQuizQuestion(player.id, {
+                  index: currentQuestionIndex,
+                  question: currentQuestion.question,
+                  options: currentQuestion.options,
+                  timeLimit: session.timerDuration || 30,
+                  points: 1000
+                }, session.quizCode);
+              }
+
+              console.log(`✅ Updated lastNotifiedQuestionIndex from ${lastNotifiedIndex} to ${currentQuestionIndex} for quiz ${session.quizCode}`);
+              
+              // Update the last notified question index
+              await this.db.collection('quizSessions').updateOne(
+                { _id: session._id },
+                { $set: { lastNotifiedQuestionIndex: currentQuestionIndex } }
+              );
+            } else {
+              console.log(`⏭️ Question ${currentQuestionIndex + 1} already sent (last notified: ${lastNotifiedIndex})`);
             }
-
-            // Mark as notified to avoid sending multiple times
-            await this.db.collection('quizSessions').updateOne(
-              { _id: session._id },
-              { $set: { telegramPlayersNotified: true } }
-            );
-
-            console.log(`📤 Sent question ${currentQuestionIndex + 1} to ${telegramPlayers.length} Telegram players for quiz ${session.quizCode}`);
+          } else {
+            console.log(`❌ No question found at index ${currentQuestionIndex} for quiz ${session.quizCode}`);
           }
+        } else {
+          console.log(`👥 No Telegram players found for quiz ${session.quizCode}`);
         }
       }
 

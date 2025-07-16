@@ -108,7 +108,8 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
       startedAt: new Date(),
       currentQuestionIndex: 0,
       playerAnswers: {},
-      isQuizCompleted: false
+      isQuizCompleted: false,
+      lastNotifiedQuestionIndex: -1 // Initialize Telegram notification tracking
     };
 
     // Insert quiz session into quizSessions collection

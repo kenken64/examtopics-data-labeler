@@ -40,19 +40,26 @@ export default function QuizBlitzPage() {
   };
 
   const handleContinue = async () => {
+    console.log('🚀 QuizBlitz: handleContinue called', { accessCode, timerDuration });
+    
     if (!accessCode.trim()) {
+      console.log('❌ QuizBlitz: No access code provided');
       toast.error('Please enter an access code');
       return;
     }
 
     if (timerDuration < 5 || timerDuration > 300) {
+      console.log('❌ QuizBlitz: Invalid timer duration', timerDuration);
       toast.error('Timer must be between 5 and 300 seconds');
       return;
     }
 
     setIsVerifying(true);
+    console.log('🔄 QuizBlitz: Starting verification process...');
 
     try {
+      console.log('📡 QuizBlitz: Sending verify request to /api/access-codes/verify');
+      
       // Verify access code with authentication
       const response = await fetch(`/api/access-codes/verify`, {
         method: 'POST',
@@ -63,19 +70,33 @@ export default function QuizBlitzPage() {
         body: JSON.stringify({ accessCode }),
       });
 
+      console.log('📨 QuizBlitz: Received response', { 
+        status: response.status, 
+        statusText: response.statusText,
+        ok: response.ok 
+      });
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.log('❌ QuizBlitz: Response not ok', errorText);
         throw new Error('Invalid access code');
       }
 
       const data = await response.json();
+      console.log('✅ QuizBlitz: Verification successful', data);
+      
+      const hostUrl = `/quizblitz/host?accessCode=${accessCode}&timer=${timerDuration}&questions=${data.questionCount}`;
+      console.log('🔗 QuizBlitz: Navigating to', hostUrl);
       
       // Navigate to waiting room with quiz configuration
-      router.push(`/quizblitz/host?accessCode=${accessCode}&timer=${timerDuration}&questions=${data.questionCount}`);
+      router.push(hostUrl);
       
     } catch (error) {
+      console.error('💥 QuizBlitz: Verification error', error);
       toast.error('Invalid access code. Please check and try again.');
     } finally {
       setIsVerifying(false);
+      console.log('🔄 QuizBlitz: Verification process completed');
     }
   };
 
