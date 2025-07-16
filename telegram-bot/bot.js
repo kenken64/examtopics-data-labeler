@@ -2283,20 +2283,47 @@ ${explanation}
 
       const keyboard = new InlineKeyboard();
       
+      // Handle different question data formats
+      let question, options, questionIndex, timeLimit, points;
+      
+      if (questionData.question) {
+        // Direct question format
+        question = questionData.question;
+        options = questionData.options;
+        questionIndex = questionData.index !== undefined ? questionData.index : questionData.questionIndex;
+        timeLimit = questionData.timeLimit || questionData.timerDuration || 30;
+        points = questionData.points || 1000;
+      } else {
+        console.error('Invalid question data format:', questionData);
+        return;
+      }
+
       // Check if options exist and format them properly
-      if (!questionData.options) {
+      if (!options) {
         console.error('No options provided for question:', questionData);
         return;
       }
 
       // Add answer options - handle both object and direct format
       const optionsToShow = [];
-      Object.entries(questionData.options).forEach(([key, value]) => {
-        if (value && value.trim()) {
-          optionsToShow.push({ key, value: value.trim() });
-          keyboard.text(`${key}. ${value.trim()}`, `quiz_answer_${key}_${quizCode}`).row();
-        }
-      });
+      if (Array.isArray(options)) {
+        // Array format
+        options.forEach((option, idx) => {
+          if (option && option.trim()) {
+            const key = String.fromCharCode(65 + idx); // A, B, C, D
+            optionsToShow.push({ key, value: option.trim() });
+            keyboard.text(`${key}. ${option.trim()}`, `quiz_answer_${key}_${quizCode}`).row();
+          }
+        });
+      } else {
+        // Object format
+        Object.entries(options).forEach(([key, value]) => {
+          if (value && value.trim()) {
+            optionsToShow.push({ key, value: value.trim() });
+            keyboard.text(`${key}. ${value.trim()}`, `quiz_answer_${key}_${quizCode}`).row();
+          }
+        });
+      }
 
       console.log(`📝 Question has ${optionsToShow.length} options:`, optionsToShow);
 
@@ -2307,11 +2334,11 @@ ${explanation}
       });
 
       const questionText = 
-        `🎯 *Question ${questionData.index + 1}*\n\n` +
-        `${questionData.question}\n\n` +
+        `🎯 *Question ${(questionIndex || 0) + 1}*\n\n` +
+        `${question}\n\n` +
         `📋 *Options:*\n${questionOptionsText}\n` +
-        `⏱️ *Time remaining: ${questionData.timeLimit} seconds*\n` +
-        `🏆 *Points: ${questionData.points}*`;
+        `⏱️ *Time remaining: ${timeLimit} seconds*\n` +
+        `🏆 *Points: ${points}*`;
 
       await this.bot.api.sendMessage(telegramId, questionText, {
         parse_mode: 'Markdown',
@@ -2328,7 +2355,10 @@ ${explanation}
 
   // Start polling for notifications from frontend
   startNotificationPolling() {
-    // Poll every 3 seconds for new notifications
+    // Use Change Streams for real-time events + polling as fallback
+    this.startQuizEventListener();
+    
+    // Keep polling as fallback for environments without Change Streams
     setInterval(async () => {
       try {
         await this.processQuizNotifications();
@@ -2336,6 +2366,198 @@ ${explanation}
         console.error('Error in notification polling:', error);
       }
     }, 3000);
+  }
+
+  // Listen for real-time quiz events via Change Streams
+  startQuizEventListener() {
+    try {
+      const pipeline = [
+        {
+          $match: {
+            'fullDocument.type': {
+              $in: ['quiz_started', 'question_started', 'timer_update', 'question_ended', 'quiz_ended']
+            }
+          }
+        }
+      ];
+
+      const changeStream = this.db.collection('quizEvents').watch(pipeline, {
+        fullDocument: 'updateLookup'
+      });
+
+      changeStream.on('change', (change) => {
+        if (change.operationType === 'insert' && change.fullDocument) {
+          this.handleRealtimeQuizEvent(change.fullDocument);
+        }
+      });
+
+      changeStream.on('error', (error) => {
+        console.error('Change Stream error:', error);
+        console.log('🔄 Falling back to polling-only mode');
+      });
+
+      console.log('🔄 Started real-time quiz event listener (Change Streams)');
+    } catch (error) {
+      console.error('Failed to start Change Stream listener:', error);
+      console.log('🔄 Using polling-only mode');
+    }
+  }
+
+  // Handle real-time quiz events from Change Streams
+  async handleRealtimeQuizEvent(event) {
+    try {
+      const { type, quizCode, data } = event;
+      console.log(`🔔 Real-time event: ${type} for quiz ${quizCode}`);
+
+      switch (type) {
+        case 'quiz_started':
+          await this.handleQuizStartedEvent(quizCode, data);
+          break;
+        case 'question_started':
+          await this.handleQuestionStartedEvent(quizCode, data);
+          break;
+        case 'timer_update':
+          await this.handleTimerUpdateEvent(quizCode, data);
+          break;
+        case 'question_ended':
+          await this.handleQuestionEndedEvent(quizCode, data);
+          break;
+        case 'quiz_ended':
+          await this.handleQuizEndedEvent(quizCode, data);
+          break;
+        default:
+          console.log(`🤷 Unknown event type: ${type}`);
+      }
+    } catch (error) {
+      console.error('Error handling real-time quiz event:', error);
+    }
+  }
+
+  // Handle timer_update events specifically
+  async handleTimerUpdateEvent(quizCode, data) {
+    try {
+      console.log(`⏰ Timer update for quiz ${quizCode}:`, data);
+      
+      // Get Telegram players for this quiz
+      const telegramPlayers = await this.getTelegramPlayersForQuiz(quizCode);
+      
+      if (telegramPlayers.length === 0) {
+        console.log(`👥 No Telegram players found for quiz ${quizCode}`);
+        return;
+      }
+
+      // For timer updates, send time remaining notifications at key intervals
+      if (data.timeRemaining && [10, 5, 3, 2, 1].includes(data.timeRemaining)) {
+        console.log(`⏰ Sending timer notification: ${data.timeRemaining} seconds remaining to ${telegramPlayers.length} players`);
+        for (const player of telegramPlayers) {
+          try {
+            await this.bot.api.sendMessage(player.id, 
+              `⏰ ${data.timeRemaining} seconds remaining!`
+            );
+          } catch (error) {
+            console.error(`Failed to send timer update to ${player.id}:`, error.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error handling timer update event:', error);
+    }
+  }
+
+  // Get Telegram players for a specific quiz
+  async getTelegramPlayersForQuiz(quizCode) {
+    try {
+      const quizRoom = await this.db.collection('quizRooms').findOne({ 
+        quizCode: quizCode 
+      });
+      
+      const telegramPlayers = [];
+      if (quizRoom && quizRoom.players) {
+        for (const player of quizRoom.players) {
+          // Check if this is a Telegram player
+          if (this.isTelegramPlayer(player)) {
+            telegramPlayers.push({
+              id: player.id,
+              name: player.name
+            });
+          }
+        }
+      }
+      
+      return telegramPlayers;
+    } catch (error) {
+      console.error('Error getting Telegram players:', error);
+      return [];
+    }
+  }
+
+  // Enhanced Telegram player detection
+  isTelegramPlayer(player) {
+    // Method 1: Check if player has source 'telegram'
+    if (player.source === 'telegram') {
+      return true;
+    }
+    
+    // Method 2: Check if player ID is a typical Telegram user ID (large number)
+    if (player.id && typeof player.id === 'number' && player.id > 100000) {
+      return true;
+    }
+    
+    // Method 3: Check if string representation of ID looks like Telegram ID
+    if (player.id && String(player.id).length >= 7 && !isNaN(Number(player.id))) {
+      return true;
+    }
+    
+    // Method 4: Check if we have this user in our Telegram sessions
+    if (this.userSessions && this.userSessions.has(player.id)) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Handle other quiz events
+  async handleQuizStartedEvent(quizCode, data) {
+    console.log(`🎯 Quiz started: ${quizCode}`);
+    // Implementation for quiz start
+  }
+
+  async handleQuestionStartedEvent(quizCode, data) {
+    try {
+      console.log(`❓ Question started for quiz: ${quizCode}`, data);
+      
+      // Get Telegram players for this quiz
+      const telegramPlayers = await this.getTelegramPlayersForQuiz(quizCode);
+      
+      if (telegramPlayers.length === 0) {
+        console.log(`👥 No Telegram players found for quiz ${quizCode}`);
+        return;
+      }
+
+      console.log(`👥 Found ${telegramPlayers.length} Telegram players for question`);
+
+      // Send the question to all Telegram players
+      if (data.question) {
+        console.log(`📤 Sending question to ${telegramPlayers.length} Telegram players`);
+        for (const player of telegramPlayers) {
+          await this.sendQuizQuestion(player.id, data.question, quizCode);
+        }
+      } else {
+        console.error('No question data in question_started event:', data);
+      }
+    } catch (error) {
+      console.error('Error handling question started event:', error);
+    }
+  }
+
+  async handleQuestionEndedEvent(quizCode, data) {
+    console.log(`✅ Question ended for quiz: ${quizCode}`);
+    // Implementation for question end
+  }
+
+  async handleQuizEndedEvent(quizCode, data) {
+    console.log(`🏁 Quiz ended: ${quizCode}`);
+    // Implementation for quiz end
   }
 
   // Process quiz notifications from frontend
