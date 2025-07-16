@@ -14,21 +14,46 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     'Access-Control-Allow-Origin': '*',
   });
 
+  let isClientClosed = false;
+
   const stream = new ReadableStream({
     async start(controller) {
       let changeStream: any = null;
       let isRunning = true;
       let pollingInterval: NodeJS.Timeout | null = null;
+      let isControllerClosed = false;
       
       const cleanup = () => {
         isRunning = false;
         if (changeStream) {
-          changeStream.close();
+          try {
+            changeStream.close();
+          } catch (error) {
+            console.log('Change stream already closed');
+          }
         }
         if (pollingInterval) {
           clearInterval(pollingInterval);
         }
-        client.close();
+        if (!isClientClosed) {
+          try {
+            client.close();
+            isClientClosed = true;
+          } catch (error) {
+            console.log('Client already closed');
+          }
+        }
+      };
+
+      const closeController = () => {
+        if (!isControllerClosed) {
+          try {
+            controller.close();
+            isControllerClosed = true;
+          } catch (error) {
+            console.log('Controller already closed');
+          }
+        }
       };
 
       try {
@@ -52,7 +77,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         changeStream.on('error', (error: any) => {
           console.error('Change stream error:', error);
           cleanup();
-          controller.close();
+          closeController();
         });
 
       } catch (changeStreamError: any) {
@@ -102,7 +127,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     cancel() {
       // This is called when the stream is cancelled
-      client.close();
+      if (!isClientClosed) {
+        try {
+          client.close();
+          isClientClosed = true;
+        } catch (error) {
+          console.log('Client already closed in cancel');
+        }
+      }
     }
   });
 
