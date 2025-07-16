@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   try {
     console.log('👥 Quiz join endpoint called');
     
-    const { quizCode, playerName } = await request.json();
+    const { quizCode, playerName, playerId, source } = await request.json();
 
     if (!quizCode || !playerName) {
       return NextResponse.json(
@@ -35,16 +35,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique player ID
-    const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Use provided player ID or generate new one
+    const finalPlayerId = playerId || `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Check if player already exists (for rejoining)
+    const existingPlayer = quizRoom.players?.find(p => p.id === finalPlayerId);
+    
+    if (existingPlayer) {
+      console.log(`🔄 Player ${playerName} (${finalPlayerId}) already in quiz ${quizCode}`);
+      return NextResponse.json({
+        success: true,
+        playerId: finalPlayerId,
+        playerName: existingPlayer.name,
+        quizCode: quizCode.toUpperCase(),
+        playersCount: quizRoom.players?.length || 0
+      });
+    }
 
     // Create player object
     const player = {
-      id: playerId,
+      id: finalPlayerId,
       name: playerName.trim(),
       joinedAt: new Date(),
       score: 0,
-      answers: []
+      answers: [],
+      source: source || 'web' // Track if player joined via Telegram or web
     };
 
     // Add player to the room
@@ -56,13 +71,14 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    console.log(`✅ Player ${playerName} joined quiz ${quizCode}`);
+    console.log(`✅ Player ${playerName} (${source || 'web'}) joined quiz ${quizCode}`);
 
     return NextResponse.json({
       success: true,
-      playerId,
+      playerId: finalPlayerId,
       playerName: playerName.trim(),
-      quizCode: quizCode.toUpperCase()
+      quizCode: quizCode.toUpperCase(),
+      playersCount: (quizRoom.players?.length || 0) + 1
     });
 
   } catch (error) {

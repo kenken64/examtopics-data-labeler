@@ -26,6 +26,7 @@ interface Player {
   score: number;
   currentAnswer?: string;
   hasAnswered?: boolean;
+  source?: string; // 'web' or 'telegram'
 }
 
 interface QuestionResult {
@@ -42,6 +43,7 @@ function LiveQuizPageContent() {
   
   const quizCode = params.quizCode as string;
   const isHost = searchParams.get('host') === 'true';
+  const currentPlayerId = searchParams.get('playerId'); // Get current player ID
   
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -57,6 +59,7 @@ function LiveQuizPageContent() {
   const [quizStatus, setQuizStatus] = useState<string>('waiting');
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const nextQuestionInProgress = useRef<boolean>(false); // Add debouncing flag
 
   // Use SSE for real-time quiz session updates instead of polling
   const { sessionData, isConnected: sseConnected, error: sseError } = useSessionSSE(quizCode || null);
@@ -83,9 +86,23 @@ function LiveQuizPageContent() {
     }
   }, [sessionData]);
 
+  // Handle timer expiration - show results when timer reaches 0
+  useEffect(() => {
+    if (timeRemaining === 0 && currentQuestion && !showResults) {
+      console.log('⏰ Timer expired! Showing question results...');
+      handleTimeUp();
+    }
+  }, [timeRemaining, currentQuestion, showResults]);
+
   // Real-time quiz event sync (MongoDB Change Streams)
   useQuizEvents(quizCode, {
     onQuestionStarted: (question) => {
+      console.log('🔧 DEBUG: [FRONTEND] onQuestionStarted called:', {
+        questionIndex: question.questionIndex,
+        question: question.question?.substring(0, 50) + '...',
+        timeLimit: question.timeLimit
+      });
+      
       setCurrentQuestion(question);
       setQuestionIndex(question.questionIndex);
       setSelectedAnswer('');
@@ -93,15 +110,38 @@ function LiveQuizPageContent() {
       setShowResults(false);
       setQuestionResult(null);
       setTimeRemaining(question.timeLimit || 30);
+      
+      console.log('🔧 DEBUG: [FRONTEND] State reset for new question');
     },
     onTimerUpdate: (data) => {
+      // Only log timer updates at key intervals to avoid spam
+      if (data.timeRemaining % 10 === 0 || data.timeRemaining <= 5) {
+        console.log('🔧 DEBUG: [FRONTEND] Timer update:', data.timeRemaining);
+      }
       setTimeRemaining(data.timeRemaining);
     },
     onQuestionEnded: (data) => {
+      console.log('🔧 DEBUG: [FRONTEND] onQuestionEnded called:', {
+        correctAnswer: data.results?.correctAnswer,
+        hasResults: !!data.results,
+        leaderboardCount: data.results?.leaderboard?.length || 0
+      });
+      
       setShowResults(true);
-      setQuestionResult(data.results);
+      // Ensure data.results has the required structure
+      const results = data.results || {};
+      const safeResults = {
+        correctAnswer: results.correctAnswer || '',
+        explanation: results.explanation || '',
+        playerAnswers: results.playerAnswers || {},
+        leaderboard: results.leaderboard || []
+      };
+      setQuestionResult(safeResults);
+      
+      console.log('🔧 DEBUG: [FRONTEND] Results will be shown for 5 seconds');
       // Auto-advance to next question after 5 seconds
       setTimeout(() => {
+        console.log('🔧 DEBUG: [FRONTEND] 5-second results timeout expired, hiding results');
         setShowResults(false);
         setQuestionResult(null);
       }, 5000);
@@ -143,28 +183,54 @@ function LiveQuizPageContent() {
         return prev - 1;
       });
     }, 1000);
-  };  const handleTimeUp = async () => {
+  };
+
+  const handleTimeUp = async () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
 
-    if (!hasAnswered && !showResults) {
-      // Auto-submit empty answer when time runs out
+    // Timer up logic should proceed regardless of answer status
+    console.log('⏰ [FRONTEND] Time up! Processing...');
+    console.log('🔧 DEBUG: [FRONTEND] Current state:', {
+      questionIndex: questionIndex + 1,
+      totalQuestions,
+      hasAnswered,
+      showResults
+    });
+    
+    // Auto-submit empty answer if not answered yet
+    if (!hasAnswered) {
       setHasAnswered(true);
-      console.log('⏰ Time up! Auto-submitting...');
-      
+      console.log('📝 [FRONTEND] Auto-submitting empty answer...');
+    }
+    
+    // Check if this is the last question (7/7)
+    const isLastQuestion = questionIndex + 1 >= totalQuestions;
+    
+    if (isLastQuestion) {
+      console.log('🏁 [FRONTEND] Last question completed! Going directly to final results...');
+      // Go directly to final results without showing individual question results
+      setQuizFinished(true);
+      setShowResults(false);
+      setQuestionResult(null);
+    } else {
+      console.log('📊 [FRONTEND] Not last question, showing results and waiting for backend timer service...');
       // Show results for current question
       showQuestionResults();
       
-      // After showing results, automatically move to next question
-      setTimeout(async () => {
-        await nextQuestion();
-      }, 3000); // Show results for 3 seconds
+      // IMPORTANT: The quiz timer service will automatically advance after 5 seconds
+      // The backend timer service will send a new question_started event
+      // The onQuestionStarted handler will reset the state for the next question
+      console.log('⏱️ [FRONTEND] Backend timer service should send next question in 5 seconds...');
     }
   };
 
-  const submitAnswer = async () => {
-    if (!selectedAnswer || hasAnswered) return;
+  const handleAnswerSelection = async (answer: string) => {
+    if (hasAnswered) return;
+
+    setSelectedAnswer(answer);
+    setHasAnswered(true);
 
     try {
       const response = await fetch('/api/quizblitz/submit-answer', {
@@ -175,7 +241,7 @@ function LiveQuizPageContent() {
         body: JSON.stringify({
           quizCode,
           questionIndex,
-          answer: selectedAnswer,
+          answer: answer,
           playerId: 'current-player-id', // Replace with actual player ID
           timestamp: Date.now()
         }),
@@ -185,54 +251,57 @@ function LiveQuizPageContent() {
         throw new Error('Failed to submit answer');
       }
 
-      setHasAnswered(true);
       toast.success('Answer submitted!');
-
-      // For demo purposes, show results after 2 seconds
-      setTimeout(async () => {
-        showQuestionResults();
-        
-        // After showing results, automatically move to next question
-        setTimeout(async () => {
-          await nextQuestion();
-        }, 3000); // Show results for 3 seconds
-      }, 2000);
 
     } catch (error) {
       console.error('Failed to submit answer:', error);
       toast.error('Failed to submit answer');
+      // Reset state on error
+      setHasAnswered(false);
+      setSelectedAnswer('');
     }
   };
 
   const showQuestionResults = () => {
+    console.log('📊 [FRONTEND] showQuestionResults called');
+    
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
 
-    // Mock results for demo
-    const mockResult: QuestionResult = {
+    // Create results with real player data
+    const questionResult: QuestionResult = {
       correctAnswer: currentQuestion?.correctAnswer || '',
       explanation: currentQuestion?.explanation || '',
       playerAnswers: {
-        'player1': selectedAnswer || '',
-        'player2': currentQuestion?.correctAnswer || ''
+        'current-player': selectedAnswer || '' // Only show current player's answer
       },
-      leaderboard: [
-        { id: 'player2', name: 'Demo Player 2', score: 1000 },
-        { id: 'player1', name: 'You', score: selectedAnswer === currentQuestion?.correctAnswer ? 800 : 0 }
-      ]
+      leaderboard: players.map(player => ({
+        id: player.id,
+        name: player.name,
+        score: player.score
+      }))
     };
 
-    setQuestionResult(mockResult);
+    setQuestionResult(questionResult);
     setShowResults(true);
+    
+    console.log('📊 [FRONTEND] Question results displayed, showResults=true');
+    console.log('⏱️ [FRONTEND] Backend timer service should send next question in 5 seconds...');
 
-    // Auto-advance to next question after 5 seconds
-    setTimeout(async () => {
-      await nextQuestion();
-    }, 5000);
+    // REMOVED: Don't manually advance question here - let the timer service handle it
+    // The quiz timer service will automatically advance after 5 seconds
   };
 
   const nextQuestion = async () => {
+    // Debouncing: Prevent multiple simultaneous calls
+    if (nextQuestionInProgress.current) {
+      console.log('⏸️ Next question already in progress, skipping...');
+      return;
+    }
+    
+    nextQuestionInProgress.current = true;
+    
     try {
       // Call API to move to next question
       const response = await fetch('/api/quizblitz/control', {
@@ -249,6 +318,11 @@ function LiveQuizPageContent() {
       const data = await response.json();
       
       if (!response.ok) {
+        // Handle race condition gracefully
+        if (response.status === 409) {
+          console.log('⚠️ Quiz state changed by another process, refreshing...');
+          return; // Let the timer service handle the update
+        }
         throw new Error(data.error || 'Failed to advance question');
       }
 
@@ -277,6 +351,9 @@ function LiveQuizPageContent() {
     } catch (error) {
       console.error('Failed to advance question:', error);
       toast.error('Failed to load next question');
+    } finally {
+      // Reset debouncing flag
+      nextQuestionInProgress.current = false;
     }
   };
 
@@ -390,65 +467,143 @@ function LiveQuizPageContent() {
   }
 
   if (quizFinished) {
+    // Calculate current player stats
+    const currentPlayer = players.find(p => p.id === currentPlayerId) || { name: 'You', score: 0 };
+    const totalPlayers = players.length;
+    const sortedPlayers = players.sort((a, b) => b.score - a.score);
+    const currentPlayerRank = sortedPlayers.findIndex(p => p.id === currentPlayerId) + 1;
+    const correctAnswers = Math.floor(currentPlayer.score / 100); // Assuming 100 points per correct answer
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-100 p-4 sm:p-6 lg:p-8">
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="mb-8">
-            <Trophy className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-            <h1 className="text-4xl font-bold mb-2">Quiz Complete!</h1>
-            <p className="text-lg text-muted-foreground">Great job everyone!</p>
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <Trophy className="h-20 w-20 text-yellow-500 mx-auto mb-4" />
+            <h1 className="text-5xl font-bold mb-2">Quiz Complete!</h1>
+            <p className="text-xl text-muted-foreground">Here are your final results</p>
           </div>
 
-          <Card className="bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle>Final Leaderboard</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {questionResult?.leaderboard.map((player, index) => (
-                  <div key={player.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${
-                      index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : 'bg-orange-400'
-                    }`}>
-                      {index + 1}
-                    </div>
-                    <span className="font-medium flex-1 text-left">{player.name}</span>
-                    <Badge variant="outline" className="font-mono">
-                      {player.score} pts
-                    </Badge>
+          <div className="grid lg:grid-cols-2 gap-8 mb-8">
+            {/* Your Stats */}
+            <Card className="bg-white/90 backdrop-blur-sm border-2 border-blue-200">
+              <CardHeader className="text-center">
+                <CardTitle className="text-2xl flex items-center justify-center gap-2">
+                  <Users className="h-6 w-6" />
+                  Your Performance
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="text-center">
+                  <div className="text-6xl font-bold text-blue-600 mb-2">
+                    {currentPlayerRank}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <p className="text-lg text-muted-foreground">
+                    out of {totalPlayers} players
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="p-4 bg-green-50 rounded-lg">
+                    <div className="text-3xl font-bold text-green-600">
+                      {correctAnswers}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Correct Answers
+                    </p>
+                  </div>
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <div className="text-3xl font-bold text-blue-600">
+                      {currentPlayer.score}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Total Points
+                    </p>
+                  </div>
+                </div>
 
-          <Button
-            onClick={() => router.push('/quizblitz')}
-            className="mt-6 bg-gradient-to-r from-purple-600 to-blue-600"
-            size="lg"
-          >
-            New Quiz
-          </Button>
+                <div className="text-center">
+                  <div className="text-lg font-semibold">
+                    Accuracy: {totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0}%
+                  </div>
+                  <Progress 
+                    value={totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0} 
+                    className="mt-2"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Final Leaderboard */}
+            <Card className="bg-white/90 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="text-2xl flex items-center justify-center gap-2">
+                  <Trophy className="h-6 w-6" />
+                  Final Leaderboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {sortedPlayers.slice(0, 10).map((player, index) => (
+                    <div key={player.id} className={`flex items-center gap-3 p-3 rounded-lg ${
+                      player.id === currentPlayerId ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'
+                    }`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                        index === 0 ? 'bg-yellow-500' : 
+                        index === 1 ? 'bg-gray-400' : 
+                        index === 2 ? 'bg-orange-400' : 'bg-blue-500'
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <span className="font-medium flex-1 text-left">
+                        {player.name} {player.id === currentPlayerId && '(You)'}
+                      </span>
+                      <Badge variant="outline" className="font-mono">
+                        {player.score} pts
+                      </Badge>
+                    </div>
+                  ))}
+                  {players.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>No players data available</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="text-center space-y-4">
+            <p className="text-lg text-muted-foreground">
+              Thank you for playing! 🎉
+            </p>
+            <Button
+              onClick={() => router.push('/quizblitz')}
+              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+              size="lg"
+            >
+              Play Again
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
   if (showResults && questionResult) {
-    const isCorrect = selectedAnswer === questionResult.correctAnswer;
+    // If this is the last question, skip showing results and go directly to final results
+    if (questionIndex + 1 >= totalQuestions) {
+      setQuizFinished(true);
+      setShowResults(false);
+      return null; // This will trigger the quiz finished view
+    }
     
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 p-4 sm:p-6 lg:p-8">
         <div className="max-w-4xl mx-auto">
-          {/* Results Header */}
+          {/* Results Header - Removed individual correct/incorrect status */}
           <div className="text-center mb-6">
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-white mb-4 ${
-              isCorrect ? 'bg-green-500' : 'bg-red-500'
-            }`}>
-              {isCorrect ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
-              {isCorrect ? 'Correct!' : 'Incorrect'}
-            </div>
             <h2 className="text-2xl font-bold">Question {questionIndex + 1} Results</h2>
+            <p className="text-muted-foreground mt-2">See how everyone performed</p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
@@ -480,7 +635,7 @@ function LiveQuizPageContent() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {questionResult.leaderboard.slice(0, 5).map((player, index) => (
+                  {questionResult?.leaderboard?.slice(0, 5).map((player, index) => (
                     <div key={player.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
                       <span className="font-bold text-sm w-6">{index + 1}</span>
                       <span className="flex-1 text-sm font-medium">{player.name}</span>
@@ -488,7 +643,11 @@ function LiveQuizPageContent() {
                         {player.score}
                       </Badge>
                     </div>
-                  ))}
+                  )) || (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <p className="text-sm">No leaderboard data available</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -497,9 +656,7 @@ function LiveQuizPageContent() {
           {/* Next Question Info */}
           <div className="text-center mt-6">
             <p className="text-muted-foreground">
-              {questionIndex + 1 < totalQuestions 
-                ? `Next question in 5 seconds...` 
-                : 'Quiz completed!'}
+              Next question in 5 seconds...
             </p>
           </div>
         </div>
@@ -536,81 +693,145 @@ function LiveQuizPageContent() {
           className="mb-6 h-2"
         />
 
-        {/* Question Card */}
-        <Card className="mb-6 bg-white/80 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-xl">
-              {currentQuestion?.question}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3">
-              {currentQuestion?.options && Object.entries(currentQuestion.options).map(([key, value]) => (
-                <Button
-                  key={key}
-                  variant={selectedAnswer === key ? "default" : "outline"}
-                  className={`p-4 h-auto text-left justify-start ${
-                    selectedAnswer === key 
-                      ? 'bg-blue-600 text-white' 
-                      : 'hover:bg-blue-50'
-                  }`}
-                  onClick={() => setSelectedAnswer(key)}
-                  disabled={hasAnswered}
-                >
-                  <span className="font-bold mr-3">{key}.</span>
-                  <span>{value}</span>
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Main Content: Question and Player Progress Side by Side */}
+        <div className="grid xl:grid-cols-4 lg:grid-cols-3 gap-8">
+          {/* Question Card - Takes up 3/4 of the space on large screens */}
+          <div className="xl:col-span-3 lg:col-span-2">
+            <Card className="bg-white/80 backdrop-blur-sm min-h-[500px]">
+              <CardHeader className="pb-6">
+                <CardTitle className="text-2xl leading-relaxed">
+                  {currentQuestion?.question}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                {/* Answer Options */}
+                <div className="grid gap-4">
+                  {currentQuestion?.options && Object.entries(currentQuestion.options).map(([key, value]) => (
+                    <Button
+                      key={key}
+                      variant={selectedAnswer === key ? "default" : "outline"}
+                      className={`p-6 h-auto text-left justify-start whitespace-normal break-words min-h-[4rem] w-full text-base ${
+                        selectedAnswer === key 
+                          ? 'bg-blue-600 text-white' 
+                          : 'hover:bg-blue-50'
+                      }`}
+                      onClick={() => handleAnswerSelection(key)}
+                      disabled={hasAnswered}
+                    >
+                      <div className="flex items-start gap-4 w-full">
+                        <span className="font-bold flex-shrink-0 text-lg">{key}.</span>
+                        <span className="break-words text-left leading-relaxed">{value}</span>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
 
-        {/* Submit Button */}
-        <div className="text-center">
-          <Button
-            onClick={submitAnswer}
-            disabled={!selectedAnswer || hasAnswered}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-8 py-3"
-            size="lg"
-          >
-            {hasAnswered ? (
-              <>
-                <CheckCircle className="mr-2 h-5 w-5" />
-                Answer Submitted
-              </>
-            ) : (
-              <>
-                Submit Answer
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </>
-            )}
-          </Button>
+                {/* Answer Status */}
+                <div className="text-center pt-6 border-t">
+                  {hasAnswered ? (
+                    <div className="inline-flex items-center gap-2 px-8 py-4 bg-green-100 text-green-800 rounded-lg text-lg">
+                      <CheckCircle className="h-6 w-6" />
+                      Answer Submitted: {selectedAnswer}
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 px-8 py-4 bg-blue-100 text-blue-800 rounded-lg text-lg">
+                      <Timer className="h-6 w-6" />
+                      Select your answer above
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Players Progress - Takes up 1/4 of the space on large screens */}
+          <div className="xl:col-span-1 lg:col-span-1">
+            <Card className="bg-white/80 backdrop-blur-sm h-full">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Users className="h-4 w-4" />
+                  Players Progress
+                </CardTitle>
+                <div className="text-xs text-muted-foreground">
+                  {players.filter(p => p.hasAnswered).length}/{players.length} completed
+                </div>
+                {players.length > 0 && (
+                  <div className="mt-3">
+                    <Progress 
+                      value={(players.filter(p => p.hasAnswered).length / players.length) * 100} 
+                      className="h-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {Math.round((players.filter(p => p.hasAnswered).length / players.length) * 100)}% completed
+                    </p>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="flex-1 overflow-auto max-h-[600px]">
+                {players.length === 0 ? (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No players connected</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {players.map((player) => (
+                      <div 
+                        key={player.id} 
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 ${
+                          player.hasAnswered 
+                            ? 'bg-green-50 border-green-200 shadow-sm' 
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
+                      >
+                        <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 ${
+                          player.hasAnswered 
+                            ? 'bg-green-500 text-white' 
+                            : 'bg-gray-300 text-gray-600'
+                        }`}>
+                          {player.hasAnswered ? (
+                            <CheckCircle className="h-3 w-3" />
+                          ) : (
+                            <span className="text-xs font-bold">
+                              {player.name.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm truncate">
+                              {player.name}
+                            </span>
+                            {player.source === 'telegram' && (
+                              <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-600">
+                                📱 TG
+                              </Badge>
+                            )}
+                          </div>
+                          <span className={`text-xs ${
+                            player.hasAnswered ? 'text-green-600' : 'text-gray-500'
+                          }`}>
+                            {player.hasAnswered 
+                              ? (player.source === 'telegram' ? 'Answered via Telegram' : 'Answered') 
+                              : (player.source === 'telegram' ? 'Answering via Telegram...' : 'Thinking...')
+                            }
+                          </span>
+                        </div>
+                        {player.hasAnswered && (
+                          <div className="flex-shrink-0">
+                            <Badge variant="outline" className="text-xs bg-white border-green-200">
+                              ✓
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
-
-        {/* Players Status */}
-        {isHost && (
-          <Card className="mt-6 bg-white/60 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Users className="h-4 w-4" />
-                Players ({players.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-2 flex-wrap">
-                {players.map((player) => (
-                  <Badge 
-                    key={player.id} 
-                    variant={player.hasAnswered ? "default" : "outline"}
-                    className="text-xs"
-                  >
-                    {player.name}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );

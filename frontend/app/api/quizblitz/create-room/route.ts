@@ -41,6 +41,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if quiz room with this code already exists
+    const existingRoom = await db.collection('quizRooms').findOne({
+      quizCode: quizCode.toUpperCase()
+    });
+
+    if (existingRoom) {
+      console.log('⚠️ Quiz room with code', quizCode, 'already exists');
+      return NextResponse.json(
+        { error: 'Quiz room with this code already exists' },
+        { status: 409 }
+      );
+    }
+
     // Create quiz room
     const quizRoom = {
       quizCode: quizCode.toUpperCase(),

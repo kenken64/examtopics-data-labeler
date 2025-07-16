@@ -342,6 +342,22 @@ class MessageHandlers {
       await ctx.reply('❌ Error fetching bookmarks. Please try again.');
     }
   }
+
+  async handleMessage(ctx, userSessions, userSelections) {
+    // Handle regular text messages that aren't commands
+    const text = ctx.message.text;
+    
+    // For now, just provide helpful guidance
+    await ctx.reply(
+      `🤖 I received your message: "${text}"\n\n` +
+      `💡 Here's what you can do:\n` +
+      `• Use /start to begin a quiz\n` +
+      `• Use /help for detailed instructions\n` +
+      `• Use /join to join a QuizBlitz game\n` +
+      `• Send a 6-digit code to join a QuizBlitz quiz\n\n` +
+      `If you're trying to join a quiz, make sure to send just the 6-digit code (e.g., 123456)`
+    );
+  }
 }
 
 module.exports = MessageHandlers;
