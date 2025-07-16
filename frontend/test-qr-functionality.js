@@ -12,8 +12,8 @@ async function testQRCodeFunctionality() {
   const testData = {
     quizCode: 'TEST99',
     accessCode: 'AC-F2NOKPMQ',
-    timerDuration: 30,
-    hostId: 'test-host-123'
+    timerDuration: 30
+    // hostUserId will be set automatically from authenticated user
   };
   
   try {

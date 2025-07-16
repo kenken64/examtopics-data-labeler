@@ -11,8 +11,8 @@ async function testCreateRoom() {
   const testData = {
     quizCode: 'QUIZ123',
     accessCode: 'AC-F2NOKPMQ',
-    timerDuration: 30,
-    hostId: 'host-test-123'
+    timerDuration: 30
+    // hostUserId will be set automatically from authenticated user
   };
   
   try {

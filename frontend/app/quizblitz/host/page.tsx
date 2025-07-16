@@ -34,13 +34,17 @@ function QuizHostPageContent() {
   const { players: connectedPlayers, isConnected: sseConnected, error: sseError } = useRoomSSE(quizCode || null);
 
   useEffect(() => {
+    console.log('🏠 QuizHost: Component mounted', { accessCode, timer, questionCount });
+    
     if (!accessCode || !timer) {
+      console.log('❌ QuizHost: Missing required params, redirecting to QuizBlitz');
       router.push('/quizblitz');
       return;
     }
 
     // Generate 6-digit quiz code
     const code = Math.random().toString().slice(2, 8);
+    console.log('🎯 QuizHost: Generated quiz code', code);
     setQuizCode(code);
 
     // Generate QR code for the quiz URL
@@ -51,30 +55,47 @@ function QuizHostPageContent() {
 
     return () => {
       if (socketRef.current) {
+        console.log('🔌 QuizHost: Disconnecting socket');
         socketRef.current.disconnect();
       }
     };
   }, [accessCode, timer, router]);
 
   const initializeQuizRoom = async (code: string) => {
+    console.log('🏗️ QuizHost: Initializing quiz room', { code, accessCode, timer });
+    
     try {
+      console.log('📡 QuizHost: Sending create-room request');
+      
       // Create quiz room in database
       const response = await fetch('/api/quizblitz/create-room', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Include cookies for authentication
         body: JSON.stringify({
           quizCode: code,
           accessCode,
-          timerDuration: parseInt(timer || '30'),
-          hostId: 'current-user-id' // Replace with actual user ID
+          timerDuration: parseInt(timer || '30')
+          // hostUserId will be set automatically from authenticated user
         }),
       });
 
+      console.log('📨 QuizHost: Create-room response', { 
+        status: response.status, 
+        statusText: response.statusText,
+        ok: response.ok 
+      });
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.log('❌ QuizHost: Create-room failed', errorText);
         throw new Error('Failed to create quiz room');
       }
+
+      const result = await response.json();
+      console.log('✅ QuizHost: Quiz room created successfully', result);
 
       // SSE will now handle real-time player updates automatically
 
@@ -119,14 +140,25 @@ function QuizHostPageContent() {
   };
 
   const startQuiz = async () => {
+    console.log('🚀 QuizHost: startQuiz called', { 
+      playersCount: connectedPlayers.length, 
+      quizCode, 
+      accessCode, 
+      timer 
+    });
+    
     if (connectedPlayers.length === 0) {
+      console.log('❌ QuizHost: No players connected');
       toast.error('Wait for at least one player to join');
       return;
     }
 
     setIsStarting(true);
+    console.log('🔄 QuizHost: Starting quiz process...');
 
     try {
+      console.log('📡 QuizHost: Sending start request to /api/quizblitz/start');
+      
       // Start quiz session
       const response = await fetch('/api/quizblitz/start', {
         method: 'POST',
@@ -142,14 +174,29 @@ function QuizHostPageContent() {
         }),
       });
 
+      console.log('📨 QuizHost: Start response', { 
+        status: response.status, 
+        statusText: response.statusText,
+        ok: response.ok 
+      });
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.log('❌ QuizHost: Start failed', errorText);
         throw new Error('Failed to start quiz');
       }
 
+      const result = await response.json();
+      console.log('✅ QuizHost: Quiz started successfully', result);
+
+      const liveUrl = `/quizblitz/live/${quizCode}?host=true`;
+      console.log('🔗 QuizHost: Navigating to live quiz', liveUrl);
+      
       // Navigate to live quiz
-      router.push(`/quizblitz/live/${quizCode}?host=true`);
+      router.push(liveUrl);
 
     } catch (error) {
+      console.error('💥 QuizHost: Start quiz error', error);
       toast.error('Failed to start quiz');
       setIsStarting(false);
     }

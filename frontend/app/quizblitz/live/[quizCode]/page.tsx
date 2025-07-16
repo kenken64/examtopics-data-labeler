@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Trophy, Timer, Users, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSessionSSE } from '@/lib/use-sse';
+import { useQuizEvents } from '@/lib/use-quiz-events';
 
 interface Question {
   _id: string;
@@ -82,6 +83,36 @@ function LiveQuizPageContent() {
     }
   }, [sessionData]);
 
+  // Real-time quiz event sync (MongoDB Change Streams)
+  useQuizEvents(quizCode, {
+    onQuestionStarted: (question) => {
+      setCurrentQuestion(question);
+      setQuestionIndex(question.questionIndex);
+      setSelectedAnswer('');
+      setHasAnswered(false);
+      setShowResults(false);
+      setQuestionResult(null);
+      setTimeRemaining(question.timeLimit || 30);
+    },
+    onTimerUpdate: (data) => {
+      setTimeRemaining(data.timeRemaining);
+    },
+    onQuestionEnded: (data) => {
+      setShowResults(true);
+      setQuestionResult(data.results);
+      // Auto-advance to next question after 5 seconds
+      setTimeout(() => {
+        setShowResults(false);
+        setQuestionResult(null);
+      }, 5000);
+    },
+    onQuizEnded: (data) => {
+      setQuizFinished(true);
+      setShowResults(false);
+      setQuestionResult(null);
+    }
+  });
+
   useEffect(() => {
     if (!quizCode) {
       router.push('/quizblitz');
@@ -112,17 +143,23 @@ function LiveQuizPageContent() {
         return prev - 1;
       });
     }, 1000);
-  };
-
-  const handleTimeUp = () => {
+  };  const handleTimeUp = async () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
-    
+
     if (!hasAnswered && !showResults) {
-      // Auto-submit empty answer or move to results
+      // Auto-submit empty answer when time runs out
       setHasAnswered(true);
+      console.log('⏰ Time up! Auto-submitting...');
+      
+      // Show results for current question
       showQuestionResults();
+      
+      // After showing results, automatically move to next question
+      setTimeout(async () => {
+        await nextQuestion();
+      }, 3000); // Show results for 3 seconds
     }
   };
 
@@ -152,8 +189,13 @@ function LiveQuizPageContent() {
       toast.success('Answer submitted!');
 
       // For demo purposes, show results after 2 seconds
-      setTimeout(() => {
+      setTimeout(async () => {
         showQuestionResults();
+        
+        // After showing results, automatically move to next question
+        setTimeout(async () => {
+          await nextQuestion();
+        }, 3000); // Show results for 3 seconds
       }, 2000);
 
     } catch (error) {
@@ -185,41 +227,57 @@ function LiveQuizPageContent() {
     setShowResults(true);
 
     // Auto-advance to next question after 5 seconds
-    setTimeout(() => {
-      nextQuestion();
+    setTimeout(async () => {
+      await nextQuestion();
     }, 5000);
   };
 
-  const nextQuestion = () => {
-    if (questionIndex + 1 >= totalQuestions) {
-      // Quiz finished
-      setQuizFinished(true);
-      return;
-    }
-
-    // Move to next question
-    setQuestionIndex(prev => prev + 1);
-    setSelectedAnswer('');
-    setHasAnswered(false);
-    setShowResults(false);
-    setQuestionResult(null);
-
-    // Load next question (for demo, we'll just modify current question)
-    if (currentQuestion) {
-      setCurrentQuestion({
-        ...currentQuestion,
-        question: `Question ${questionIndex + 2}: This is a demo question...`,
-        options: {
-          A: 'Option A',
-          B: 'Option B', 
-          C: 'Option C',
-          D: 'Option D'
-        }
+  const nextQuestion = async () => {
+    try {
+      // Call API to move to next question
+      const response = await fetch('/api/quizblitz/control', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quizCode: quizCode,
+          action: 'next-question'
+        }),
       });
-    }
 
-    // Restart timer
-    startTimer(30);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to advance question');
+      }
+
+      if (data.action === 'quiz-finished') {
+        // Quiz finished
+        setQuizFinished(true);
+        return;
+      }
+
+      if (data.action === 'question-changed') {
+        // Update to next question
+        setCurrentQuestion(data.currentQuestion);
+        setQuestionIndex(data.currentQuestionIndex);
+        setTotalQuestions(data.totalQuestions);
+        setSelectedAnswer('');
+        setHasAnswered(false);
+        setShowResults(false);
+        setQuestionResult(null);
+
+        // Start timer for new question
+        startTimer(data.timerDuration);
+        
+        console.log(`📝 Advanced to question ${data.currentQuestionIndex + 1}/${data.totalQuestions}`);
+      }
+
+    } catch (error) {
+      console.error('Failed to advance question:', error);
+      toast.error('Failed to load next question');
+    }
   };
 
   if (loading) {

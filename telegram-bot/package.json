@@ -9,7 +9,14 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "validate": "node -c bot.js"
   },
-  "keywords": ["telegram", "bot", "aws", "certification", "practice", "quiz"],
+  "keywords": [
+    "telegram",
+    "bot",
+    "aws",
+    "certification",
+    "practice",
+    "quiz"
+  ],
   "author": "ExamTopics",
   "license": "ISC",
   "type": "commonjs",
@@ -19,6 +26,7 @@
   "dependencies": {
     "dotenv": "^17.0.1",
     "grammy": "^1.15.0",
-    "mongodb": "^6.17.0"
+    "mongodb": "^6.17.0",
+    "node-fetch": "^2.7.0"
   }
 }
