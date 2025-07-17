@@ -114,63 +114,67 @@ jobs:
         # Bandit Results
         if [ -f "security-reports/bandit-report.json" ]; then
           echo "### 🛡️ Bandit (Code Security Analysis)" >> security-summary.md
-          python3 -c '
-import json
-try:
-    with open("security-reports/bandit-report.json", "r") as f:
-        data = json.load(f)
-    results = data.get("results", [])
-    high_count = len([r for r in results if r.get("issue_severity") == "HIGH"])
-    medium_count = len([r for r in results if r.get("issue_severity") == "MEDIUM"])
-    low_count = len([r for r in results if r.get("issue_severity") == "LOW"])
-    print(f"- **High Severity**: {high_count}")
-    print(f"- **Medium Severity**: {medium_count}")
-    print(f"- **Low Severity**: {low_count}")
-    print(f"- **Total Issues**: {len(results)}")
-except Exception as e:
-    print("- **Status**: Scan completed, check detailed reports")
-' >> security-summary.md
+          cat > /tmp/parse_bandit.py << 'EOF'
+        import json
+        import sys
+        try:
+            with open("security-reports/bandit-report.json", "r") as f:
+                data = json.load(f)
+            results = data.get("results", [])
+            high_count = len([r for r in results if r.get("issue_severity") == "HIGH"])
+            medium_count = len([r for r in results if r.get("issue_severity") == "MEDIUM"])
+            low_count = len([r for r in results if r.get("issue_severity") == "LOW"])
+            print(f"- **High Severity**: {high_count}")
+            print(f"- **Medium Severity**: {medium_count}")
+            print(f"- **Low Severity**: {low_count}")
+            print(f"- **Total Issues**: {len(results)}")
+        except Exception as e:
+            print("- **Status**: Scan completed, check detailed reports")
+        EOF
+          python3 /tmp/parse_bandit.py >> security-summary.md
         fi
         echo "" >> security-summary.md
         
         # Safety Results
         if [ -f "security-reports/safety-report.json" ]; then
           echo "### 🔐 Safety (Dependency Vulnerabilities)" >> security-summary.md
-          python3 -c '
-import json
-try:
-    with open("security-reports/safety-report.json", "r") as f:
-        data = json.load(f)
-    vulns = len(data) if isinstance(data, list) else 0
-    print(f"- **Vulnerabilities Found**: {vulns}")
-    if vulns > 0:
-        print("- **Critical Action Required**: Update vulnerable dependencies")
-    else:
-        print("- **Status**: No known vulnerabilities found")
-except Exception as e:
-    print("- **Status**: Scan completed, check detailed reports")
-' >> security-summary.md
+          cat > /tmp/parse_safety.py << 'EOF'
+        import json
+        try:
+            with open("security-reports/safety-report.json", "r") as f:
+                data = json.load(f)
+            vulns = len(data) if isinstance(data, list) else 0
+            print(f"- **Vulnerabilities Found**: {vulns}")
+            if vulns > 0:
+                print("- **Critical Action Required**: Update vulnerable dependencies")
+            else:
+                print("- **Status**: No known vulnerabilities found")
+        except Exception as e:
+            print("- **Status**: Scan completed, check detailed reports")
+        EOF
+          python3 /tmp/parse_safety.py >> security-summary.md
         fi
         echo "" >> security-summary.md
         
         # Semgrep Results
         if [ -f "security-reports/semgrep-report.json" ]; then
           echo "### ⚡ Semgrep (Static Analysis)" >> security-summary.md
-          python3 -c '
-import json
-try:
-    with open("security-reports/semgrep-report.json", "r") as f:
-        data = json.load(f)
-    findings = data.get("results", [])
-    errors = len([f for f in findings if f.get("extra", {}).get("severity") == "ERROR"])
-    warnings = len([f for f in findings if f.get("extra", {}).get("severity") == "WARNING"])
-    infos = len([f for f in findings if f.get("extra", {}).get("severity") == "INFO"])
-    print(f"- **Errors**: {errors}")
-    print(f"- **Warnings**: {warnings}")
-    print(f"- **Info**: {infos}")
-except Exception as e:
-    print("- **Status**: Scan completed, check detailed reports")
-' >> security-summary.md
+          cat > /tmp/parse_semgrep.py << 'EOF'
+        import json
+        try:
+            with open("security-reports/semgrep-report.json", "r") as f:
+                data = json.load(f)
+            findings = data.get("results", [])
+            errors = len([f for f in findings if f.get("extra", {}).get("severity") == "ERROR"])
+            warnings = len([f for f in findings if f.get("extra", {}).get("severity") == "WARNING"])
+            infos = len([f for f in findings if f.get("extra", {}).get("severity") == "INFO"])
+            print(f"- **Errors**: {errors}")
+            print(f"- **Warnings**: {warnings}")
+            print(f"- **Info**: {infos}")
+        except Exception as e:
+            print("- **Status**: Scan completed, check detailed reports")
+        EOF
+          python3 /tmp/parse_semgrep.py >> security-summary.md
         fi
         echo "" >> security-summary.md
         
@@ -186,51 +190,52 @@ except Exception as e:
       run: |
         if [ -f "security-reports/bandit-report.json" ]; then
           # Simple SARIF conversion for Bandit results
-          python3 -c '
-import json
-import sys
-from datetime import datetime
+          cat > /tmp/bandit_to_sarif.py << 'EOF'
+        import json
+        import sys
+        from datetime import datetime
 
-try:
-    with open("security-reports/bandit-report.json", "r") as f:
-        bandit_data = json.load(f)
-    
-    sarif = {
-        "version": "2.1.0",
-        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
-        "runs": [{
-            "tool": {
-                "driver": {
-                    "name": "Bandit",
-                    "version": "1.7.5",
-                    "informationUri": "https://bandit.readthedocs.io/"
+        try:
+            with open("security-reports/bandit-report.json", "r") as f:
+                bandit_data = json.load(f)
+            
+            sarif = {
+                "version": "2.1.0",
+                "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+                "runs": [{
+                    "tool": {
+                        "driver": {
+                            "name": "Bandit",
+                            "version": "1.7.5",
+                            "informationUri": "https://bandit.readthedocs.io/"
+                        }
+                    },
+                    "results": []
+                }]
+            }
+            
+            for result in bandit_data.get("results", []):
+                severity_map = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note"}
+                sarif_result = {
+                    "ruleId": result.get("test_id", "unknown"),
+                    "level": severity_map.get(result.get("issue_severity", "LOW"), "note"),
+                    "message": {"text": result.get("issue_text", "Security issue detected")},
+                    "locations": [{
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": result.get("filename", "unknown")},
+                            "region": {"startLine": result.get("line_number", 1)}
+                        }
+                    }]
                 }
-            },
-            "results": []
-        }]
-    }
-    
-    for result in bandit_data.get("results", []):
-        severity_map = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note"}
-        sarif_result = {
-            "ruleId": result.get("test_id", "unknown"),
-            "level": severity_map.get(result.get("issue_severity", "LOW"), "note"),
-            "message": {"text": result.get("issue_text", "Security issue detected")},
-            "locations": [{
-                "physicalLocation": {
-                    "artifactLocation": {"uri": result.get("filename", "unknown")},
-                    "region": {"startLine": result.get("line_number", 1)}
-                }
-            }]
-        }
-        sarif["runs"][0]["results"].append(sarif_result)
-    
-    with open("security-reports/bandit-sarif.json", "w") as f:
-        json.dump(sarif, f, indent=2)
-    print("SARIF conversion completed")
-except Exception as e:
-    print(f"SARIF conversion failed: {e}")
-'
+                sarif["runs"][0]["results"].append(sarif_result)
+            
+            with open("security-reports/bandit-sarif.json", "w") as f:
+                json.dump(sarif, f, indent=2)
+            print("SARIF conversion completed")
+        except Exception as e:
+            print(f"SARIF conversion failed: {e}")
+        EOF
+          python3 /tmp/bandit_to_sarif.py
         fi
 
     - name: Upload Security Reports
@@ -263,15 +268,15 @@ except Exception as e:
         # Check Bandit for high severity issues
         if [ -f "security-reports/bandit-report.json" ]; then
           HIGH_SEVERITY_COUNT=$(python3 -c '
-import json
-try:
-    with open("security-reports/bandit-report.json", "r") as f:
-        data = json.load(f)
-    count = len([r for r in data.get("results", []) if r.get("issue_severity") == "HIGH"])
-    print(count)
-except:
-    print(0)
-')
+        import json
+        try:
+            with open("security-reports/bandit-report.json", "r") as f:
+                data = json.load(f)
+            count = len([r for r in data.get("results", []) if r.get("issue_severity") == "HIGH"])
+            print(count)
+        except:
+            print(0)
+        ')
           CRITICAL_ISSUES=$((CRITICAL_ISSUES + HIGH_SEVERITY_COUNT))
           echo "Bandit high severity issues: $HIGH_SEVERITY_COUNT"
         fi
@@ -279,15 +284,15 @@ except:
         # Check Safety for vulnerabilities
         if [ -f "security-reports/safety-report.json" ]; then
           SAFETY_VULNS=$(python3 -c '
-import json
-try:
-    with open("security-reports/safety-report.json", "r") as f:
-        data = json.load(f)
-    count = len(data) if isinstance(data, list) else 0
-    print(count)
-except:
-    print(0)
-')
+        import json
+        try:
+            with open("security-reports/safety-report.json", "r") as f:
+                data = json.load(f)
+            count = len(data) if isinstance(data, list) else 0
+            print(count)
+        except:
+            print(0)
+        ')
           CRITICAL_ISSUES=$((CRITICAL_ISSUES + SAFETY_VULNS))
           echo "Safety vulnerabilities found: $SAFETY_VULNS"
         fi
