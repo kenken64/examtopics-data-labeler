@@ -37,8 +37,8 @@ jobs:
         file: ./telegram-bot/Dockerfile
         push: false
         tags: test:latest
-        cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.DOCKER_HUB_USERNAME || github.repository_owner }}/${{ env.IMAGE_NAME }}:buildcache
-        cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.DOCKER_HUB_USERNAME || github.repository_owner }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+        cache-from: type=gha,scope=test
+        cache-to: type=gha,mode=max,scope=test
         build-args: |
           BUILDKIT_INLINE_CACHE=1
 
