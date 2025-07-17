@@ -48,18 +48,12 @@ jobs:
         project: 'frontend'
         path: './frontend'
         format: 'ALL'
-        # Only scan package.json and package-lock.json for Node.js dependencies
-        enableExperimental: true
         # Set failure threshold - fail on medium severity and above
         failOnCVSS: 4.0
-        # Additional arguments for better Node.js scanning
+        # Additional arguments for comprehensive scanning
         args: >
-          --nodeAuditSkipDevDependencies false
-          --nodePackageSkipDevDependencies false
-          --enableNodeAudit true
-          --disableYarnAudit false
-          --disableBundleAudit false
-          --disableNodeJS false
+          --enableRetired
+          --enableExperimental
           --suppression .github/dependencycheck-suppressions.xml
 
     - name: Upload Dependency-Check results
