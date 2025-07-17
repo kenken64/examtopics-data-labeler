@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { MongoClient, ObjectId } from 'mongodb';
+import { NextResponse } from 'next/server';
+import { MongoClient } from 'mongodb';
 
 export async function GET() {
   const client = new MongoClient(process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert');

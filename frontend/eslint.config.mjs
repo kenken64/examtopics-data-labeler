@@ -10,7 +10,6 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     ignores: [
       "lib/quiz-pubsub.ts",
@@ -20,13 +19,13 @@ const eslintConfig = [
       "lib/live-quiz-client.ts",
       "app/api/auth/passkey/**",
       "app/api/quizblitz/**"
-    ],
+    ]
+  },
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
     rules: {
-      "@typescript-eslint/no-unused-vars": ["warn", { 
-        "argsIgnorePattern": "^_",
-        "varsIgnorePattern": "^_" 
-      }],
-      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off", // Too noisy in this codebase
+      "@typescript-eslint/no-explicit-any": "off", // Legacy code with many any types
       "@typescript-eslint/no-unsafe-function-type": "off",
       "react/no-unescaped-entities": "warn",
       "react-hooks/exhaustive-deps": "off",

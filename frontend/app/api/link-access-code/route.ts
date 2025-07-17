@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { MongoClient, ObjectId } from 'mongodb';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/mongodb';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
-async function connectToDatabaseOld() {
+async function _connectToDatabaseOld() {
   const client = new MongoClient(uri);
   await client.connect();
   return client.db('awscert');
