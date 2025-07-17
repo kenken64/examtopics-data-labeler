@@ -31,17 +31,29 @@ export async function POST(request: NextRequest) {
       const nextQuestionIndex = quizSession.currentQuestionIndex + 1;
       
       if (nextQuestionIndex >= quizSession.questions.length) {
-        // Quiz finished
-        await db.collection('quizSessions').updateOne(
-          { quizCode: quizCode.toUpperCase() },
+        // Quiz finished - use atomic update to prevent race condition
+        const updateResult = await db.collection('quizSessions').updateOne(
+          { 
+            quizCode: quizCode.toUpperCase(),
+            currentQuestionIndex: quizSession.currentQuestionIndex, // Ensure no other process updated this
+            status: 'active' // Only update if still active
+          },
           {
             $set: {
               status: 'finished',
               isQuizCompleted: true,
-              finishedAt: new Date()
+              finishedAt: new Date(),
+              version: (quizSession.version || 0) + 1
             }
           }
         );
+
+        if (updateResult.modifiedCount === 0) {
+          return NextResponse.json({
+            success: false,
+            error: 'Quiz state changed by another process'
+          }, { status: 409 });
+        }
 
         return NextResponse.json({
           success: true,
@@ -50,16 +62,28 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Move to next question
-      await db.collection('quizSessions').updateOne(
-        { quizCode: quizCode.toUpperCase() },
+      // Move to next question - use atomic update to prevent race condition
+      const updateResult = await db.collection('quizSessions').updateOne(
+        { 
+          quizCode: quizCode.toUpperCase(),
+          currentQuestionIndex: quizSession.currentQuestionIndex, // Ensure no other process updated this
+          status: 'active' // Only update if still active
+        },
         {
           $set: {
             currentQuestionIndex: nextQuestionIndex,
-            lastQuestionChangeAt: new Date()
+            lastQuestionChangeAt: new Date(),
+            version: (quizSession.version || 0) + 1
           }
         }
       );
+
+      if (updateResult.modifiedCount === 0) {
+        return NextResponse.json({
+          success: false,
+          error: 'Quiz state changed by another process'
+        }, { status: 409 });
+      }
 
       const nextQuestion = quizSession.questions[nextQuestionIndex];
 

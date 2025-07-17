@@ -178,6 +178,31 @@ class CertificationBot {
       await this.callbackHandlers.handleNextQuestion(ctx, this.userSessions, this.userSelections);
     });
 
+    // QuizBlitz Commands
+    this.bot.command('join', async (ctx) => {
+      await this.handleJoinQuiz(ctx);
+    });
+
+    // Handle QuizBlitz answer selection (A, B, C, D)
+    this.bot.callbackQuery(/^quiz_answer_([A-D])_(.+)$/, async (ctx) => {
+      const selectedAnswer = ctx.match[1];
+      const quizCode = ctx.match[2];
+      await this.handleQuizAnswer(ctx, selectedAnswer, quizCode);
+    });
+
+    // Handle text messages for quiz codes
+    this.bot.on('message:text', async (ctx) => {
+      const text = ctx.message.text.trim();
+      
+      // Check if it's a 6-digit quiz code
+      if (/^\d{6}$/.test(text)) {
+        await this.handleJoinQuizByCode(ctx, text);
+      } else {
+        // Handle regular messages
+        await this.messageHandlers.handleMessage(ctx, this.userSessions, this.userSelections);
+      }
+    });
+
     // Handle text messages (access code input)
     this.bot.on('message:text', async (ctx) => {
       const userId = ctx.from.id;
@@ -232,6 +257,123 @@ class CertificationBot {
     this.healthServer.listen(port, () => {
       console.log(`🏥 Health check server running on port ${port}`);
     });
+  }
+
+  // QuizBlitz Handler Methods
+  async handleJoinQuiz(ctx) {
+    const message = 
+      `🎮 Welcome to QuizBlitz!\n\n` +
+      `To join a quiz, send me the 6-digit quiz code.\n\n` +
+      `Example: 123456\n\n` +
+      `You'll receive questions here and can answer directly in Telegram!`;
+      
+    await ctx.reply(message);
+  }
+
+  async handleJoinQuizByCode(ctx, quizCode) {
+    try {
+      const telegramUserId = ctx.from.id;
+      const playerName = ctx.from.first_name || ctx.from.username || 'Player';
+      
+      console.log(`🎮 User ${playerName} (${telegramUserId}) trying to join quiz ${quizCode}`);
+      
+      // Join the quiz via API
+      const response = await fetch(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/quizblitz/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quizCode: quizCode,
+          playerName: playerName,
+          playerId: telegramUserId.toString(),
+          source: 'telegram'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        const message = 
+          `🎉 Successfully joined quiz!\n\n` +
+          `👤 Player: ${playerName}\n` +
+          `🎯 Quiz Code: ${quizCode}\n` +
+          `👥 Players in room: ${data.playersCount || 1}\n\n` +
+          `⏳ Waiting for host to start...\n` +
+          `You'll receive questions here when the quiz begins!`;
+          
+        await ctx.reply(message);
+        console.log(`✅ User ${playerName} joined quiz ${quizCode} successfully`);
+      } else {
+        throw new Error(data.error || 'Failed to join quiz');
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error joining quiz ${quizCode}:`, error);
+      
+      let errorMessage = '❌ Failed to join quiz.\n\n';
+      
+      if (error.message.includes('404')) {
+        errorMessage += 'Quiz not found. Please check the code and try again.';
+      } else if (error.message.includes('already started')) {
+        errorMessage += 'This quiz has already started.';
+      } else {
+        errorMessage += 'Please check the quiz code and try again.';
+      }
+      
+      await ctx.reply(errorMessage);
+    }
+  }
+
+  async handleQuizAnswer(ctx, selectedAnswer, quizCode) {
+    try {
+      const telegramUserId = ctx.from.id;
+      const playerName = ctx.from.first_name || ctx.from.username || 'Player';
+      
+      console.log(`📝 User ${playerName} selected answer ${selectedAnswer} for quiz ${quizCode}`);
+      
+      // Submit answer via API
+      const response = await fetch(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/quizblitz/submit-answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quizCode: quizCode,
+          answer: selectedAnswer,
+          playerId: telegramUserId.toString(),
+          timestamp: Date.now()
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Edit the message to show answer was submitted
+        await ctx.editMessageText(
+          `📝 Question answered!\n\n` +
+          `✅ Your answer: ${selectedAnswer}\n\n` +
+          `⏳ Waiting for other players...`
+        );
+        
+        console.log(`✅ Answer ${selectedAnswer} submitted for user ${playerName}`);
+      } else {
+        throw new Error(data.error || 'Failed to submit answer');
+      }
+      
+    } catch (error) {
+      console.error(`❌ Error submitting answer:`, error);
+      
+      await ctx.answerCallbackQuery('❌ Failed to submit answer. Please try again.');
+    }
   }
 
   async start() {

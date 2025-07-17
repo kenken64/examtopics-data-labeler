@@ -4,7 +4,7 @@
 import { MongoClient, ChangeStream } from 'mongodb';
 
 export interface QuizEvent {
-  type: 'quiz_started' | 'question_started' | 'question_ended' | 'timer_update' | 'quiz_ended' | 'answer_submitted';
+  type: 'quiz_started' | 'question_started' | 'question_sent' | 'question_ended' | 'timer_update' | 'quiz_ended' | 'answer_submitted';
   quizCode: string;
   data: any;
   timestamp: Date;
@@ -73,7 +73,7 @@ export class QuizPubSub {
       {
         $match: {
           'fullDocument.type': {
-            $in: ['quiz_started', 'question_started', 'question_ended', 'timer_update', 'quiz_ended', 'answer_submitted']
+            $in: ['quiz_started', 'question_started', 'question_sent', 'question_ended', 'timer_update', 'quiz_ended', 'answer_submitted']
           }
         }
       }
@@ -137,20 +137,44 @@ export class QuizPubSub {
     }
   }
 
-  // Publish quiz events
+  // Publish quiz events - Use upsert to maintain single record per quizCode
   async publishEvent(event: Omit<QuizEvent, 'timestamp'>): Promise<void> {
+    console.log('🔧 DEBUG: publishEvent called with:', {
+      type: event.type,
+      quizCode: event.quizCode,
+      dataKeys: Object.keys(event.data || {}),
+      isConnected: this.isConnected
+    });
+
     if (!this.isConnected) {
       throw new Error('QuizPubSub not connected');
     }
 
-    const eventWithTimestamp: QuizEvent = {
-      ...event,
-      timestamp: new Date()
+    const eventWithTimestamp = {
+      quizCode: event.quizCode.toUpperCase(),
+      type: event.type,
+      data: event.data,
+      lastUpdated: new Date()
     };
 
+    console.log('🔧 DEBUG: Upserting event into quizEvents collection:', {
+      type: eventWithTimestamp.type,
+      quizCode: eventWithTimestamp.quizCode,
+      lastUpdated: eventWithTimestamp.lastUpdated
+    });
+
     try {
-      await this.db.collection('quizEvents').insertOne(eventWithTimestamp);
+      // Use upsert to update existing record or create new one
+      const result = await this.db.collection('quizEvents').updateOne(
+        { quizCode: event.quizCode.toUpperCase() },
+        { 
+          $set: eventWithTimestamp
+        },
+        { upsert: true }
+      );
+      
       console.log(`📡 Published event: ${event.type} for quiz ${event.quizCode}`);
+      console.log('🔧 DEBUG: Event upserted - matched:', result.matchedCount, 'modified:', result.modifiedCount, 'upserted:', result.upsertedId);
     } catch (error) {
       console.error('❌ Failed to publish event:', error);
       throw error;
@@ -159,43 +183,135 @@ export class QuizPubSub {
 
   // Specific event publishers
   async publishQuizStarted(quizCode: string, questionData: QuestionData): Promise<void> {
+    console.log('🔧 DEBUG: publishQuizStarted called with:', {
+      quizCode: quizCode.toUpperCase(),
+      questionIndex: questionData.questionIndex,
+      question: questionData.question.substring(0, 100) + '...',
+      optionsCount: Object.keys(questionData.options).length
+    });
+
+    console.log('🔧 DEBUG: Publishing quiz_started event to quizEvents collection');
     await this.publishEvent({
       type: 'quiz_started',
       quizCode,
-      data: { question: questionData }
+      data: { 
+        question: questionData,
+        currentQuestionIndex: questionData.questionIndex,
+        timeRemaining: questionData.timeLimit
+      }
     });
+    console.log('🔧 DEBUG: quiz_started event published successfully');
   }
 
   async publishQuestionStarted(quizCode: string, questionData: QuestionData): Promise<void> {
+    console.log('🔧 DEBUG: [PUBSUB] publishQuestionStarted called:', {
+      quizCode: quizCode.toUpperCase(),
+      questionIndex: questionData.questionIndex,
+      question: questionData.question?.substring(0, 100) + '...',
+      optionsCount: Object.keys(questionData.options || {}).length,
+      timeLimit: questionData.timeLimit
+    });
+
     await this.publishEvent({
       type: 'question_started',
       quizCode,
-      data: { question: questionData }
+      data: { 
+        question: questionData,
+        currentQuestionIndex: questionData.questionIndex,
+        timeRemaining: questionData.timeLimit
+      }
     });
+    
+    console.log('🔧 DEBUG: [PUBSUB] question_started event published successfully');
+  }
+
+  async publishQuestionSent(quizCode: string, questionData: QuestionData): Promise<void> {
+    console.log('🔧 DEBUG: [PUBSUB] publishQuestionSent called:', {
+      quizCode: quizCode.toUpperCase(),
+      questionIndex: questionData.questionIndex,
+      question: questionData.question?.substring(0, 100) + '...',
+      optionsCount: Object.keys(questionData.options || {}).length,
+      timeLimit: questionData.timeLimit
+    });
+
+    await this.publishEvent({
+      type: 'question_sent',
+      quizCode,
+      data: { 
+        question: questionData,
+        currentQuestionIndex: questionData.questionIndex,
+        timeRemaining: questionData.timeLimit
+      }
+    });
+    
+    console.log('🔧 DEBUG: [PUBSUB] question_sent event published successfully');
   }
 
   async publishQuestionEnded(quizCode: string, results: any): Promise<void> {
+    console.log('🔧 DEBUG: [PUBSUB] publishQuestionEnded called:', {
+      quizCode: quizCode.toUpperCase(),
+      questionIndex: results.questionIndex,
+      correctAnswer: results.correctAnswer,
+      totalAnswers: results.totalAnswers,
+      answerBreakdown: results.answerBreakdown
+    });
+
     await this.publishEvent({
       type: 'question_ended',
       quizCode,
       data: { results }
     });
+    
+    console.log('🔧 DEBUG: [PUBSUB] question_ended event published successfully');
   }
 
   async publishTimerUpdate(quizCode: string, timeRemaining: number): Promise<void> {
-    await this.publishEvent({
-      type: 'timer_update',
-      quizCode,
-      data: { timeRemaining }
-    });
+    // Only log timer updates at key intervals to avoid spam
+    if (timeRemaining % 10 === 0 || timeRemaining <= 5) {
+      console.log('🔧 DEBUG: [PUBSUB] publishTimerUpdate called:', {
+        quizCode: quizCode.toUpperCase(),
+        timeRemaining
+      });
+    }
+
+    // IMPORTANT: Timer updates should NOT overwrite question events!
+    // Only update the timeRemaining field, preserve existing type and question data
+    console.log('🔧 DEBUG: [PUBSUB] Updating timeRemaining only, preserving existing event type');
+    
+    try {
+      const result = await this.db.collection('quizEvents').updateOne(
+        { quizCode: quizCode.toUpperCase() },
+        { 
+          $set: { 
+            'data.timeRemaining': timeRemaining,
+            'data.lastTimerUpdate': new Date(),
+            lastUpdated: new Date()
+          }
+        }
+      );
+      
+      if (timeRemaining % 10 === 0 || timeRemaining <= 5) {
+        console.log('🔧 DEBUG: [PUBSUB] Timer update - matched:', result.matchedCount, 'modified:', result.modifiedCount);
+      }
+    } catch (error) {
+      console.error('❌ Failed to update timer:', error);
+      throw error;
+    }
   }
 
   async publishQuizEnded(quizCode: string, finalResults: any): Promise<void> {
+    console.log('🔧 DEBUG: [PUBSUB] publishQuizEnded called:', {
+      quizCode: quizCode.toUpperCase(),
+      finalResults: finalResults ? 'PROVIDED' : 'NOT PROVIDED'
+    });
+
     await this.publishEvent({
       type: 'quiz_ended',
       quizCode,
       data: { finalResults }
     });
+    
+    console.log('🔧 DEBUG: [PUBSUB] quiz_ended event published successfully');
   }
 
   async publishAnswerSubmitted(quizCode: string, answer: AnswerSubmission): Promise<void> {
