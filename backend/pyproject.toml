@@ -1,0 +1,59 @@
+# Python Project Configuration for Security Tools
+
+[tool.bandit]
+# Bandit security linter configuration
+exclude_dirs = ["tests", "test", "venv", ".venv", "env", ".env"]
+skips = []  # Add test IDs to skip, e.g., ["B101", "B601"]
+
+[tool.bandit.assert_used]
+# Skip assert statements in test files
+skips = ["**/test_*.py", "**/tests/**"]
+
+[tool.safety]
+# Safety dependency scanner configuration
+# Ignore specific vulnerability IDs (use with caution)
+# ignore = ["12345", "67890"]
+
+[tool.semgrep]
+# Semgrep static analysis configuration
+config = [
+    "auto",  # Automatic ruleset selection
+    "p/security-audit",  # Security-focused rules
+    "p/python",  # Python-specific rules
+]
+
+[tool.pylint]
+# PyLint configuration for security checks
+load-plugins = [
+    "pylint.extensions.bad_builtin",
+    "pylint.extensions.check_elif",
+    "pylint.extensions.redefined_variable_type"
+]
+
+# Security-focused checks
+enable = [
+    "dangerous-default-value",
+    "unused-variable",
+    "unused-import", 
+    "redefined-builtin",
+    "eval-used",
+    "exec-used",
+    "subprocess-popen-preexec-fn",
+    "consider-using-with"
+]
+
+# Disable non-security checks for focused scanning
+disable = [
+    "missing-docstring",
+    "invalid-name",
+    "line-too-long",
+    "too-many-arguments",
+    "too-many-locals"
+]
+
+[tool.pip-audit]
+# pip-audit configuration for dependency scanning
+format = "json"
+output = "pip-audit-report.json"
+desc = true
+cache-dir = ".pip-audit-cache"

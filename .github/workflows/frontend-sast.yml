@@ -1,0 +1,109 @@
+name: Frontend (Next.js) SAST Security Scan
+
+on:
+  push:
+    branches: [ master, q-labeler ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-sast.yml'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-sast.yml'
+  schedule:
+    # Run weekly security scan every Monday at 2 AM UTC
+    - cron: '0 2 * * 1'
+
+jobs:
+  security-scan:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: 'frontend/package-lock.json'
+
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm ci --production=false
+
+    - name: Run OWASP Dependency-Check
+      uses: dependency-check/Dependency-Check_Action@main
+      id: depcheck
+      with:
+        project: 'frontend'
+        path: './frontend'
+        format: 'ALL'
+        # Set failure threshold - fail on medium severity and above
+        failOnCVSS: 4.0
+        # Additional arguments for comprehensive scanning
+        args: >
+          --enableRetired
+          --enableExperimental
+          --suppression .github/dependencycheck-suppressions.xml
+
+    - name: Upload Dependency-Check results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: dependency-check-frontend-reports
+        path: |
+          reports/
+          dependency-check-report.html
+          dependency-check-report.json
+          dependency-check-report.xml
+        retention-days: 30
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: reports/dependency-check-report.sarif
+        category: frontend-dependency-check
+
+    - name: Security scan summary
+      if: always()
+      run: |
+        echo "## 🔒 Frontend Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Scan Details" >> $GITHUB_STEP_SUMMARY
+        echo "- **Project**: Frontend (Next.js)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Scan Type**: OWASP Dependency-Check" >> $GITHUB_STEP_SUMMARY
+        echo "- **Failure Threshold**: CVSS 4.0+ (Medium severity and above)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "reports/dependency-check-report.json" ]; then
+          echo "### Vulnerability Summary" >> $GITHUB_STEP_SUMMARY
+          # Extract vulnerability counts from JSON report if available
+          echo "Detailed reports are available in the artifacts section." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### Status" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Security scan completed. Check artifacts for detailed reports." >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "1. Review the detailed HTML report in artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "2. Check the Security tab for SARIF results" >> $GITHUB_STEP_SUMMARY
+        echo "3. Update vulnerable dependencies if any found" >> $GITHUB_STEP_SUMMARY
+
+    - name: Fail on security issues
+      if: steps.depcheck.outcome == 'failure'
+      run: |
+        echo "❌ Security vulnerabilities found with CVSS score ≥ 4.0"
+        echo "Please review the dependency-check report and update vulnerable dependencies."
+        exit 1

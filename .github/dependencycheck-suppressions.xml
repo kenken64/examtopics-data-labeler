@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <!--
+    OWASP Dependency-Check Suppressions Configuration
+    
+    This file contains suppressions for known false positives or accepted risks.
+    Each suppression should include:
+    - A clear reason for suppression
+    - CVE number or vulnerability identifier
+    - Expiration date for review
+    
+    Documentation: https://jeremylong.github.io/DependencyCheck/general/suppression.html
+    -->
+    
+    <!-- Example suppression - remove this if not needed -->
+    <!--
+    <suppress>
+        <notes>
+            Example: False positive for development dependency that doesn't affect production
+            Review date: 2024-12-31
+        </notes>
+        <packageUrl regex="true">^pkg:npm/example-dev-package@.*$</packageUrl>
+        <cve>CVE-YYYY-XXXX</cve>
+    </suppress>
+    -->
+    
+    <!-- Suppressions for dev dependencies that don't affect production runtime -->
+    <!--
+    <suppress until="2024-12-31Z">
+        <notes>
+            ESLint development dependency vulnerability - does not affect production runtime
+        </notes>
+        <packageUrl regex="true">^pkg:npm/eslint@.*$</packageUrl>
+    </suppress>
+    -->
+</suppressions>

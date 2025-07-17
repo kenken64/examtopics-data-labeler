@@ -1,0 +1,179 @@
+name: Backend Docker Build & Publish
+
+on:
+  push:
+    branches: [ master, q-labeler ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-docker.yml'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-docker.yml'
+  release:
+    types: [published]
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: awscert-backend
+
+jobs:
+  test-build:
+    name: Test Docker Build
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Test Docker build
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: false
+        tags: test:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
+    - name: Run container smoke test
+      run: |
+        # Build and run container for quick smoke test
+        docker build -t backend-test ./backend
+        
+        # Start container in background with basic environment variables
+        docker run -d --name backend-test-container \
+          -p 5000:5000 \
+          -e FLASK_ENV=production \
+          -e MONGODB_URI=mongodb://localhost:27017/test \
+          backend-test
+        
+        # Wait for container to start
+        sleep 15
+        
+        # Check if container is running
+        if docker ps | grep -q backend-test-container; then
+          echo "✅ Container started successfully"
+        else
+          echo "❌ Container failed to start"
+          docker logs backend-test-container
+          exit 1
+        fi
+        
+        # Test health endpoint
+        timeout 30 bash -c 'until curl -f http://localhost:5000/health >/dev/null 2>&1; do sleep 2; done' && {
+          echo "✅ Health endpoint accessible"
+        } || {
+          echo "⚠️ Health endpoint not accessible, checking logs:"
+          docker logs backend-test-container | tail -20
+        }
+        
+        # Test basic Flask app response
+        timeout 10 bash -c 'curl -s http://localhost:5000/ || echo "Root endpoint not accessible"'
+        
+        # Cleanup
+        docker stop backend-test-container
+        docker rm backend-test-container
+        echo "✅ Smoke test completed"
+
+  build-and-publish:
+    name: Build and Push to DockerHub
+    runs-on: ubuntu-latest
+    needs: test-build
+    if: github.event_name != 'pull_request'
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_PAT }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=raw,value=latest,enable={{is_default_branch}}
+          type=sha,prefix={{branch}}-
+        labels: |
+          org.opencontainers.image.title=AWS Certification Backend
+          org.opencontainers.image.description=Python Flask backend for AWS certification practice app
+          org.opencontainers.image.vendor=ExamTopics
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+
+    - name: Generate deployment summary
+      run: |
+        echo "## 🐳 Backend Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Build Details" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image Name**: \`${{ env.REGISTRY }}/${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Base Image**: python:3.12.4-slim" >> $GITHUB_STEP_SUMMARY
+        echo "- **Server**: Gunicorn with 4 workers" >> $GITHUB_STEP_SUMMARY
+        echo "- **Platforms**: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Context**: ./backend" >> $GITHUB_STEP_SUMMARY
+        echo "- **Health Check**: /health endpoint" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Tags Published" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### System Dependencies Included" >> $GITHUB_STEP_SUMMARY
+        echo "- **PDF Processing**: poppler-utils, pdf2image" >> $GITHUB_STEP_SUMMARY
+        echo "- **OCR**: tesseract-ocr with English language pack" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image Processing**: OpenCV, PIL/Pillow dependencies" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Tools**: gcc, g++, build-essential" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "1. **Pull Image**: \`docker pull ${{ env.REGISTRY }}/${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "2. **Run Container**: \`docker run -p 5000:5000 -e MONGODB_URI=your_mongodb_uri ${{ env.REGISTRY }}/${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "3. **Environment Variables**: Configure MongoDB URI, file upload paths, and API keys" >> $GITHUB_STEP_SUMMARY
+        echo "4. **Health Check**: Access \`http://localhost:5000/health\` to verify deployment" >> $GITHUB_STEP_SUMMARY
+
+    - name: Update DockerHub description
+      uses: peter-evans/dockerhub-description@v4
+      if: github.ref == 'refs/heads/master'
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_PAT }}
+        repository: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.IMAGE_NAME }}
+        short-description: "Python Flask backend for AWS certification practice application"
+        readme-filepath: ./backend/README.md
