@@ -63,7 +63,7 @@ export default function AccessCodeQuestionsManagement() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [pendingUpdates, setPendingUpdates] = useState<{ questionId: string; enabled: boolean }[]>([]);
+  const [pendingUpdates, setPendingUpdates] = useState<{ _id: string; isEnabled?: boolean; sortOrder?: number; assignedQuestionNo?: number }[]>([]);
   const [includeDisabled, setIncludeDisabled] = useState(true);
 
   const loadAssignment = useCallback(async () => {

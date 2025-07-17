@@ -279,7 +279,7 @@ class QuizTimerService {
       await db.collection('quizSessions').updateOne(
         { quizCode: quizCode },
         {
-          $push: { questionResults: questionResults },
+          $push: { questionResults: questionResults as any },
           $set: { timeRemaining: 0 }
         }
       );

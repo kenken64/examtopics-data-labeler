@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const finalPlayerId = playerId || `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Check if player already exists (for rejoining)
-    const existingPlayer = quizRoom.players?.find(p => p.id === finalPlayerId);
+    const existingPlayer = quizRoom.players?.find((p: any) => p.id === finalPlayerId);
     
     if (existingPlayer) {
       console.log(`🔄 Player ${playerName} (${finalPlayerId}) already in quiz ${quizCode}`);

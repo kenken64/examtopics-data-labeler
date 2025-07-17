@@ -83,14 +83,14 @@ export class QuizPubSub {
       fullDocument: 'updateLookup'
     });
 
-    this.changeStream.on('change', (change) => {
+    this.changeStream?.on('change', (change) => {
       if (change.operationType === 'insert' && change.fullDocument) {
-        const event: QuizEvent = change.fullDocument;
+        const event = change.fullDocument as QuizEvent;
         this.handleEvent(event);
       }
     });
 
-    this.changeStream.on('error', (error) => {
+    this.changeStream?.on('error', (error) => {
       console.error('📡 Change stream error:', error);
     });
 
