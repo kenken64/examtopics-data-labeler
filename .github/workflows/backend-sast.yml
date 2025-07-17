@@ -1,0 +1,305 @@
+name: Backend (Python Flask) SAST Security Scan
+
+on:
+  push:
+    branches: [ master, q-labeler ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-sast.yml'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-sast.yml'
+  schedule:
+    # Run weekly security scan every Monday at 3 AM UTC
+    - cron: '0 3 * * 1'
+
+jobs:
+  security-scan:
+    name: Python Security Analysis
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install security scanning tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit[toml] safety semgrep pylint pip-audit
+
+    - name: Install project dependencies
+      run: |
+        cd backend
+        # Install dependencies for better analysis context
+        if [ -f requirements.txt ]; then 
+          pip install -r requirements.txt || echo "⚠️ Some dependencies failed to install"
+        fi
+
+    - name: Create reports directory
+      run: mkdir -p security-reports
+
+    - name: Run Bandit (Python Security Linter)
+      continue-on-error: true
+      run: |
+        cd backend
+        echo "🔍 Running Bandit security analysis..."
+        bandit -r . -c pyproject.toml -f json -o ../security-reports/bandit-report.json || true
+        bandit -r . -c pyproject.toml -f txt -o ../security-reports/bandit-report.txt || true
+        bandit -r . -c pyproject.toml -f html -o ../security-reports/bandit-report.html || true
+        echo "✅ Bandit scan completed"
+
+    - name: Run Safety (Dependency Vulnerability Scanner)
+      continue-on-error: true
+      run: |
+        cd backend
+        echo "🔍 Running Safety dependency scan..."
+        safety check --json --output ../security-reports/safety-report.json || true
+        safety check --output ../security-reports/safety-report.txt || true
+        echo "✅ Safety scan completed"
+
+    - name: Run pip-audit (Alternative Dependency Scanner)
+      continue-on-error: true
+      run: |
+        cd backend
+        echo "🔍 Running pip-audit dependency scan..."
+        pip-audit --format=json --output=../security-reports/pip-audit-report.json || true
+        pip-audit --format=cyclonedx-json --output=../security-reports/pip-audit-cyclonedx.json || true
+        pip-audit --output=../security-reports/pip-audit-report.txt || true
+        echo "✅ pip-audit scan completed"
+
+    - name: Run Semgrep (Static Analysis)
+      continue-on-error: true
+      run: |
+        cd backend
+        echo "🔍 Running Semgrep static analysis..."
+        semgrep --config=auto --json --output=../security-reports/semgrep-report.json . || true
+        semgrep --config=auto --output=../security-reports/semgrep-report.txt . || true
+        echo "✅ Semgrep scan completed"
+
+    - name: Run PyLint Security Checks
+      continue-on-error: true
+      run: |
+        cd backend
+        echo "🔍 Running PyLint security analysis..."
+        pylint --load-plugins=pylint.extensions.bad_builtin,pylint.extensions.check_elif,pylint.extensions.redefined_variable_type \
+               --disable=all \
+               --enable=dangerous-default-value,unused-variable,unused-import,redefined-builtin,eval-used,exec-used \
+               --output-format=json \
+               *.py > ../security-reports/pylint-security.json 2>&1 || true
+        echo "✅ PyLint security checks completed"
+
+    - name: Generate Security Summary
+      run: |
+        echo "## 🔒 Backend Security Scan Results" > security-summary.md
+        echo "" >> security-summary.md
+        echo "### Scan Details" >> security-summary.md
+        echo "- **Project**: Backend (Python Flask)" >> security-summary.md
+        echo "- **Python Version**: $(python --version)" >> security-summary.md
+        echo "- **Scan Tools**: Bandit, Safety, Semgrep, PyLint" >> security-summary.md
+        echo "- **Scan Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> security-summary.md
+        echo "" >> security-summary.md
+        
+        # Bandit Results
+        if [ -f "security-reports/bandit-report.json" ]; then
+          echo "### 🛡️ Bandit (Code Security Analysis)" >> security-summary.md
+          BANDIT_ISSUES=$(python3 -c "
+import json
+try:
+    with open('security-reports/bandit-report.json', 'r') as f:
+        data = json.load(f)
+    metrics = data.get('metrics', {})
+    print(f\"- **High Severity**: {len([r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH'])}\")
+    print(f\"- **Medium Severity**: {len([r for r in data.get('results', []) if r.get('issue_severity') == 'MEDIUM'])}\")
+    print(f\"- **Low Severity**: {len([r for r in data.get('results', []) if r.get('issue_severity') == 'LOW'])}\")
+    print(f\"- **Files Scanned**: {metrics.get('_totals', {}).get('loc', 'N/A')}\")
+except Exception as e:
+    print('- **Status**: Scan completed, check detailed reports')
+")
+          echo "$BANDIT_ISSUES" >> security-summary.md
+        fi
+        echo "" >> security-summary.md
+        
+        # Safety Results
+        if [ -f "security-reports/safety-report.json" ]; then
+          echo "### 🔐 Safety (Dependency Vulnerabilities)" >> security-summary.md
+          SAFETY_ISSUES=$(python3 -c "
+import json
+try:
+    with open('security-reports/safety-report.json', 'r') as f:
+        data = json.load(f)
+    vulns = len(data) if isinstance(data, list) else 0
+    print(f\"- **Vulnerabilities Found**: {vulns}\")
+    if vulns > 0:
+        print(f\"- **Critical Action Required**: Update vulnerable dependencies\")
+    else:
+        print(f\"- **Status**: No known vulnerabilities found\")
+except Exception as e:
+    print('- **Status**: Scan completed, check detailed reports')
+")
+          echo "$SAFETY_ISSUES" >> security-summary.md
+        fi
+        echo "" >> security-summary.md
+        
+        # Semgrep Results
+        if [ -f "security-reports/semgrep-report.json" ]; then
+          echo "### ⚡ Semgrep (Static Analysis)" >> security-summary.md
+          SEMGREP_ISSUES=$(python3 -c "
+import json
+try:
+    with open('security-reports/semgrep-report.json', 'r') as f:
+        data = json.load(f)
+    findings = data.get('results', [])
+    errors = len([f for f in findings if f.get('extra', {}).get('severity') == 'ERROR'])
+    warnings = len([f for f in findings if f.get('extra', {}).get('severity') == 'WARNING'])
+    infos = len([f for f in findings if f.get('extra', {}).get('severity') == 'INFO'])
+    print(f\"- **Errors**: {errors}\")
+    print(f\"- **Warnings**: {warnings}\")
+    print(f\"- **Info**: {infos}\")
+except Exception as e:
+    print('- **Status**: Scan completed, check detailed reports')
+")
+          echo "$SEMGREP_ISSUES" >> security-summary.md
+        fi
+        echo "" >> security-summary.md
+        
+        echo "### 📊 Next Steps" >> security-summary.md
+        echo "1. **Review Detailed Reports**: Download artifacts for comprehensive analysis" >> security-summary.md
+        echo "2. **Priority Order**: Address High severity issues first, then Medium" >> security-summary.md
+        echo "3. **Dependency Updates**: Run \`pip-audit --fix\` for vulnerable packages" >> security-summary.md
+        echo "4. **Code Review**: Examine flagged code patterns and apply fixes" >> security-summary.md
+        echo "5. **Verification**: Re-run scans after applying fixes" >> security-summary.md
+
+    - name: Convert Bandit to SARIF
+      continue-on-error: true
+      run: |
+        if [ -f "security-reports/bandit-report.json" ]; then
+          # Simple SARIF conversion for Bandit results
+          python3 -c "
+import json
+import sys
+from datetime import datetime
+
+try:
+    with open('security-reports/bandit-report.json', 'r') as f:
+        bandit_data = json.load(f)
+    
+    sarif = {
+        'version': '2.1.0',
+        '\$schema': 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
+        'runs': [{
+            'tool': {
+                'driver': {
+                    'name': 'Bandit',
+                    'version': '1.7.5',
+                    'informationUri': 'https://bandit.readthedocs.io/'
+                }
+            },
+            'results': []
+        }]
+    }
+    
+    for result in bandit_data.get('results', []):
+        severity_map = {'HIGH': 'error', 'MEDIUM': 'warning', 'LOW': 'note'}
+        sarif_result = {
+            'ruleId': result.get('test_id', 'unknown'),
+            'level': severity_map.get(result.get('issue_severity', 'LOW'), 'note'),
+            'message': {'text': result.get('issue_text', 'Security issue detected')},
+            'locations': [{
+                'physicalLocation': {
+                    'artifactLocation': {'uri': result.get('filename', 'unknown')},
+                    'region': {'startLine': result.get('line_number', 1)}
+                }
+            }]
+        }
+        sarif['runs'][0]['results'].append(sarif_result)
+    
+    with open('security-reports/bandit-sarif.json', 'w') as f:
+        json.dump(sarif, f, indent=2)
+    print('SARIF conversion completed')
+except Exception as e:
+    print(f'SARIF conversion failed: {e}')
+"
+        fi
+
+    - name: Upload Security Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: python-security-reports
+        path: |
+          security-reports/
+          security-summary.md
+        retention-days: 30
+
+    - name: Upload SARIF to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      if: always() && hashFiles('security-reports/bandit-sarif.json') != ''
+      with:
+        sarif_file: security-reports/bandit-sarif.json
+        category: python-security-bandit
+
+    - name: Display Security Summary
+      if: always()
+      run: |
+        cat security-summary.md >> $GITHUB_STEP_SUMMARY
+
+    - name: Evaluate Security Results
+      run: |
+        # Check for critical security issues
+        CRITICAL_ISSUES=0
+        
+        # Check Bandit for high severity issues
+        if [ -f "security-reports/bandit-report.json" ]; then
+          HIGH_SEVERITY_COUNT=$(python3 -c "
+import json
+try:
+    with open('security-reports/bandit-report.json', 'r') as f:
+        data = json.load(f)
+    count = len([r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH'])
+    print(count)
+except:
+    print(0)
+")
+          CRITICAL_ISSUES=$((CRITICAL_ISSUES + HIGH_SEVERITY_COUNT))
+          echo "Bandit high severity issues: $HIGH_SEVERITY_COUNT"
+        fi
+        
+        # Check Safety for vulnerabilities
+        if [ -f "security-reports/safety-report.json" ]; then
+          SAFETY_VULNS=$(python3 -c "
+import json
+try:
+    with open('security-reports/safety-report.json', 'r') as f:
+        data = json.load(f)
+    count = len(data) if isinstance(data, list) else 0
+    print(count)
+except:
+    print(0)
+")
+          CRITICAL_ISSUES=$((CRITICAL_ISSUES + SAFETY_VULNS))
+          echo "Safety vulnerabilities found: $SAFETY_VULNS"
+        fi
+        
+        echo "Total critical issues: $CRITICAL_ISSUES"
+        
+        # Set warning for high issues but don't fail (configurable)
+        if [ $CRITICAL_ISSUES -gt 0 ]; then
+          echo "⚠️ WARNING: $CRITICAL_ISSUES critical security issues found!"
+          echo "Please review the security reports and address high-priority issues."
+          # Uncomment the line below to fail the build on critical issues:
+          # exit 1
+        else
+          echo "✅ No critical security issues detected."
+        fi

@@ -4,10 +4,10 @@ This document describes the SAST (Static Application Security Testing) setup for
 
 ## Overview
 
-We use OWASP Dependency-Check to perform automated security scanning of our dependencies across three sub-projects:
-- Frontend (Next.js)
-- Telegram Bot (Node.js)
-- Backend (Python Flask) - handled separately
+We use multiple security scanning tools to perform comprehensive automated security analysis across three sub-projects:
+- **Frontend (Next.js)**: OWASP Dependency-Check for Node.js dependencies
+- **Telegram Bot (Node.js)**: OWASP Dependency-Check for Node.js dependencies  
+- **Backend (Python Flask)**: Bandit, Safety, Semgrep, pip-audit, and PyLint for Python code and dependencies
 
 ## Workflows
 
@@ -21,11 +21,30 @@ We use OWASP Dependency-Check to perform automated security scanning of our depe
 - **Scope**: Scans Node.js dependencies in `telegram-bot/` directory
 - **Threshold**: Fails on CVSS 4.0+ (Medium severity and above)
 
+### 3. Backend Python SAST Scan (`.github/workflows/backend-sast.yml`)
+- **Triggers**: Push to main branches, PRs, weekly schedule (Mondays 3 AM UTC)
+- **Scope**: Comprehensive Python security analysis in `backend/` directory
+- **Tools Used**:
+  - **Bandit**: Python code security linter (AST-based analysis)
+  - **Safety**: Known vulnerability database for Python packages
+  - **pip-audit**: Alternative Python dependency vulnerability scanner
+  - **Semgrep**: Static analysis with security-focused rules
+  - **PyLint**: Security-focused code quality checks
+- **Threshold**: Reports critical issues but doesn't fail build (configurable)
+
 ## Configuration
 
 ### Failure Thresholds
+
+#### Node.js Projects (Frontend/Telegram Bot)
 - **CVSS 4.0+**: Medium, High, and Critical severity vulnerabilities will fail the build
 - **CVSS 0.0-3.9**: Low severity vulnerabilities are reported but don't fail the build
+
+#### Python Backend
+- **Bandit High Severity**: Critical code security issues (configurable to fail build)
+- **Safety/pip-audit**: Known vulnerability alerts (warning mode, configurable to fail)
+- **Semgrep Errors**: Static analysis errors flagged for review
+- **Current Mode**: Warning-only (can be changed to fail on critical issues)
 
 ### Scan Settings
 - **Node.js Audit**: Enabled for both projects
@@ -55,6 +74,35 @@ We use OWASP Dependency-Check to perform automated security scanning of our depe
 
 ## Managing False Positives
 
+### Node.js Dependencies
+Use the `.github/dependencycheck-suppressions.xml` file to suppress known false positives:
+
+### Python Security Tools
+Python tools use different configuration approaches:
+
+#### Bandit Configuration
+Configure in `backend/pyproject.toml` or `.bandit` files:
+```toml
+[tool.bandit]
+exclude_dirs = ["tests", "venv"]
+skips = ["B101"]  # Skip specific test IDs
+```
+
+#### Safety Suppressions
+Use `backend/pyproject.toml`:
+```toml
+[tool.safety]
+ignore = ["12345"]  # Ignore specific vulnerability IDs
+```
+
+#### Semgrep Rules
+Configure via CLI or `.semgrepignore` file:
+```bash
+# Skip specific rules
+semgrep --config=auto --exclude-rule="python.lang.security.audit.dangerous-system-call"
+```
+
+### OWASP Dependency-Check
 Use the `.github/dependencycheck-suppressions.xml` file to suppress known false positives:
 
 ```xml
@@ -84,6 +132,8 @@ When vulnerabilities are found:
 ## Common Commands
 
 ### Manual Dependency Updates
+
+#### Node.js Projects
 ```bash
 # Frontend
 cd frontend
@@ -96,6 +146,29 @@ cd telegram-bot
 npm audit
 npm audit fix
 npm update
+```
+
+#### Python Backend
+```bash
+# Backend
+cd backend
+
+# Check for vulnerabilities
+safety check
+pip-audit
+
+# Update dependencies (manual review recommended)
+pip list --outdated
+pip install --upgrade package_name
+
+# Fix specific vulnerabilities
+pip-audit --fix  # Auto-fix when possible
+safety check --json | jq '.[]' # Review details
+
+# Run security scans locally
+bandit -r . -c pyproject.toml
+semgrep --config=auto .
+pylint --load-plugins=pylint.extensions.bad_builtin *.py
 ```
 
 ### Local Dependency-Check Run
