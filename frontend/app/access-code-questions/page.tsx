@@ -86,7 +86,7 @@ export default function AccessCodeQuestionsManagement() {
         setError(data.message || 'Failed to load assignment');
         setAssignment(null);
       }
-    } catch (_err) {
+    } catch {
       setError('Failed to fetch assignment data');
       setAssignment(null);
     } finally {
@@ -204,7 +204,7 @@ export default function AccessCodeQuestionsManagement() {
       } else {
         setError(data.message || 'Failed to save changes');
       }
-    } catch (_err) {
+    } catch {
       setError('Failed to save changes');
     } finally {
       setSaving(false);
