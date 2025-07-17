@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Check, Copy, RefreshCw, Link, Unlink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -459,7 +457,7 @@ export default function AccessCodesPage() {
           <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <h3 className="text-lg font-semibold text-blue-800 mb-2">Access Code Information</h3>
             <ul className="text-sm text-blue-700 space-y-1">
-              <li>• Access codes can only be generated for customers with "Paid" status</li>
+              <li>• Access codes can only be generated for customers with &ldquo;Paid&rdquo; status</li>
               <li>• Original codes are provided by customers during payment</li>
               <li>• Generated codes are unique system-generated access credentials</li>
               <li>• Once generated, codes cannot be regenerated for security purposes</li>
