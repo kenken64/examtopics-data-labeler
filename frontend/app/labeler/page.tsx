@@ -784,7 +784,7 @@ export default function Labeler() {
                   dangerouslySetInnerHTML={{ __html: markdownContent || '' }}
                 ></div>
               ) : (
-                <p className="text-sm lg:text-base text-gray-600">Click "AI OCR Conversion" to see the output.</p>
+                <p className="text-sm lg:text-base text-gray-600">Click &ldquo;AI OCR Conversion&rdquo; to see the output.</p>
               )}
             </div>
           </div>

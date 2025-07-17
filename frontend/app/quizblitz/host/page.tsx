@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -311,11 +312,12 @@ function QuizHostPageContent() {
               <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-center">
                 {qrCodeUrl ? (
                   <div className="text-center">
-                    <img 
+                    <Image 
                       src={qrCodeUrl} 
                       alt="Quiz QR Code" 
+                      width={200}
+                      height={200}
                       className="mx-auto mb-2 rounded-lg"
-                      style={{ maxWidth: '200px', height: 'auto' }}
                     />
                     <p className="text-sm text-gray-600">Scan to join via Telegram bot</p>
                   </div>

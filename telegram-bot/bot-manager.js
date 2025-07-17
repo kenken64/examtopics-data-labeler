@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 const { exec } = require('child_process');
-const path = require('path');
 
 // Function to find and kill any running bot processes
 function killExistingBots() {
@@ -14,10 +13,9 @@ function killExistingBots() {
           resolve();
           return;
         }
-        
+
         const lines = stdout.split('\n');
         let foundBots = false;
-        
         lines.forEach(line => {
           if (line.includes('node.exe')) {
             // Extract PID from CSV format
@@ -41,7 +39,7 @@ function killExistingBots() {
             }
           }
         });
-        
+
         // Wait a moment for processes to be killed
         setTimeout(() => {
           if (foundBots) {
@@ -55,16 +53,16 @@ function killExistingBots() {
       });
     } else {
       // Unix-like systems
-      exec("ps aux | grep 'node.*bot.js' | grep -v grep", (error, stdout) => {
+      exec('ps aux | grep \'node.*bot.js\' | grep -v grep', (error, stdout) => {
         if (error || !stdout.trim()) {
           console.log('No existing bot processes found');
           resolve();
           return;
         }
-        
+
         const lines = stdout.trim().split('\n');
         console.log(`Found ${lines.length} existing bot process(es). Terminating...`);
-        
+
         lines.forEach(line => {
           const parts = line.trim().split(/\s+/);
           const pid = parts[1];
@@ -76,7 +74,7 @@ function killExistingBots() {
             });
           }
         });
-        
+
         // Wait for processes to terminate
         setTimeout(resolve, 3000);
       });
@@ -87,24 +85,24 @@ function killExistingBots() {
 // Main function
 async function main() {
   const command = process.argv[2];
-  
+
   if (command === 'kill') {
     console.log('Searching for and terminating existing bot processes...');
     await killExistingBots();
     console.log('Done.');
     return;
   }
-  
+
   if (command === 'start') {
     console.log('Starting bot with cleanup...');
     await killExistingBots();
-    
+
     // Start the bot
     console.log('Starting fresh bot instance...');
     require('./bot.js');
     return;
   }
-  
+
   console.log('Telegram Bot Manager');
   console.log('Usage:');
   console.log('  node bot-manager.js kill   - Kill any existing bot processes');

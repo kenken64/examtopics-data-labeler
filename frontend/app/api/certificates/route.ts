@@ -1,5 +1,5 @@
 // Next.js server components for API route handling
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 // Mongoose ODM for MongoDB operations and schema definitions
 import mongoose from 'mongoose';
 // Authentication middleware for protecting API endpoints
@@ -115,7 +115,7 @@ const Certificate = mongoose.models.Certificate || mongoose.model('Certificate',
  * @param request - Authenticated HTTP request
  * @returns JSON response with certificates array or error message
  */
-export const GET = withAuth(async (request: AuthenticatedRequest) => {
+export const GET = withAuth(async (_request: AuthenticatedRequest) => {
   try {
     // Establish database connection
     await connectDB();

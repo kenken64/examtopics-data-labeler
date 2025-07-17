@@ -1,5 +1,5 @@
 import { MongoClient } from 'mongodb';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { withAuth, AuthenticatedRequest } from '@/lib/auth';
 
 const uri = process.env.MONGODB_URI || "mongodb+srv://user:password@cluster.mongodb.net/";

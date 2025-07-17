@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     jwt.verify(token, JWT_SECRET);
     return NextResponse.json({ message: 'Authorized' }, { status: 200 });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 }

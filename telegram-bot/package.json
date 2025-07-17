@@ -28,5 +28,9 @@
     "grammy": "^1.15.0",
     "mongodb": "^6.17.0",
     "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "eslint": "^9.31.0"
   }
 }

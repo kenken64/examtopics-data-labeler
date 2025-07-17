@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -433,9 +434,11 @@ export default function Certificates() {
                           <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-3 mb-2">
                             {certificate.logoUrl ? (
                               <div className="w-24 h-24 sm:w-32 sm:h-32 lg:w-40 lg:h-40 flex-shrink-0 mx-auto sm:mx-0">
-                                <img 
+                                <Image 
                                   src={certificate.logoUrl} 
                                   alt={`${certificate.name} logo`}
+                                  width={160}
+                                  height={160}
                                   className="w-full h-full object-contain rounded"
                                   onLoad={(e) => {
                                     console.log(`Logo loaded successfully: ${certificate.logoUrl}`);

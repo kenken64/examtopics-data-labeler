@@ -15,7 +15,7 @@ class TelegramQuizBotSync {
     this.changeStream = null;
     this.activeQuizzes = new Map(); // quizCode -> { chatIds: Set, currentQuestion: object }
     this.playerSessions = new Map(); // chatId -> { quizCode, playerId, playerName }
-    
+
     this.setupEventHandlers();
   }
 
@@ -24,7 +24,7 @@ class TelegramQuizBotSync {
       await this.client.connect();
       this.db = this.client.db(this.dbName);
       console.log('🤖 Telegram QuizBot connected to MongoDB');
-      
+
       this.startListening();
       this.setupBotCommands();
     } catch (error) {
@@ -60,32 +60,32 @@ class TelegramQuizBotSync {
 
   async handleQuizEvent(event) {
     const { type, quizCode, data } = event;
-    
+
     switch (type) {
-      case 'quiz_started':
-        await this.handleQuizStarted(quizCode, data);
-        break;
-      case 'question_started':
-        await this.handleQuestionStarted(quizCode, data);
-        break;
-      case 'timer_update':
-        await this.handleTimerUpdate(quizCode, data);
-        break;
-      case 'question_ended':
-        await this.handleQuestionEnded(quizCode, data);
-        break;
-      case 'quiz_ended':
-        await this.handleQuizEnded(quizCode, data);
-        break;
+    case 'quiz_started':
+      await this.handleQuizStarted(quizCode, data);
+      break;
+    case 'question_started':
+      await this.handleQuestionStarted(quizCode, data);
+      break;
+    case 'timer_update':
+      await this.handleTimerUpdate(quizCode, data);
+      break;
+    case 'question_ended':
+      await this.handleQuestionEnded(quizCode, data);
+      break;
+    case 'quiz_ended':
+      await this.handleQuizEnded(quizCode, data);
+      break;
     }
   }
 
   async handleQuizStarted(quizCode, data) {
     const { question } = data;
-    
+
     if (!this.activeQuizzes.has(quizCode)) {
-      this.activeQuizzes.set(quizCode, { 
-        chatIds: new Set(), 
+      this.activeQuizzes.set(quizCode, {
+        chatIds: new Set(),
         currentQuestion: question,
         questionStartTime: Date.now()
       });
@@ -104,7 +104,7 @@ class TelegramQuizBotSync {
 
   async handleQuestionStarted(quizCode, data) {
     const { question } = data;
-    
+
     if (!this.activeQuizzes.has(quizCode)) return;
 
     const quiz = this.activeQuizzes.get(quizCode);
@@ -121,11 +121,11 @@ class TelegramQuizBotSync {
 
   async handleTimerUpdate(quizCode, data) {
     const { timeRemaining } = data;
-    
+
     if (!this.activeQuizzes.has(quizCode)) return;
 
     const quiz = this.activeQuizzes.get(quizCode);
-    
+
     // Send timer updates at specific intervals (10, 5, 3, 2, 1 seconds remaining)
     if ([10, 5, 3, 2, 1].includes(timeRemaining)) {
       for (const chatId of quiz.chatIds) {
@@ -136,20 +136,20 @@ class TelegramQuizBotSync {
 
   async handleQuestionEnded(quizCode, data) {
     const { results } = data;
-    
+
     if (!this.activeQuizzes.has(quizCode)) return;
 
     const quiz = this.activeQuizzes.get(quizCode);
-    
+
     // Show correct answer and explanation
     for (const chatId of quiz.chatIds) {
       const resultText = `✅ Correct Answer: ${results.correctAnswer}\n\n` +
-                        `📊 Answer Breakdown:\n` +
+                        '📊 Answer Breakdown:\n' +
                         Object.entries(results.answerBreakdown)
                           .map(([option, count]) => `${option}: ${count} votes`)
                           .join('\n') +
                         (results.explanation ? `\n\n💡 ${results.explanation}` : '');
-      
+
       await this.bot.sendMessage(chatId, resultText);
     }
 
@@ -158,18 +158,18 @@ class TelegramQuizBotSync {
 
   async handleQuizEnded(quizCode, data) {
     const { finalResults } = data;
-    
+
     if (!this.activeQuizzes.has(quizCode)) return;
 
     const quiz = this.activeQuizzes.get(quizCode);
-    
+
     // Send final results
     for (const chatId of quiz.chatIds) {
-      const finalText = `🏁 Quiz Completed!\n\n` +
+      const finalText = '🏁 Quiz Completed!\n\n' +
                        `📊 Total Questions: ${finalResults.totalQuestions}\n` +
                        `⏱️ Quiz Duration: ${this.formatDuration(Date.now() - quiz.questionStartTime)}\n\n` +
-                       `Thanks for participating! 🎉`;
-      
+                       'Thanks for participating! 🎉';
+
       await this.bot.sendMessage(chatId, finalText);
     }
 
@@ -180,7 +180,7 @@ class TelegramQuizBotSync {
 
   async sendQuestionToUser(chatId, question, quizCode) {
     const { questionIndex, question: questionText, options, timeLimit } = question;
-    
+
     // Create option buttons (A, B, C, D, E)
     const optionButtons = Object.entries(options).map(([letter, text]) => ([
       {
@@ -204,12 +204,12 @@ class TelegramQuizBotSync {
     // Handle /start command
     this.bot.onText(/\/start/, (msg) => {
       const chatId = msg.chat.id;
-      const welcomeText = `🎮 Welcome to QuizBlitz Bot!\n\n` +
-                         `Commands:\n` +
-                         `/join <quiz_code> - Join a live quiz\n` +
-                         `/leave - Leave current quiz\n` +
-                         `/status - Check your quiz status`;
-      
+      const welcomeText = '🎮 Welcome to QuizBlitz Bot!\n\n' +
+                         'Commands:\n' +
+                         '/join <quiz_code> - Join a live quiz\n' +
+                         '/leave - Leave current quiz\n' +
+                         '/status - Check your quiz status';
+
       this.bot.sendMessage(chatId, welcomeText);
     });
 
@@ -217,7 +217,7 @@ class TelegramQuizBotSync {
     this.bot.onText(/\/join (.+)/, async (msg, match) => {
       const chatId = msg.chat.id;
       const quizCode = match[1].toUpperCase();
-      
+
       try {
         // Check if quiz exists and is active
         const quizSession = await this.db.collection('quizSessions').findOne({
@@ -232,8 +232,8 @@ class TelegramQuizBotSync {
 
         // Add user to quiz
         if (!this.activeQuizzes.has(quizCode)) {
-          this.activeQuizzes.set(quizCode, { 
-            chatIds: new Set(), 
+          this.activeQuizzes.set(quizCode, {
+            chatIds: new Set(),
             currentQuestion: null,
             questionStartTime: Date.now()
           });
@@ -268,7 +268,7 @@ class TelegramQuizBotSync {
     this.bot.onText(/\/leave/, async (msg) => {
       const chatId = msg.chat.id;
       const session = this.playerSessions.get(chatId);
-      
+
       if (!session) {
         await this.bot.sendMessage(chatId, '❌ You are not in any quiz.');
         return;
@@ -276,11 +276,11 @@ class TelegramQuizBotSync {
 
       const { quizCode } = session;
       const quiz = this.activeQuizzes.get(quizCode);
-      
+
       if (quiz) {
         quiz.chatIds.delete(chatId);
       }
-      
+
       this.playerSessions.delete(chatId);
       await this.bot.sendMessage(chatId, `✅ Left quiz ${quizCode}.`);
     });
@@ -304,7 +304,7 @@ class TelegramQuizBotSync {
 
         // Submit answer to the backend
         try {
-          const response = await fetch(`http://localhost:3001/api/quizblitz/submit-answer`, {
+          const response = await fetch('http://localhost:3001/api/quizblitz/submit-answer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

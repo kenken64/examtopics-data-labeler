@@ -22,21 +22,21 @@ class QuizBlitzManualSender {
   async sendMessageViaCurl(chatId, text, replyMarkup = null) {
     return new Promise((resolve, reject) => {
       const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
-      
+
       const payload = {
         chat_id: chatId,
         text: text,
         parse_mode: 'Markdown'
       };
-      
+
       if (replyMarkup) {
         payload.reply_markup = replyMarkup;
       }
-      
+
       const curlCommand = `curl -s -X POST "${url}" \\
         -H "Content-Type: application/json" \\
-        -d '${JSON.stringify(payload).replace(/'/g, "\\'")}'`;
-      
+        -d '${JSON.stringify(payload).replace(/'/g, '\\\'')}'`;
+
       exec(curlCommand, (error, stdout, stderr) => {
         if (error) {
           reject(error);
@@ -58,7 +58,7 @@ class QuizBlitzManualSender {
 
   // Simulate sending a QuizBlitz question via curl
   async sendQuizQuestionViaCurl(chatId, questionData, quizCode) {
-    const questionText = 
+    const questionText =
       `🎯 *Question ${questionData.index + 1}*\n\n` +
       `${questionData.question}\n\n` +
       `⏱️ *Time remaining: ${questionData.timeLimit} seconds*\n` +
@@ -77,17 +77,17 @@ class QuizBlitzManualSender {
       console.log(`✅ Sent question via curl to chat ${chatId}:`, result.message_id);
       return result;
     } catch (error) {
-      console.error(`❌ Failed to send question via curl:`, error.message);
+      console.error('❌ Failed to send question via curl:', error.message);
       throw error;
     }
   }
 
   async testQuizBlitzWithCurl() {
     console.log('🧪 Testing QuizBlitz with Curl Workaround...\n');
-    
+
     try {
       await this.initialize();
-      
+
       // Get test quiz
       const quizSession = await this.db.collection('quizSessions').findOne({
         quizCode: 'TEST5SO',
@@ -100,16 +100,16 @@ class QuizBlitzManualSender {
       }
 
       const currentQuestion = quizSession.questions[0];
-      
+
       console.log('📝 Question data to send:');
       console.log(`   Question: ${currentQuestion.question.substring(0, 100)}...`);
       console.log(`   Options: ${Object.keys(currentQuestion.options).join(', ')}`);
-      
+
       // Test sending to a dummy chat ID (won't work but will test the curl mechanism)
       const testChatId = 123456789; // Dummy ID for testing
-      
+
       console.log(`\n📤 Testing curl-based message sending to chat ${testChatId}...`);
-      
+
       try {
         await this.sendQuizQuestionViaCurl(testChatId, {
           index: 0,
@@ -118,9 +118,9 @@ class QuizBlitzManualSender {
           timeLimit: 30,
           points: 1000
         }, 'TEST5SO');
-        
+
         console.log('✅ Curl-based message sending works!');
-        
+
       } catch (sendError) {
         if (sendError.message.includes('chat not found')) {
           console.log('✅ Curl mechanism works (expected "chat not found" for dummy ID)');
@@ -128,14 +128,14 @@ class QuizBlitzManualSender {
           console.log('⚠️  Curl send test result:', sendError.message);
         }
       }
-      
+
       console.log('\n💡 SOLUTION FOUND:');
       console.log('   Since curl works but Node.js HTTPS does not, we can:');
       console.log('   1. Use curl-based message sending for QuizBlitz');
       console.log('   2. Implement webhook-based receiving instead of polling');
       console.log('   3. Or configure Node.js HTTPS to work in this environment');
       console.log('\n✅ QuizBlitz can work with curl-based workaround!');
-      
+
     } catch (error) {
       console.error('❌ Test failed:', error);
     } finally {

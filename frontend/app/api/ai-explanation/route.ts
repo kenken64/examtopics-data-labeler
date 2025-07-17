@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI } from '@ai-sdk/openai';
-import { MongoClient, ObjectId } from 'mongodb';
+import { ObjectId } from 'mongodb';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/mongodb';
 

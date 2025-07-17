@@ -76,9 +76,9 @@ export default function LoginForm() {
           window.location.href = redirectTo;
         }, 1500); // Longer delay to ensure cookie is fully processed
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Login error:', error);
-      setMessage(error.message || 'An unknown error occurred during login');
+      setMessage((error as Error)?.message || 'An unknown error occurred during login');
     }
   };
 
@@ -130,7 +130,7 @@ export default function LoginForm() {
           {/* Sign up link */}
           <div className="text-center">
             <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <button
                 onClick={() => router.push('/register')}
                 className="text-blue-500 hover:text-blue-600 font-medium"

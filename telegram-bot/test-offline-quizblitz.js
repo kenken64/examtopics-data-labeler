@@ -32,10 +32,10 @@ class OfflineQuizBlitzTest {
   async processQuizNotifications() {
     try {
       console.log('\n🔍 Processing quiz notifications...');
-      
+
       // Check for active quiz sessions that need Telegram bot sync
       const activeSessions = await this.db.collection('quizSessions')
-        .find({ 
+        .find({
           status: 'active',
           $or: [
             { telegramPlayersNotified: { $ne: true } },
@@ -57,15 +57,15 @@ class OfflineQuizBlitzTest {
 
         if (telegramPlayers.length > 0) {
           console.log(`\n🎯 Quiz ${session.quizCode} has ${telegramPlayers.length} Telegram players`);
-          
+
           // Send current question to Telegram players
           const currentQuestionIndex = session.currentQuestionIndex || 0;
           if (session.questions && session.questions[currentQuestionIndex]) {
             const currentQuestion = session.questions[currentQuestionIndex];
-            
+
             console.log('\n📝 Sending question to Telegram players:');
             console.log('='.repeat(50));
-            
+
             for (const telegramId of telegramPlayers) {
               await this.simulateSendQuizQuestion(telegramId, {
                 index: currentQuestionIndex,
@@ -100,8 +100,8 @@ class OfflineQuizBlitzTest {
     }
 
     console.log(`\n📱 Sending to user ${session.playerName} (${telegramId}):`);
-    
-    const questionText = 
+
+    const questionText =
       `🎯 *Question ${questionData.index + 1}*\n\n` +
       `${questionData.question}\n\n` +
       `⏱️ *Time remaining: ${questionData.timeLimit} seconds*\n` +
@@ -109,7 +109,7 @@ class OfflineQuizBlitzTest {
 
     console.log(questionText);
     console.log('\n📱 Inline Keyboard Buttons:');
-    
+
     // Simulate creating inline keyboard
     Object.entries(questionData.options).forEach(([key, value]) => {
       console.log(`   [${key}. ${value.substring(0, 50)}...]  ← Button: quiz_answer_${key}_${quizCode}`);
@@ -124,7 +124,7 @@ class OfflineQuizBlitzTest {
     if (!session) return;
 
     console.log(`\n✅ User ${session.playerName} selected answer: ${selectedAnswer}`);
-    
+
     // Find the quiz session and current question
     const quizSession = await this.db.collection('quizSessions').findOne({
       quizCode: quizCode,
@@ -141,10 +141,10 @@ class OfflineQuizBlitzTest {
 
   async runCompleteTest() {
     console.log('🧪 Starting Offline QuizBlitz Test...\n');
-    
+
     try {
       await this.initialize();
-      
+
       // 1. Find existing test quiz
       let quizSession = await this.db.collection('quizSessions').findOne({
         quizCode: 'TEST5SO',

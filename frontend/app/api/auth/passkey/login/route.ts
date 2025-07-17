@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { User } from '@/lib/db';
 import dbConnect from '@/lib/db';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 
 const RP_ID = process.env.RP_ID || 'localhost';
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';

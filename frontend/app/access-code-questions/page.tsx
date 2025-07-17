@@ -1,18 +1,15 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { 
   ArrowUp, 
   ArrowDown, 
   Eye, 
   EyeOff, 
-  Plus, 
-  Trash2, 
   Save,
   Search,
   AlertCircle,
@@ -66,10 +63,10 @@ export default function AccessCodeQuestionsManagement() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [pendingUpdates, setPendingUpdates] = useState<any[]>([]);
+  const [pendingUpdates, setPendingUpdates] = useState<{ _id: string; isEnabled?: boolean; sortOrder?: number; assignedQuestionNo?: number }[]>([]);
   const [includeDisabled, setIncludeDisabled] = useState(true);
 
-  const loadAssignment = async () => {
+  const loadAssignment = useCallback(async () => {
     if (!generatedAccessCode.trim()) {
       setError('Please enter a generated access code');
       return;
@@ -89,13 +86,13 @@ export default function AccessCodeQuestionsManagement() {
         setError(data.message || 'Failed to load assignment');
         setAssignment(null);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch assignment data');
       setAssignment(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [generatedAccessCode, includeDisabled]);
 
   const toggleQuestionStatus = (questionId: string) => {
     if (!assignment) return;
@@ -207,7 +204,7 @@ export default function AccessCodeQuestionsManagement() {
       } else {
         setError(data.message || 'Failed to save changes');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to save changes');
     } finally {
       setSaving(false);
@@ -223,7 +220,7 @@ export default function AccessCodeQuestionsManagement() {
     if (generatedAccessCode) {
       loadAssignment();
     }
-  }, [includeDisabled]);
+  }, [includeDisabled, generatedAccessCode, loadAssignment]);
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
@@ -350,7 +347,7 @@ export default function AccessCodeQuestionsManagement() {
             <CardHeader>
               <CardTitle>Question Assignments</CardTitle>
               <CardDescription>
-                Reorder questions and toggle their enabled status. Changes are tracked and saved when you click "Save Changes".
+                Reorder questions and toggle their enabled status. Changes are tracked and saved when you click &ldquo;Save Changes&rdquo;.
               </CardDescription>
             </CardHeader>
             <CardContent>

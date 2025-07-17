@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { User } from '@/lib/db';
 import dbConnect from '@/lib/db';
-import crypto from 'crypto';
 
 const RP_ID = process.env.RP_ID || 'localhost';
 

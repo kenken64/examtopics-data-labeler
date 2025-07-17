@@ -334,6 +334,14 @@ def merge_grid(images):
     print(f"Screenshot region defined: ({x1}, {y1}, {width}, {height})")
     return (x1, y1, width, height)
 
+
+def define_screenshot_region():
+    """Define screenshot region interactively (placeholder implementation)"""
+    print("Interactive region selection not implemented yet.")
+    print("Using full screen region.")
+    return None
+
+
 def main():
     import argparse
     
