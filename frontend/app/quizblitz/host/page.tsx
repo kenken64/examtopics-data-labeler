@@ -25,6 +25,8 @@ function QuizHostPageContent() {
   const [copied, setCopied] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const socketRef = useRef<Socket | null>(null);
+  const roomInitialized = useRef<boolean>(false); // Prevent duplicate room creation
+  const codeGenerated = useRef<boolean>(false); // Prevent duplicate code generation
 
   const accessCode = searchParams.get('accessCode');
   const timer = searchParams.get('timer');
@@ -42,16 +44,21 @@ function QuizHostPageContent() {
       return;
     }
 
-    // Generate 6-digit quiz code
-    const code = Math.random().toString().slice(2, 8);
-    console.log('🎯 QuizHost: Generated quiz code', code);
-    setQuizCode(code);
+    // Only generate quiz code once
+    if (!codeGenerated.current) {
+      codeGenerated.current = true;
+      
+      // Generate 6-digit quiz code
+      const code = Math.random().toString().slice(2, 8);
+      console.log('🎯 QuizHost: Generated quiz code', code);
+      setQuizCode(code);
 
-    // Generate QR code for the quiz URL
-    generateQRCode(code);
+      // Generate QR code for the quiz URL
+      generateQRCode(code);
 
-    // Initialize quiz room
-    initializeQuizRoom(code);
+      // Initialize quiz room
+      initializeQuizRoom(code);
+    }
 
     return () => {
       if (socketRef.current) {
@@ -62,6 +69,13 @@ function QuizHostPageContent() {
   }, [accessCode, timer, router]);
 
   const initializeQuizRoom = async (code: string) => {
+    // Prevent duplicate room creation
+    if (roomInitialized.current) {
+      console.log('⚠️ QuizHost: Room already initialized, skipping');
+      return;
+    }
+    
+    roomInitialized.current = true;
     console.log('🏗️ QuizHost: Initializing quiz room', { code, accessCode, timer });
     
     try {
@@ -91,17 +105,54 @@ function QuizHostPageContent() {
       if (!response.ok) {
         const errorText = await response.text();
         console.log('❌ QuizHost: Create-room failed', errorText);
+        
+        // If it's a duplicate error, fetch the existing room to sync quiz code
+        if (response.status === 409) {
+          console.log('ℹ️ QuizHost: Room already exists, fetching existing room...');
+          await syncWithExistingRoom();
+          return;
+        }
+        
         throw new Error('Failed to create quiz room');
       }
 
       const result = await response.json();
       console.log('✅ QuizHost: Quiz room created successfully', result);
 
+      // Ensure frontend quiz code matches database
+      if (result.quizCode && result.quizCode !== code) {
+        console.log('🔄 QuizHost: Updating frontend quiz code to match database', result.quizCode);
+        setQuizCode(result.quizCode);
+        generateQRCode(result.quizCode);
+      }
+
       // SSE will now handle real-time player updates automatically
 
     } catch (error) {
       console.error('Failed to initialize quiz room:', error);
       toast.error('Failed to create quiz room');
+      roomInitialized.current = false; // Reset on error
+    }
+  };
+
+  const syncWithExistingRoom = async () => {
+    try {
+      // Fetch existing quiz room for this access code
+      const response = await fetch(`/api/quizblitz/room-by-access-code/${accessCode}`, {
+        method: 'GET',
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const roomData = await response.json();
+        if (roomData.quizCode) {
+          console.log('🔄 QuizHost: Syncing with existing room code', roomData.quizCode);
+          setQuizCode(roomData.quizCode);
+          generateQRCode(roomData.quizCode);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to sync with existing room:', error);
     }
   };
 

@@ -27,10 +27,21 @@ class QuizTimerService {
 
   async startQuizTimer(quizCode: string): Promise<void> {
     try {
+      console.log('🔧 DEBUG: [TIMER] startQuizTimer called for quiz:', quizCode.toUpperCase());
+      
       const db = await connectToDatabase();
       const quizSession = await db.collection('quizSessions').findOne({
         quizCode: quizCode.toUpperCase(),
         status: 'active'
+      });
+
+      console.log('🔧 DEBUG: [TIMER] Quiz session found:', {
+        found: !!quizSession,
+        quizCode: quizSession?.quizCode,
+        status: quizSession?.status,
+        currentQuestionIndex: quizSession?.currentQuestionIndex,
+        questionsLength: quizSession?.questions?.length,
+        timerDuration: quizSession?.timerDuration
       });
 
       if (!quizSession) {
@@ -45,6 +56,8 @@ class QuizTimerService {
         timerDuration: quizSession.timerDuration,
         totalQuestions: quizSession.questions.length
       };
+
+      console.log('🔧 DEBUG: [TIMER] Creating active quiz:', activeQuiz);
 
       this.activeQuizzes.set(quizCode.toUpperCase(), activeQuiz);
 
@@ -61,33 +74,73 @@ class QuizTimerService {
   private async startQuestion(activeQuiz: ActiveQuiz): Promise<void> {
     const { quizCode, currentQuestionIndex, timerDuration, totalQuestions } = activeQuiz;
 
+    console.log('🔧 DEBUG: [TIMER] startQuestion called:', {
+      quizCode,
+      currentQuestionIndex,
+      timerDuration,
+      totalQuestions
+    });
+
     try {
       const db = await connectToDatabase();
       const quizSession = await db.collection('quizSessions').findOne({
         quizCode: quizCode
       });
 
+      console.log('🔧 DEBUG: [TIMER] Quiz session state before update:', {
+        found: !!quizSession,
+        status: quizSession?.status,
+        currentQuestionIndex: quizSession?.currentQuestionIndex,
+        lastNotifiedQuestionIndex: quizSession?.lastNotifiedQuestionIndex,
+        version: quizSession?.version
+      });
+
       if (!quizSession || currentQuestionIndex >= totalQuestions) {
         // Quiz finished
+        console.log('🔧 DEBUG: [TIMER] Quiz finished, ending quiz');
         await this.endQuiz(activeQuiz);
         return;
       }
 
       const currentQuestion = quizSession.questions[currentQuestionIndex];
+      console.log('🔧 DEBUG: [TIMER] Current question:', {
+        index: currentQuestionIndex,
+        question: currentQuestion?.question?.substring(0, 100) + '...',
+        optionsCount: Object.keys(currentQuestion?.options || {}).length
+      });
       
-      // Update session with current question
-      await db.collection('quizSessions').updateOne(
-        { quizCode: quizCode },
-        {
-          $set: {
-            currentQuestionIndex: currentQuestionIndex,
-            questionStartedAt: new Date(),
-            timeRemaining: timerDuration
-          }
-        }
+      // Update session with current question - use atomic update to prevent race conditions
+      const updateData = {
+        currentQuestionIndex: currentQuestionIndex,
+        questionStartedAt: new Date(),
+        timeRemaining: timerDuration,
+        lastNotifiedQuestionIndex: currentQuestionIndex - 1, // Reset Telegram notification tracking
+        version: (quizSession.version || 0) + 1
+      };
+
+      console.log('🔧 DEBUG: [TIMER] Updating quiz session with:', updateData);
+
+      const updateResult = await db.collection('quizSessions').updateOne(
+        { 
+          quizCode: quizCode,
+          status: 'active' // Only update if still active
+        },
+        { $set: updateData }
       );
 
+      console.log('🔧 DEBUG: [TIMER] Database update result:', {
+        matchedCount: updateResult.matchedCount,
+        modifiedCount: updateResult.modifiedCount,
+        acknowledged: updateResult.acknowledged
+      });
+
+      if (updateResult.modifiedCount === 0) {
+        console.log(`⚠️ Quiz session ${quizCode} was modified by another process, skipping question start`);
+        return;
+      }
+
       // Publish question started event
+      console.log('🔧 DEBUG: [TIMER] Publishing question started event');
       const pubsub = await getQuizPubSub();
       const questionData = {
         questionIndex: currentQuestionIndex,
@@ -97,12 +150,22 @@ class QuizTimerService {
         timeRemaining: timerDuration
       };
 
+      console.log('🔧 DEBUG: [TIMER] Question data for PubSub:', {
+        questionIndex: questionData.questionIndex,
+        question: questionData.question?.substring(0, 100) + '...',
+        optionsCount: Object.keys(questionData.options || {}).length,
+        timeLimit: questionData.timeLimit
+      });
+
       await pubsub.publishQuestionStarted(quizCode, questionData);
+      console.log('🔧 DEBUG: [TIMER] Question started event published successfully');
 
       // Reset timer
       activeQuiz.timeRemaining = timerDuration;
+      console.log('🔧 DEBUG: [TIMER] Timer reset to:', timerDuration);
       
       // Start countdown timer
+      console.log('🔧 DEBUG: [TIMER] Starting countdown timer');
       this.startCountdown(activeQuiz);
 
       console.log(`📝 Started question ${currentQuestionIndex + 1}/${totalQuestions} for quiz ${quizCode}`);
@@ -117,8 +180,15 @@ class QuizTimerService {
       clearInterval(activeQuiz.timerId);
     }
 
+    console.log('🔧 DEBUG: [TIMER] Starting countdown interval for quiz:', activeQuiz.quizCode);
+
     activeQuiz.timerId = setInterval(async () => {
       activeQuiz.timeRemaining--;
+
+      // Log timer updates at key intervals
+      if (activeQuiz.timeRemaining % 10 === 0 || activeQuiz.timeRemaining <= 5) {
+        console.log('🔧 DEBUG: [TIMER] Time remaining for quiz', activeQuiz.quizCode, ':', activeQuiz.timeRemaining);
+      }
 
       try {
         const pubsub = await getQuizPubSub();
@@ -128,6 +198,7 @@ class QuizTimerService {
 
         // Update database every 5 seconds or when time is almost up
         if (activeQuiz.timeRemaining % 5 === 0 || activeQuiz.timeRemaining <= 5) {
+          console.log('🔧 DEBUG: [TIMER] Updating database with time remaining:', activeQuiz.timeRemaining);
           const db = await connectToDatabase();
           await db.collection('quizSessions').updateOne(
             { quizCode: activeQuiz.quizCode },
@@ -137,6 +208,7 @@ class QuizTimerService {
 
         // Time's up!
         if (activeQuiz.timeRemaining <= 0) {
+          console.log('🔧 DEBUG: [TIMER] Time up! Ending question for quiz:', activeQuiz.quizCode);
           clearInterval(activeQuiz.timerId!);
           await this.endQuestion(activeQuiz);
         }
@@ -149,6 +221,8 @@ class QuizTimerService {
   private async endQuestion(activeQuiz: ActiveQuiz): Promise<void> {
     const { quizCode, currentQuestionIndex } = activeQuiz;
 
+    console.log('🔧 DEBUG: [TIMER] endQuestion called for quiz:', quizCode, 'question:', currentQuestionIndex);
+
     try {
       const db = await connectToDatabase();
       
@@ -157,10 +231,21 @@ class QuizTimerService {
         quizCode: quizCode
       });
 
-      if (!quizSession) return;
+      if (!quizSession) {
+        console.log('🔧 DEBUG: [TIMER] Quiz session not found, returning');
+        return;
+      }
+
+      console.log('🔧 DEBUG: [TIMER] Processing question results for question:', currentQuestionIndex);
 
       const currentQuestion = quizSession.questions[currentQuestionIndex];
       const questionAnswers = quizSession.playerAnswers?.[currentQuestionIndex] || {};
+
+      console.log('🔧 DEBUG: [TIMER] Question answers received:', {
+        questionIndex: currentQuestionIndex,
+        answersCount: Object.keys(questionAnswers).length,
+        correctAnswer: currentQuestion.correctAnswer
+      });
 
       // Calculate results
       const answerBreakdown: { [key: string]: number } = {};
@@ -183,6 +268,13 @@ class QuizTimerService {
         totalAnswers: Object.keys(questionAnswers).length
       };
 
+      console.log('🔧 DEBUG: [TIMER] Question results calculated:', {
+        questionIndex: currentQuestionIndex,
+        correctAnswer: questionResults.correctAnswer,
+        totalAnswers: questionResults.totalAnswers,
+        answerBreakdown: questionResults.answerBreakdown
+      });
+
       // Save question results
       await db.collection('quizSessions').updateOne(
         { quizCode: quizCode },
@@ -192,15 +284,30 @@ class QuizTimerService {
         }
       );
 
+      console.log('🔧 DEBUG: [TIMER] Question results saved to database');
+
       // Publish question ended event
       const pubsub = await getQuizPubSub();
       await pubsub.publishQuestionEnded(quizCode, questionResults);
 
+      console.log('🔧 DEBUG: [TIMER] Question ended event published');
+
       console.log(`⏰ Question ${currentQuestionIndex + 1} ended for quiz ${quizCode}`);
 
       // Wait 5 seconds then move to next question
+      console.log('🔧 DEBUG: [TIMER] Setting 5-second timeout for next question progression');
       setTimeout(async () => {
+        console.log('🔧 DEBUG: [TIMER] 5-second timeout expired, progressing to next question');
         activeQuiz.currentQuestionIndex++;
+        console.log('🔧 DEBUG: [TIMER] Updated currentQuestionIndex to:', activeQuiz.currentQuestionIndex);
+        console.log('🔧 DEBUG: [TIMER] Total questions:', activeQuiz.totalQuestions);
+        
+        if (activeQuiz.currentQuestionIndex >= activeQuiz.totalQuestions) {
+          console.log('🔧 DEBUG: [TIMER] All questions completed, quiz should end');
+        } else {
+          console.log('🔧 DEBUG: [TIMER] Starting next question:', activeQuiz.currentQuestionIndex);
+        }
+        
         await this.startQuestion(activeQuiz);
       }, 5000);
 

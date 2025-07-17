@@ -27,11 +27,12 @@ export async function GET(
       controller.enqueue('data: {"type":"connected","message":"SSE connection established"}\n\n');
 
       let isActive = true;
+      let isControllerClosed = false;
       const client = new MongoClient(process.env.MONGODB_URI!);
       let intervalId: NodeJS.Timeout;
 
       const sendUpdate = async () => {
-        if (!isActive) return;
+        if (!isActive || isControllerClosed) return;
 
         try {
           await client.connect();
@@ -43,11 +44,13 @@ export async function GET(
           });
 
           if (!quizRoom) {
-            const errorData = {
-              type: 'error',
-              data: { error: 'Quiz room not found', status: 404 }
-            };
-            controller.enqueue(`data: ${JSON.stringify(errorData)}\n\n`);
+            if (!isControllerClosed) {
+              const errorData = {
+                type: 'error',
+                data: { error: 'Quiz room not found', status: 404 }
+              };
+              controller.enqueue(`data: ${JSON.stringify(errorData)}\n\n`);
+            }
             return;
           }
 
@@ -111,48 +114,72 @@ export async function GET(
               totalQuestions: quizSession.questions?.length || 0,
               timerDuration: quizSession.timerDuration,
               isQuizCompleted: quizSession.status === 'completed',
-              startedAt: quizSession.startedAt,
-              timestamp: new Date().toISOString()
-            }
-          };
-
-          controller.enqueue(`data: ${JSON.stringify(updateData)}\n\n`);
-
-        } catch (error) {
-          console.error('SSE session update error:', error);
-          if (isActive) {
-            const errorData = {
-              type: 'error',
-              data: { message: 'Failed to fetch session updates' }
-            };
-            controller.enqueue(`data: ${JSON.stringify(errorData)}\n\n`);
+              startedAt: quizSession.startedAt,            timestamp: new Date().toISOString()
           }
+        };
+
+        if (!isControllerClosed) {
+          controller.enqueue(`data: ${JSON.stringify(updateData)}\n\n`);
         }
-      };
 
-      // Send updates every 3 seconds (same as original polling)
-      intervalId = setInterval(sendUpdate, 3000);
-
-      // Send initial update
-      sendUpdate();
-
-      // Cleanup function
-      const cleanup = () => {
-        isActive = false;
-        if (intervalId) {
-          clearInterval(intervalId);
+      } catch (error) {
+        console.error('SSE session update error:', error);
+        if (isActive && !isControllerClosed) {
+          const errorData = {
+            type: 'error',
+            data: { message: 'Failed to fetch session updates' }
+          };
+          controller.enqueue(`data: ${JSON.stringify(errorData)}\n\n`);
         }
-        client.close().catch(console.error);
-      };
+      }
+    };
 
-      // Handle client disconnect
-      request.signal?.addEventListener('abort', cleanup);
+    // Send updates every 3 seconds (same as original polling)
+    intervalId = setInterval(sendUpdate, 3000);
 
-      // Cleanup after 5 minutes to prevent resource leaks
-      setTimeout(() => {
-        cleanup();
-        controller.close();
-      }, 300000);
+    // Send initial update
+    sendUpdate();
+
+    // Cleanup function
+    const cleanup = () => {
+      isActive = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      client.close().catch(console.error);
+    };
+
+    // Safe controller close function
+    const safeControllerClose = () => {
+      if (!isControllerClosed) {
+        try {
+          isControllerClosed = true;
+          controller.close();
+        } catch (error) {
+          // Controller already closed, ignore error
+          console.debug('Controller close error (likely already closed):', error instanceof Error ? error.message : 'Unknown error');
+        }
+      }
+    };
+
+    // Handle client disconnect
+    request.signal?.addEventListener('abort', () => {
+      cleanup();
+      safeControllerClose();
+    });
+
+    // Cleanup after 5 minutes to prevent resource leaks
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      safeControllerClose();
+    }, 300000);
+
+    // Store cleanup for potential early termination
+    (controller as any)._cleanup = () => {
+      cleanup();
+      clearTimeout(timeoutId);
+      safeControllerClose();
+    };
     }
   });
 

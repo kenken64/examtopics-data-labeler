@@ -22,14 +22,29 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     
     // Find quiz room
     const quizRoom = await db.collection('quizRooms').findOne({ 
-      quizCode: quizCode.toUpperCase(),
-      status: 'waiting'
+      quizCode: quizCode.toUpperCase()
     });
 
     if (!quizRoom) {
       return NextResponse.json(
-        { error: 'Quiz room not found or not ready to start' },
+        { error: 'Quiz room not found' },
         { status: 404 }
+      );
+    }
+
+    // Check if quiz is already started or finished
+    if (quizRoom.status === 'active' || quizRoom.status === 'finished') {
+      return NextResponse.json(
+        { error: 'Quiz has already been started' },
+        { status: 409 }
+      );
+    }
+
+    // Check if room is ready to start
+    if (quizRoom.status !== 'waiting') {
+      return NextResponse.json(
+        { error: 'Quiz room not ready to start' },
+        { status: 400 }
       );
     }
 
@@ -97,6 +112,19 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
 
     console.log(`✅ Successfully processed ${questions.length} questions`);
 
+    // Check if quiz session already exists (prevent duplicates)
+    const existingSession = await db.collection('quizSessions').findOne({
+      quizCode: quizCode.toUpperCase(),
+      status: 'active'
+    });
+
+    if (existingSession) {
+      return NextResponse.json(
+        { error: 'Quiz session already exists and is active' },
+        { status: 409 }
+      );
+    }
+
     // Create quiz session (this is what the live quiz page expects)
     const quizSession = {
       quizCode: quizCode.toUpperCase(),
@@ -122,9 +150,12 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
       );
     }
 
-    // Update quiz room status to indicate quiz has started
+    // Update quiz room status to indicate quiz has started (atomic update with condition)
     const updateResult = await db.collection('quizRooms').updateOne(
-      { quizCode: quizCode.toUpperCase() },
+      { 
+        quizCode: quizCode.toUpperCase(),
+        status: 'waiting' // Only update if still waiting (prevent race conditions)
+      },
       {
         $set: {
           status: 'active', // Update room status to active
@@ -135,9 +166,11 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     );
 
     if (updateResult.modifiedCount === 0) {
+      // If update failed, cleanup the session we just created and return error
+      await db.collection('quizSessions').deleteOne({ _id: sessionResult.insertedId });
       return NextResponse.json(
-        { error: 'Failed to update quiz room' },
-        { status: 500 }
+        { error: 'Quiz room was already started by another process' },
+        { status: 409 }
       );
     }
 
@@ -145,6 +178,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
 
     // Initialize PubSub for real-time sync between frontend and Telegram bot
     try {
+      console.log('🔧 DEBUG: Initializing PubSub for quiz:', quizCode.toUpperCase());
       const pubsub = await getQuizPubSub();
       
       // Publish quiz started event with first question
@@ -155,10 +189,19 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
         timeLimit: timerDuration
       };
       
+      console.log('🔧 DEBUG: Publishing quiz started event with first question:', {
+        quizCode: quizCode.toUpperCase(),
+        questionIndex: firstQuestion.questionIndex,
+        question: firstQuestion.question.substring(0, 100) + '...',
+        optionsCount: Object.keys(firstQuestion.options).length,
+        timeLimit: firstQuestion.timeLimit
+      });
+      
       await pubsub.publishQuizStarted(quizCode.toUpperCase(), firstQuestion);
       console.log('📡 Published quiz started event for real-time sync');
 
       // Start the quiz timer service for automatic question progression
+      console.log('🔧 DEBUG: Starting quiz timer service for:', quizCode.toUpperCase());
       const timerService = getQuizTimerService();
       await timerService.startQuizTimer(quizCode.toUpperCase());
       console.log('⏱️ Started quiz timer service for automatic progression');

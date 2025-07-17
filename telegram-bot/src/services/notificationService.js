@@ -1,26 +1,152 @@
 const { ObjectId } = require('mongodb');
+const { InlineKeyboard } = require('grammy');
 
 class NotificationService {
   constructor(databaseService, bot) {
     this.databaseService = databaseService;
     this.bot = bot;
     this.pollingInterval = null;
+    this.changeStream = null;
   }
 
   startNotificationPolling() {
-    console.log('📡 Starting QuizBlitz notification polling...');
+    console.log('📡 Starting QuizBlitz notification system...');
+    console.log('🔄 USING: MongoDB Change Streams for real-time monitoring');
     
     // Initialize sessions on startup
     this.initializeSessions();
     
-    // Poll every 2 seconds for new notifications
+    // Start real-time change stream monitoring
+    this.startChangeStreamMonitoring();
+    
+    // Keep legacy polling as backup every 10 seconds
     this.pollingInterval = setInterval(async () => {
       try {
         await this.checkForQuizNotifications();
       } catch (error) {
-        console.error('Error in notification polling:', error);
+        console.error('Error in backup notification polling:', error);
       }
-    }, 2000);
+    }, 10000);
+  }
+
+  async startChangeStreamMonitoring() {
+    try {
+      const db = await this.databaseService.connectToDatabase();
+      
+      console.log('👀 Setting up Change Stream for quizEvents collection...');
+      
+      // Watch for quiz events from the frontend
+      const pipeline = [
+        {
+          $match: {
+            'fullDocument.type': {
+              $in: ['quiz_started', 'question_started', 'question_ended', 'timer_update', 'quiz_ended']
+            }
+          }
+        }
+      ];
+
+      this.changeStream = db.collection('quizEvents').watch(pipeline, {
+        fullDocument: 'updateLookup'
+      });
+
+      console.log('⚡ Change Stream ACTIVE - monitoring quizEvents in real-time');
+      console.log('🎯 Watching for: quiz_started, question_started, question_ended, timer_update, quiz_ended');
+
+      this.changeStream.on('change', (change) => {
+        if (change.operationType === 'insert' && change.fullDocument) {
+          this.handleQuizEventChange(change.fullDocument);
+        }
+      });
+
+      this.changeStream.on('error', (error) => {
+        console.error('❌ Change Stream error:', error);
+        this.reconnectChangeStream();
+      });
+
+      this.changeStream.on('close', () => {
+        console.log('⚠️ Change Stream closed - attempting reconnect...');
+        this.reconnectChangeStream();
+      });
+
+    } catch (error) {
+      console.error('❌ Failed to start Change Stream monitoring:', error);
+      console.log('📡 Falling back to polling-only mode');
+    }
+  }
+
+  async handleQuizEventChange(event) {
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    console.log(`⚡ REAL-TIME CHANGE DETECTED - ${timestamp}`);
+    console.log(`   🎮 Quiz Code: ${event.quizCode}`);
+    console.log(`   📋 Event Type: ${event.type}`);
+    console.log(`   📊 Question: ${(event.data?.currentQuestionIndex || 0) + 1}`);
+    console.log(`   ⏰ Time: ${event.data?.timeRemaining || 0}s`);
+
+    try {
+      // Process question starts immediately
+      if (event.type === 'question_started' || event.type === 'quiz_started') {
+        console.log(`📤 Processing ${event.type} for quiz ${event.quizCode}`);
+        await this.processQuizEventForTelegram(event);
+      } else {
+        console.log(`⏭️ ${event.type} - no immediate action needed`);
+      }
+    } catch (error) {
+      console.error('❌ Error processing change event:', error);
+    }
+  }
+
+  async processQuizEventForTelegram(event) {
+    try {
+      const db = await this.databaseService.connectToDatabase();
+      
+      // Find Telegram players for this quiz
+      const quizRoom = await db.collection('quizRooms').findOne({ 
+        quizCode: event.quizCode 
+      });
+      
+      if (quizRoom && quizRoom.players) {
+        const telegramPlayers = quizRoom.players.filter(p => 
+          p.id && (String(p.id).length >= 7 || p.source === 'telegram')
+        );
+        
+        console.log(`👥 Found ${telegramPlayers.length} Telegram players for quiz ${event.quizCode}`);
+        
+        if (telegramPlayers.length > 0 && event.data?.question) {
+          console.log(`📱 Sending question to Telegram players immediately`);
+          
+          // Send question to each Telegram player
+          for (const player of telegramPlayers) {
+            try {
+              await this.sendQuestionToPlayer(player, event.data.question, event.quizCode);
+              console.log(`   ✅ Sent to ${player.name} (${player.id})`);
+            } catch (error) {
+              console.error(`   ❌ Failed to send to ${player.name}:`, error.message);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing quiz event for Telegram:', error);
+    }
+  }
+
+  async reconnectChangeStream() {
+    console.log('🔄 Attempting to reconnect Change Stream...');
+    
+    try {
+      if (this.changeStream) {
+        await this.changeStream.close();
+      }
+      
+      // Wait 3 seconds before reconnecting
+      setTimeout(() => {
+        this.startChangeStreamMonitoring();
+      }, 3000);
+      
+    } catch (error) {
+      console.error('❌ Error during Change Stream reconnection:', error);
+    }
   }
 
   async initializeSessions() {
@@ -56,6 +182,12 @@ class NotificationService {
       clearInterval(this.pollingInterval);
       this.pollingInterval = null;
       console.log('📡 Notification polling stopped');
+    }
+    
+    if (this.changeStream) {
+      this.changeStream.close();
+      this.changeStream = null;
+      console.log('⚡ Change Stream closed');
     }
   }
 
@@ -160,6 +292,18 @@ class NotificationService {
     }
   }
 
+  async sendQuestionToPlayer(player, questionData, quizCode) {
+    try {
+      const telegramUserId = player.id;
+      
+      // Use existing sendQuizQuestion method
+      await this.sendQuizQuestion(telegramUserId, questionData, quizCode);
+    } catch (error) {
+      console.error(`Error sending question to player ${player.name} (${player.id}):`, error);
+      throw error;
+    }
+  }
+
   async sendQuizQuestion(telegramUserId, questionData, quizCode) {
     try {
       const questionNumber = (questionData.index || 0) + 1;
@@ -172,7 +316,7 @@ class NotificationService {
         `🎯 Quiz Code: ${quizCode}\n\n` +
         `${questionData.question}\n\n`;
 
-      // Add answer options
+      // Add answer options to message text
       if (questionData.options) {
         Object.entries(questionData.options).forEach(([key, value]) => {
           if (value) {
@@ -181,11 +325,38 @@ class NotificationService {
         });
       }
 
-      formattedQuestion += `\n💡 Answer on the host's screen or website!`;
+      formattedQuestion += `\n🎯 Tap an answer button below to submit:`;
 
-      await this.sendMessage(telegramUserId, formattedQuestion);
+      // Create inline keyboard with answer buttons
+      const keyboard = new InlineKeyboard();
+      
+      if (questionData.options) {
+        Object.entries(questionData.options).forEach(([key, value]) => {
+          if (value) {
+            keyboard.text(`${key}. ${value.substring(0, 30)}${value.length > 30 ? '...' : ''}`, `quiz_answer_${key}_${quizCode}`);
+            keyboard.row(); // Each answer on a new row
+          }
+        });
+      }
+
+      await this.sendMessageWithKeyboard(telegramUserId, formattedQuestion, keyboard);
     } catch (error) {
       console.error(`Error sending quiz question to user ${telegramUserId}:`, error);
+    }
+  }
+
+  async sendMessageWithKeyboard(telegramUserId, message, keyboard) {
+    try {
+      if (this.bot) {
+        await this.bot.api.sendMessage(telegramUserId, message, {
+          reply_markup: keyboard
+        });
+        console.log(`📱 Sent interactive question to user ${telegramUserId}`);
+      } else {
+        console.log('📱 Bot not available for sending interactive messages');
+      }
+    } catch (error) {
+      console.error(`Error sending message with keyboard to user ${telegramUserId}:`, error);
     }
   }
 

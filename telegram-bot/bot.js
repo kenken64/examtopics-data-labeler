@@ -3,6 +3,15 @@ const { MongoClient, ObjectId } = require('mongodb');
 const http = require('http');
 require('dotenv').config();
 
+console.log('🔧 DEBUG: ========== TELEGRAM BOT SCRIPT LOADED ==========');
+console.log('🔧 DEBUG: Current time:', new Date().toISOString());
+console.log('🔧 DEBUG: Node.js version:', process.version);
+console.log('🔧 DEBUG: Environment variables check:');
+console.log('🔧 DEBUG: - BOT_TOKEN:', process.env.BOT_TOKEN ? 'SET' : 'NOT SET');
+console.log('🔧 DEBUG: - MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
+console.log('🔧 DEBUG: - MONGODB_DB_NAME:', process.env.MONGODB_DB_NAME || 'NOT SET');
+console.log('🔧 DEBUG: ====================================================');
+
 /**
  * Utility functions for handling multiple-choice questions with multiple correct answers
  */
@@ -72,8 +81,37 @@ function formatAnswerForDisplay(answer) {
   return normalized.split('').join(', ');
 }
 
+/**
+ * Wraps text to specified width for better Telegram display
+ * @param {string} text - Text to wrap
+ * @param {number} width - Maximum characters per line
+ * @returns {string} Wrapped text
+ */
+function wrapText(text, width = 50) {
+  if (!text || text.length <= width) return text;
+  
+  const words = text.split(' ');
+  let lines = [];
+  let currentLine = '';
+  
+  for (const word of words) {
+    if (currentLine.length + word.length + 1 <= width) {
+      currentLine += (currentLine ? ' ' : '') + word;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  
+  if (currentLine) lines.push(currentLine);
+  return lines.join('\n   '); // Indent continuation lines
+}
+
 class CertificationBot {
   constructor() {
+    console.log('🔧 DEBUG: ========== CONSTRUCTOR CALLED ==========');
+    console.log('🔧 DEBUG: Validating environment variables...');
+    
     // Validate essential environment variables
     if (!process.env.BOT_TOKEN) {
       console.error('❌ BOT_TOKEN environment variable is missing!');
@@ -89,8 +127,12 @@ class CertificationBot {
       return;
     }
 
+    console.log('🔧 DEBUG: Environment variables validated successfully');
+    console.log('🔧 DEBUG: Creating Bot instance...');
     this.bot = new Bot(process.env.BOT_TOKEN);
+    console.log('🔧 DEBUG: Creating MongoClient...');
     this.mongoClient = new MongoClient(process.env.MONGODB_URI);
+    console.log('🔧 DEBUG: Initializing properties...');
     this.db = null;
     this.userSessions = new Map(); // Store user quiz sessions
     this.userSelections = new Map(); // Store user's current answer selections for multiple choice
@@ -99,17 +141,24 @@ class CertificationBot {
     this.startupError = null; // Track startup errors
     this.offlineMode = false; // Track if running in offline mode
     this.pollingIssue = false; // Track if polling has issues but API works
+    this.lastKnownQuizStates = new Map(); // Track quiz state changes for debugging
     
     // Start health server immediately for Railway
+    console.log('🔧 DEBUG: Setting up health check...');
     this.setupHealthCheck();
     
     // Initialize bot asynchronously
+    console.log('🔧 DEBUG: Calling initializeAsync()...');
     this.initializeAsync();
+    console.log('🔧 DEBUG: Constructor completed');
   }
 
   async initializeAsync() {
     try {
       console.log('🚀 Starting bot initialization...');
+      console.log('🔧 DEBUG: Environment check - BOT_TOKEN:', process.env.BOT_TOKEN ? 'SET' : 'NOT SET');
+      console.log('🔧 DEBUG: Environment check - MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
+      console.log('🔧 DEBUG: Environment check - MONGODB_DB_NAME:', process.env.MONGODB_DB_NAME || 'NOT SET');
       
       // Set a timeout for initialization (reduced for faster feedback)
       const timeout = setTimeout(() => {
@@ -146,7 +195,9 @@ class CertificationBot {
       
       // Always start notification polling for QuizBlitz
       console.log('📡 Starting QuizBlitz notification polling...');
+      console.log('🔧 DEBUG: About to call startNotificationPolling()');
       this.startNotificationPolling();
+      console.log('🔧 DEBUG: startNotificationPolling() called successfully');
       
       if (this.offlineMode) {
         console.log('💡 To enable full bot features, ensure network access to api.telegram.org');
@@ -174,7 +225,9 @@ class CertificationBot {
         try {
           await this.connectToDatabase();
           console.log('✅ MongoDB connected - QuizBlitz backend ready');
+          console.log('🔧 DEBUG: Starting notification polling in offline mode');
           this.startNotificationPolling(); // Still poll for quiz notifications
+          console.log('🔧 DEBUG: Notification polling started in offline mode');
           this.offlineMode = true;
         } catch (dbError) {
           console.error('❌ MongoDB connection also failed:', dbError.message);
@@ -187,18 +240,26 @@ class CertificationBot {
   async connectToDatabase() {
     if (!this.db) {
       console.log('🔗 Attempting to connect to MongoDB...');
+      console.log('🔧 DEBUG: MongoDB URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
+      console.log('🔧 DEBUG: MongoDB DB Name:', process.env.MONGODB_DB_NAME || 'NOT SET');
       
       try {
         // Add timeout for MongoDB connection
+        console.log('🔧 DEBUG: Creating connection promise...');
         const connectionPromise = this.mongoClient.connect();
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('MongoDB connection timeout after 10 seconds')), 10000);
         });
         
+        console.log('🔧 DEBUG: Waiting for MongoDB connection...');
+        
         await Promise.race([connectionPromise, timeoutPromise]);
+        console.log('🔧 DEBUG: MongoDB connection successful');
         this.db = this.mongoClient.db(process.env.MONGODB_DB_NAME);
+        console.log('🔧 DEBUG: Database selected:', process.env.MONGODB_DB_NAME);
         
         // Test the connection with a simple ping
+        console.log('🔧 DEBUG: Testing connection with ping...');
         await this.db.admin().ping();
         console.log('✅ Connected to MongoDB successfully');
         
@@ -225,6 +286,32 @@ class CertificationBot {
       }
     }
     return this.db;
+  }
+
+  /**
+   * Wraps text to specified width for better Telegram display
+   * @param {string} text - Text to wrap
+   * @param {number} width - Maximum characters per line
+   * @returns {string} Wrapped text
+   */
+  wrapText(text, width = 50) {
+    if (!text || text.length <= width) return text;
+    
+    const words = text.split(' ');
+    let lines = [];
+    let currentLine = '';
+    
+    for (const word of words) {
+      if (currentLine.length + word.length + 1 <= width) {
+        currentLine += (currentLine ? ' ' : '') + word;
+      } else {
+        if (currentLine) lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    
+    if (currentLine) lines.push(currentLine);
+    return lines.join('\n   '); // Indent continuation lines
   }
 
   /**
@@ -2197,6 +2284,12 @@ ${explanation}
         return;
       }
 
+      // Check if quiz has ended
+      if (session.quizCompleted) {
+        await ctx.reply('🏁 Quiz has already ended. You can no longer submit answers.');
+        return;
+      }
+
       // Submit answer to quiz system
       try {
         const submitResult = await this.submitQuizAnswer(
@@ -2272,7 +2365,14 @@ ${explanation}
   // Send quiz question to player
   async sendQuizQuestion(telegramId, questionData, quizCode) {
     try {
+      console.log(`🔧 DEBUG: sendQuizQuestion called for user ${telegramId}`);
+      console.log(`🔧 DEBUG: Quiz code: ${quizCode}`);
+      console.log(`🔧 DEBUG: Question data received:`, JSON.stringify(questionData, null, 2));
+      
       const session = this.userSessions.get(telegramId);
+      console.log(`🔧 DEBUG: User session found:`, !!session);
+      console.log(`🔧 DEBUG: User quiz joined:`, session?.quizJoined);
+      
       if (!session || !session.quizJoined) {
         console.log(`⚠️ User ${telegramId} not in quiz session`);
         return;
@@ -2283,62 +2383,40 @@ ${explanation}
 
       const keyboard = new InlineKeyboard();
       
-      // Handle different question data formats
-      let question, options, questionIndex, timeLimit, points;
-      
-      if (questionData.question) {
-        // Direct question format
-        question = questionData.question;
-        options = questionData.options;
-        questionIndex = questionData.index !== undefined ? questionData.index : questionData.questionIndex;
-        timeLimit = questionData.timeLimit || questionData.timerDuration || 30;
-        points = questionData.points || 1000;
-      } else {
-        console.error('Invalid question data format:', questionData);
-        return;
-      }
-
       // Check if options exist and format them properly
-      if (!options) {
+      if (!questionData.options) {
         console.error('No options provided for question:', questionData);
         return;
       }
 
       // Add answer options - handle both object and direct format
       const optionsToShow = [];
-      if (Array.isArray(options)) {
-        // Array format
-        options.forEach((option, idx) => {
-          if (option && option.trim()) {
-            const key = String.fromCharCode(65 + idx); // A, B, C, D
-            optionsToShow.push({ key, value: option.trim() });
-            keyboard.text(`${key}. ${option.trim()}`, `quiz_answer_${key}_${quizCode}`).row();
-          }
-        });
-      } else {
-        // Object format
-        Object.entries(options).forEach(([key, value]) => {
-          if (value && value.trim()) {
-            optionsToShow.push({ key, value: value.trim() });
-            keyboard.text(`${key}. ${value.trim()}`, `quiz_answer_${key}_${quizCode}`).row();
-          }
-        });
-      }
+      Object.entries(questionData.options).forEach(([key, value]) => {
+        if (value && value.trim()) {
+          optionsToShow.push({ key, value: value.trim() });
+          keyboard.text(`${key}. ${value.trim()}`, `quiz_answer_${key}_${quizCode}`).row();
+        }
+      });
 
       console.log(`📝 Question has ${optionsToShow.length} options:`, optionsToShow);
 
       // Format the question text with options displayed
       let questionOptionsText = '';
       optionsToShow.forEach(({ key, value }) => {
-        questionOptionsText += `${key}. ${value}\n`;
+        // Wrap long option text to improve readability
+        const wrappedValue = this.wrapText(value, 50); // Wrap at 50 characters
+        questionOptionsText += `${key}. ${wrappedValue}\n\n`; // Add extra line break for better spacing
       });
 
+      // Also wrap the main question text for better readability
+      const wrappedQuestion = this.wrapText(questionData.question, 60);
+      
       const questionText = 
-        `🎯 *Question ${(questionIndex || 0) + 1}*\n\n` +
-        `${question}\n\n` +
-        `📋 *Options:*\n${questionOptionsText}\n` +
-        `⏱️ *Time remaining: ${timeLimit} seconds*\n` +
-        `🏆 *Points: ${points}*`;
+        `🎯 *Question ${questionData.index + 1}*\n\n` +
+        `${wrappedQuestion}\n\n` +
+        `📋 *Options:*\n${questionOptionsText}` +
+        `⏱️ *Time remaining: ${questionData.timeLimit} seconds*\n` +
+        `🏆 *Points: ${questionData.points}*`;
 
       await this.bot.api.sendMessage(telegramId, questionText, {
         parse_mode: 'Markdown',
@@ -2355,298 +2433,232 @@ ${explanation}
 
   // Start polling for notifications from frontend
   startNotificationPolling() {
-    // Use Change Streams for real-time events + polling as fallback
-    this.startQuizEventListener();
+    console.log('🔧 DEBUG: ========== ENTERED startNotificationPolling() ==========');
+    console.log('🔧 DEBUG: Starting notification polling (every 3 seconds)');
+    console.log('🔧 DEBUG: POLLING MECHANISM: Simple timer-based polling, NOT Change Streams');
+    console.log('🔧 DEBUG: Database connection status:', this.db ? 'CONNECTED' : 'NOT CONNECTED');
     
-    // Keep polling as fallback for environments without Change Streams
-    setInterval(async () => {
+    let pollCount = 0;
+    
+    // Poll every 3 seconds for new notifications
+    console.log('🔧 DEBUG: Setting up setInterval for polling...');
+    
+    const intervalId = setInterval(async () => {
+      pollCount++;
       try {
+        const timestamp = new Date().toISOString();
+        console.log(`🔄 POLL #${pollCount} - ${timestamp.split('T')[1].split('.')[0]} - Checking quizEvents collection...`);
+        
         await this.processQuizNotifications();
+        
+        console.log(`✅ POLL #${pollCount} - Completed - Next poll in 3 seconds`);
       } catch (error) {
-        console.error('Error in notification polling:', error);
+        console.error(`❌ POLL #${pollCount} - Error:`, error);
       }
     }, 3000);
-  }
-
-  // Listen for real-time quiz events via Change Streams
-  startQuizEventListener() {
-    try {
-      const pipeline = [
-        {
-          $match: {
-            'fullDocument.type': {
-              $in: ['quiz_started', 'question_started', 'timer_update', 'question_ended', 'quiz_ended']
-            }
-          }
-        }
-      ];
-
-      const changeStream = this.db.collection('quizEvents').watch(pipeline, {
-        fullDocument: 'updateLookup'
-      });
-
-      changeStream.on('change', (change) => {
-        if (change.operationType === 'insert' && change.fullDocument) {
-          this.handleRealtimeQuizEvent(change.fullDocument);
-        }
-      });
-
-      changeStream.on('error', (error) => {
-        console.error('Change Stream error:', error);
-        console.log('🔄 Falling back to polling-only mode');
-      });
-
-      console.log('🔄 Started real-time quiz event listener (Change Streams)');
-    } catch (error) {
-      console.error('Failed to start Change Stream listener:', error);
-      console.log('🔄 Using polling-only mode');
-    }
-  }
-
-  // Handle real-time quiz events from Change Streams
-  async handleRealtimeQuizEvent(event) {
-    try {
-      const { type, quizCode, data } = event;
-      console.log(`🔔 Real-time event: ${type} for quiz ${quizCode}`);
-
-      switch (type) {
-        case 'quiz_started':
-          await this.handleQuizStartedEvent(quizCode, data);
-          break;
-        case 'question_started':
-          await this.handleQuestionStartedEvent(quizCode, data);
-          break;
-        case 'timer_update':
-          await this.handleTimerUpdateEvent(quizCode, data);
-          break;
-        case 'question_ended':
-          await this.handleQuestionEndedEvent(quizCode, data);
-          break;
-        case 'quiz_ended':
-          await this.handleQuizEndedEvent(quizCode, data);
-          break;
-        default:
-          console.log(`🤷 Unknown event type: ${type}`);
-      }
-    } catch (error) {
-      console.error('Error handling real-time quiz event:', error);
-    }
-  }
-
-  // Handle timer_update events specifically
-  async handleTimerUpdateEvent(quizCode, data) {
-    try {
-      console.log(`⏰ Timer update for quiz ${quizCode}:`, data);
-      
-      // Get Telegram players for this quiz
-      const telegramPlayers = await this.getTelegramPlayersForQuiz(quizCode);
-      
-      if (telegramPlayers.length === 0) {
-        console.log(`👥 No Telegram players found for quiz ${quizCode}`);
-        return;
-      }
-
-      // For timer updates, send time remaining notifications at key intervals
-      if (data.timeRemaining && [10, 5, 3, 2, 1].includes(data.timeRemaining)) {
-        console.log(`⏰ Sending timer notification: ${data.timeRemaining} seconds remaining to ${telegramPlayers.length} players`);
-        for (const player of telegramPlayers) {
-          try {
-            await this.bot.api.sendMessage(player.id, 
-              `⏰ ${data.timeRemaining} seconds remaining!`
-            );
-          } catch (error) {
-            console.error(`Failed to send timer update to ${player.id}:`, error.message);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error handling timer update event:', error);
-    }
-  }
-
-  // Get Telegram players for a specific quiz
-  async getTelegramPlayersForQuiz(quizCode) {
-    try {
-      const quizRoom = await this.db.collection('quizRooms').findOne({ 
-        quizCode: quizCode 
-      });
-      
-      const telegramPlayers = [];
-      if (quizRoom && quizRoom.players) {
-        for (const player of quizRoom.players) {
-          // Check if this is a Telegram player
-          if (this.isTelegramPlayer(player)) {
-            telegramPlayers.push({
-              id: player.id,
-              name: player.name
-            });
-          }
-        }
-      }
-      
-      return telegramPlayers;
-    } catch (error) {
-      console.error('Error getting Telegram players:', error);
-      return [];
-    }
-  }
-
-  // Enhanced Telegram player detection
-  isTelegramPlayer(player) {
-    // Method 1: Check if player has source 'telegram'
-    if (player.source === 'telegram') {
-      return true;
-    }
     
-    // Method 2: Check if player ID is a typical Telegram user ID (large number)
-    if (player.id && typeof player.id === 'number' && player.id > 100000) {
-      return true;
-    }
-    
-    // Method 3: Check if string representation of ID looks like Telegram ID
-    if (player.id && String(player.id).length >= 7 && !isNaN(Number(player.id))) {
-      return true;
-    }
-    
-    // Method 4: Check if we have this user in our Telegram sessions
-    if (this.userSessions && this.userSessions.has(player.id)) {
-      return true;
-    }
-    
-    return false;
-  }
-
-  // Handle other quiz events
-  async handleQuizStartedEvent(quizCode, data) {
-    console.log(`🎯 Quiz started: ${quizCode}`);
-    // Implementation for quiz start
-  }
-
-  async handleQuestionStartedEvent(quizCode, data) {
-    try {
-      console.log(`❓ Question started for quiz: ${quizCode}`, data);
-      
-      // Get Telegram players for this quiz
-      const telegramPlayers = await this.getTelegramPlayersForQuiz(quizCode);
-      
-      if (telegramPlayers.length === 0) {
-        console.log(`👥 No Telegram players found for quiz ${quizCode}`);
-        return;
-      }
-
-      console.log(`👥 Found ${telegramPlayers.length} Telegram players for question`);
-
-      // Send the question to all Telegram players
-      if (data.question) {
-        console.log(`📤 Sending question to ${telegramPlayers.length} Telegram players`);
-        for (const player of telegramPlayers) {
-          await this.sendQuizQuestion(player.id, data.question, quizCode);
-        }
-      } else {
-        console.error('No question data in question_started event:', data);
-      }
-    } catch (error) {
-      console.error('Error handling question started event:', error);
-    }
-  }
-
-  async handleQuestionEndedEvent(quizCode, data) {
-    console.log(`✅ Question ended for quiz: ${quizCode}`);
-    // Implementation for question end
-  }
-
-  async handleQuizEndedEvent(quizCode, data) {
-    console.log(`🏁 Quiz ended: ${quizCode}`);
-    // Implementation for quiz end
+    console.log('🔧 DEBUG: setInterval created with ID:', intervalId);
+    console.log('🔧 DEBUG: First poll will start in 3 seconds...');
   }
 
   // Process quiz notifications from frontend
   async processQuizNotifications() {
     try {
       if (!this.db) {
-        console.error('Database connection not available for processing notifications');
+        console.error('❌ Database connection not available for processing notifications');
         return;
       }
       
-      // Check for active quiz sessions
-      const activeSessions = await this.db.collection('quizSessions')
+      // Query quizEvents collection for active quiz states
+      console.log('    📊 Querying quizEvents collection...');
+      const activeQuizEvents = await this.db.collection('quizEvents')
         .find({ 
-          status: 'active'
+          type: { $in: ['quiz_started', 'question_started', 'question_sent', 'timer_update', 'quiz_ended'] }
         })
         .toArray();
 
-      for (const session of activeSessions) {
-        console.log(`🔍 Processing quiz session: ${session.quizCode}`);
-        
-        // Check if there are Telegram players for this quiz from the database
-        const quizRoom = await this.db.collection('quizRooms').findOne({ 
-          quizCode: session.quizCode 
+      if (activeQuizEvents.length === 0) {
+        console.log('    💤 No active quiz events found');
+        return;
+      }
+
+      console.log(`    📋 Found ${activeQuizEvents.length} active quiz events:`);
+      activeQuizEvents.forEach((event, index) => {
+        console.log(`       ${index + 1}. ${event.quizCode} - ${event.type} - Q${(event.data?.currentQuestionIndex || 0) + 1} - ${event.data?.timeRemaining || 0}s`);
+      });
+
+      for (const quizEvent of activeQuizEvents) {
+        console.log(`🔍 Processing quiz event: ${quizEvent.quizCode}`);
+        console.log(`🔧 DEBUG: Event details:`, {
+          quizCode: quizEvent.quizCode,
+          type: quizEvent.type,
+          currentQuestionIndex: quizEvent.data?.currentQuestionIndex,
+          timeRemaining: quizEvent.data?.timeRemaining,
+          lastUpdated: quizEvent.lastUpdated
         });
+
+        // Check if quiz state has changed since last poll
+        const currentState = `${quizEvent.type}-${quizEvent.data?.currentQuestionIndex}-${quizEvent.data?.timeRemaining}`;
+        const lastKnownState = this.lastKnownQuizStates.get(quizEvent.quizCode);
         
-        const telegramPlayers = [];
-        if (quizRoom && quizRoom.players) {
-          // Find players that joined via Telegram (check for Telegram ID format or source)
-          for (const player of quizRoom.players) {
-            // Telegram IDs are typically large numbers (7+ digits)
-            if (player.id && (String(player.id).length >= 7 || player.source === 'telegram')) {
-              telegramPlayers.push({
-                id: player.id,
-                name: player.name
-              });
-            }
-          }
+        if (lastKnownState !== currentState) {
+          console.log(`    🔄 STATE CHANGE DETECTED for ${quizEvent.quizCode}:`);
+          console.log(`       Previous: ${lastKnownState || 'NONE'}`);
+          console.log(`       Current:  ${currentState}`);
+          console.log(`       Action:   PROCESSING EVENT`);
+          this.lastKnownQuizStates.set(quizEvent.quizCode, currentState);
+        } else {
+          console.log(`    ⏸️ STATE UNCHANGED for ${quizEvent.quizCode}: ${currentState}`);
+          console.log(`       Action: SKIPPING`);
+          continue; // Skip processing if no state change
         }
         
-        console.log(`👥 Found ${telegramPlayers.length} Telegram players for quiz ${session.quizCode}`);
-        telegramPlayers.forEach(player => {
-          console.log(`   - ${player.name} (ID: ${player.id})`);
-        });
+        // Process events that represent new question starts or quiz completion
+        if (quizEvent.type === 'question_started' || quizEvent.type === 'quiz_started' || quizEvent.type === 'quiz_ended') {
+          // Check if there are Telegram players for this quiz from the database
+          console.log(`🔧 DEBUG: Looking for quiz room: ${quizEvent.quizCode}`);
+          const quizRoom = await this.db.collection('quizRooms').findOne({ 
+            quizCode: quizEvent.quizCode 
+          });
+          
+          console.log(`🔧 DEBUG: Quiz room found:`, {
+            found: !!quizRoom,
+            playersCount: quizRoom?.players?.length || 0,
+            players: quizRoom?.players?.map(p => ({ id: p.id, name: p.name, source: p.source })) || []
+          });
+          
+          const telegramPlayers = [];
+          if (quizRoom && quizRoom.players) {
+            // Find players that joined via Telegram (check for Telegram ID format or source)
+            for (const player of quizRoom.players) {
+              // Telegram IDs are typically large numbers (7+ digits)
+              if (player.id && (String(player.id).length >= 7 || player.source === 'telegram')) {
+                telegramPlayers.push({
+                  id: player.id,
+                  name: player.name
+                });
+              }
+            }
+          }
+          
+          console.log(`👥 Found ${telegramPlayers.length} Telegram players for quiz ${quizEvent.quizCode}`);
+          console.log(`🔧 DEBUG: Telegram players:`, telegramPlayers);
+          telegramPlayers.forEach(player => {
+            console.log(`   - ${player.name} (ID: ${player.id})`);
+          });
 
-        if (telegramPlayers.length > 0) {
-          // Send current question to Telegram players
-          const currentQuestionIndex = session.currentQuestionIndex || 0;
-          if (session.questions && session.questions[currentQuestionIndex]) {
-            const currentQuestion = session.questions[currentQuestionIndex];
+          if (quizEvent.type === 'quiz_ended') {
+            // Handle quiz completion - send results and mark users as completed
+            console.log(`🏁 Quiz ended event for quiz ${quizEvent.quizCode}`);
             
-            // Check if we need to send this question (based on lastNotifiedQuestionIndex)
-            const lastNotifiedIndex = session.lastNotifiedQuestionIndex || -1;
-            
-            console.log(`📝 Question check: current=${currentQuestionIndex}, lastNotified=${lastNotifiedIndex}`);
-            
-            if (currentQuestionIndex > lastNotifiedIndex) {
-              console.log(`📤 Sending question ${currentQuestionIndex + 1} to ${telegramPlayers.length} Telegram players for quiz ${session.quizCode}`);
+            if (telegramPlayers.length > 0) {
+              console.log(`📤 Sending quiz completion notice to ${telegramPlayers.length} Telegram players for quiz ${quizEvent.quizCode}`);
               
               for (const player of telegramPlayers) {
-                console.log(`📱 Sending question to ${player.name} (${player.id})`);
-                await this.sendQuizQuestion(player.id, {
-                  index: currentQuestionIndex,
-                  question: currentQuestion.question,
-                  options: currentQuestion.options,
-                  timeLimit: session.timerDuration || 30,
-                  points: 1000
-                }, session.quizCode);
+                console.log(`📱 Sending quiz completion to ${player.name} (${player.id})`);
+                
+                try {
+                  // Mark user session as quiz completed
+                  const session = this.userSessions.get(player.id);
+                  if (session && session.quizJoined && session.quizCode === quizEvent.quizCode) {
+                    session.quizCompleted = true;
+                    console.log(`✅ Marked quiz as completed for user ${player.name}`);
+                  }
+                  
+                  // Send completion message
+                  await this.bot.api.sendMessage(player.id, 
+                    `🏁 *Quiz Complete!*\n\n` +
+                    `The quiz "${quizEvent.quizCode}" has ended.\n` +
+                    `⏰ Time limit reached!\n\n` +
+                    `📊 Final results will be shown shortly...`,
+                    { parse_mode: 'Markdown' }
+                  );
+                  
+                  console.log(`✅ Successfully sent completion notice to ${player.name}`);
+                } catch (error) {
+                  console.error(`❌ Failed to send completion notice to ${player.name}:`, error);
+                }
               }
-
-              console.log(`✅ Updated lastNotifiedQuestionIndex from ${lastNotifiedIndex} to ${currentQuestionIndex} for quiz ${session.quizCode}`);
               
-              // Update the last notified question index
-              await this.db.collection('quizSessions').updateOne(
-                { _id: session._id },
-                { $set: { lastNotifiedQuestionIndex: currentQuestionIndex } }
-              );
-            } else {
-              console.log(`⏭️ Question ${currentQuestionIndex + 1} already sent (last notified: ${lastNotifiedIndex})`);
+              // If quiz has final results, send them
+              if (quizEvent.data?.finalResults) {
+                console.log(`📊 Sending final results for quiz ${quizEvent.quizCode}`);
+                await this.sendQuizResults(quizEvent.quizCode, quizEvent.data.finalResults);
+              }
+            }
+          } else if (telegramPlayers.length > 0 && quizEvent.data?.question) {
+            const questionData = quizEvent.data.question;
+            console.log(`🔧 DEBUG: Question data from event:`, {
+              questionIndex: questionData.questionIndex,
+              question: questionData.question?.substring(0, 100) + '...',
+              optionsCount: Object.keys(questionData.options || {}).length,
+              timeLimit: questionData.timeLimit
+            });
+            
+            // Send question to all Telegram players
+            console.log(`📤 Sending question ${questionData.questionIndex + 1} to ${telegramPlayers.length} Telegram players for quiz ${quizEvent.quizCode}`);
+            
+            let successCount = 0;
+            for (const player of telegramPlayers) {
+              console.log(`📱 Sending question to ${player.name} (${player.id})`);
+              console.log(`🔧 DEBUG: Question data being sent:`, {
+                index: questionData.questionIndex,
+                question: questionData.question,
+                options: questionData.options,
+                timeLimit: questionData.timeLimit || 30,
+                points: 1000,
+                quizCode: quizEvent.quizCode
+              });
+              
+              try {
+                await this.sendQuizQuestion(player.id, {
+                  index: questionData.questionIndex,
+                  question: questionData.question,
+                  options: questionData.options,
+                  timeLimit: questionData.timeLimit || 30,
+                  points: 1000
+                }, quizEvent.quizCode);
+                console.log(`✅ Successfully sent question to ${player.name}`);
+                successCount++;
+              } catch (error) {
+                console.error(`❌ Failed to send question to ${player.name}:`, error);
+              }
+            }
+            
+            // Update event type to question_sent after successful delivery
+            if (successCount > 0) {
+              console.log(`🔧 DEBUG: Updating event type to question_sent for quiz ${quizEvent.quizCode}`);
+              console.log(`🔧 DEBUG: ${successCount}/${telegramPlayers.length} questions delivered successfully`);
+              
+              try {
+                await this.db.collection('quizEvents').updateOne(
+                  { quizCode: quizEvent.quizCode },
+                  { 
+                    $set: { 
+                      type: 'question_sent',
+                      'data.deliveredAt': new Date(),
+                      'data.successfulDeliveries': successCount,
+                      'data.totalRecipients': telegramPlayers.length,
+                      lastUpdated: new Date()
+                    }
+                  }
+                );
+                console.log(`✅ Updated event type to question_sent for quiz ${quizEvent.quizCode}`);
+              } catch (error) {
+                console.error(`❌ Failed to update event type to question_sent:`, error);
+              }
             }
           } else {
-            console.log(`❌ No question found at index ${currentQuestionIndex} for quiz ${session.quizCode}`);
+            console.log(`👥 No Telegram players found or no question data for quiz ${quizEvent.quizCode}`);
           }
         } else {
-          console.log(`👥 No Telegram players found for quiz ${session.quizCode}`);
+          console.log(`🔧 DEBUG: Skipping timer_update event for quiz ${quizEvent.quizCode}`);
         }
       }
 
     } catch (error) {
       console.error('Error processing quiz notifications:', error);
+      console.error('🔧 DEBUG: [BOT] Full error stack:', error.stack);
     }
   }
 
@@ -2738,17 +2750,22 @@ ${explanation}
 }
 
 // Create and start the bot with better error handling
+console.log('🔧 DEBUG: ========== STARTING BOT INSTANTIATION ==========');
 console.log('Initializing Telegram Bot...');
 console.log('If you get a 409 conflict error, run: node bot-manager.js kill');
 console.log('Or use: node bot-manager.js start (recommended)');
 console.log('');
 
+console.log('🔧 DEBUG: Creating CertificationBot instance...');
 const bot = new CertificationBot();
+console.log('🔧 DEBUG: CertificationBot instance created');
 
 // Add process title for easier identification
 process.title = 'telegram-aws-cert-bot';
 
 // The bot will start automatically through initializeAsync()
+console.log('🔧 DEBUG: Bot service starting...');
+console.log('🔧 DEBUG: initializeAsync() should be called automatically');
 console.log('Telegram bot service starting...');
 
 // Handle graceful shutdown
