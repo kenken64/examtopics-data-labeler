@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -134,9 +135,11 @@ export default function QuizBlitzPage() {
               {/* QR Code */}
               <div className="flex justify-center">
                 {qrCodeUrl ? (
-                  <img 
+                  <Image 
                     src={qrCodeUrl} 
                     alt="Telegram Bot QR Code" 
+                    width={192}
+                    height={192}
                     className="rounded-lg shadow-md"
                   />
                 ) : (
