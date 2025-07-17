@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: awscert-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: awscert
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - awscert-network
+
+  # Backend Service (Python Flask)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: awscert-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/awscert?authSource=admin
+      FLASK_ENV: development
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+    volumes:
+      - ./backend:/app
+      - backend_uploads:/tmp/uploads
+    depends_on:
+      - mongodb
+    networks:
+      - awscert-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Service (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: awscert-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/awscert?authSource=admin
+      JWT_SECRET: development-jwt-secret-change-in-production
+      NEXT_PUBLIC_PDF_CONVERSION_API_URL: http://localhost:5000
+      NEXT_TELEMETRY_DISABLED: 1
+      NODE_ENV: development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - awscert-network
+
+  # Telegram Bot Service
+  telegram-bot:
+    build:
+      context: ./telegram-bot
+      dockerfile: Dockerfile
+    container_name: awscert-telegram-bot
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:-your-telegram-bot-token-here}
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/awscert?authSource=admin
+      FRONTEND_URL: http://localhost:3000
+      NODE_ENV: development
+    volumes:
+      - ./telegram-bot:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+      - frontend
+    networks:
+      - awscert-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis (for caching and session management)
+  redis:
+    image: redis:7-alpine
+    container_name: awscert-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - awscert-network
+    command: redis-server --appendonly yes
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+networks:
+  awscert-network:
+    driver: bridge
