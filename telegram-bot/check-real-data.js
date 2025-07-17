@@ -19,7 +19,7 @@ async function checkQuizRooms() {
       console.log(`   - Status: ${room.status}`);
       console.log(`   - Created: ${room.createdAt}`);
       console.log(`   - Players: ${room.players ? room.players.length : 0}`);
-      
+
       if (room.players && room.players.length > 0) {
         room.players.forEach((player, idx) => {
           console.log(`     ${idx + 1}. ${player.name || 'Unknown'} (${player.source || 'Unknown'} - ID: ${player.id})`);

@@ -8,10 +8,10 @@ const path = require('path');
 function extractHelpMessage() {
   const botFilePath = path.join(__dirname, 'bot.js');
   const botContent = fs.readFileSync(botFilePath, 'utf8');
-  
+
   // Find the help message in the handleHelp method
   const helpMethodMatch = botContent.match(/async handleHelp\(ctx\) \{[\s\S]*?const helpMessage =[\s\S]*?`;/);
-  
+
   if (helpMethodMatch) {
     // Extract just the help message content
     const helpContentMatch = helpMethodMatch[0].match(/const helpMessage =\s*`([\s\S]*?)`;/);
@@ -19,7 +19,7 @@ function extractHelpMessage() {
       return helpContentMatch[1];
     }
   }
-  
+
   return null;
 }
 

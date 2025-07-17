@@ -15,7 +15,7 @@ class TelegramQuizBotPolling {
     this.playerSessions = new Map(); // chatId -> { quizCode, playerId, playerName }
     this.pollingInterval = null;
     this.isConnected = false;
-    
+
     this.setupEventHandlers();
   }
 
@@ -25,7 +25,7 @@ class TelegramQuizBotPolling {
       this.db = this.client.db(this.dbName);
       this.isConnected = true;
       console.log('🤖 Telegram QuizBot connected to MongoDB');
-      
+
       this.setupBotCommands();
       this.startPolling();
     } catch (error) {
@@ -39,7 +39,7 @@ class TelegramQuizBotPolling {
     this.pollingInterval = setInterval(async () => {
       await this.checkForQuizUpdates();
     }, 2000);
-    
+
     console.log('🤖 Telegram QuizBot polling started (every 2 seconds)');
   }
 
@@ -84,7 +84,7 @@ class TelegramQuizBotPolling {
       // Check if we moved to a new question
       if (currentQuestionIndex !== quiz.lastQuestionIndex) {
         quiz.lastQuestionIndex = currentQuestionIndex;
-        
+
         if (currentQuestionIndex < quizSession.questions.length) {
           const currentQuestion = quizSession.questions[currentQuestionIndex];
           const questionData = {
@@ -112,7 +112,7 @@ class TelegramQuizBotPolling {
 
   async handleQuestionStarted(quizCode, questionData) {
     console.log(`🤖 Question ${questionData.questionIndex + 1} started for quiz ${quizCode}`);
-    
+
     const quiz = this.activeQuizzes.get(quizCode);
     if (!quiz) return;
 
@@ -135,16 +135,16 @@ class TelegramQuizBotPolling {
 
   async handleQuizEnded(quizCode, quizSession) {
     console.log(`🤖 Quiz ${quizCode} ended`);
-    
+
     const quiz = this.activeQuizzes.get(quizCode);
     if (!quiz) return;
 
     // Send final results
     for (const chatId of quiz.chatIds) {
-      const finalText = `🏁 Quiz Completed!\n\n` +
+      const finalText = '🏁 Quiz Completed!\n\n' +
                        `📊 Total Questions: ${quizSession.questions?.length || 0}\n` +
-                       `Thanks for participating! 🎉`;
-      
+                       'Thanks for participating! 🎉';
+
       await this.bot.sendMessage(chatId, finalText);
     }
 
@@ -154,7 +154,7 @@ class TelegramQuizBotPolling {
 
   async sendQuestionToUser(chatId, question, quizCode) {
     const { questionIndex, question: questionText, options, timeLimit } = question;
-    
+
     console.log(`🤖 Sending question to user ${chatId}:`, {
       questionIndex,
       questionText: questionText?.substring(0, 50) + '...',
@@ -165,7 +165,7 @@ class TelegramQuizBotPolling {
     // Validate options
     if (!options || Object.keys(options).length === 0) {
       console.error(`❌ No options found for question ${questionIndex} in quiz ${quizCode}`);
-      await this.bot.sendMessage(chatId, `❌ Error: Question has no answer options`);
+      await this.bot.sendMessage(chatId, '❌ Error: Question has no answer options');
       return;
     }
 
@@ -197,12 +197,12 @@ class TelegramQuizBotPolling {
     // Handle /start command
     this.bot.onText(/\/start/, (msg) => {
       const chatId = msg.chat.id;
-      const welcomeText = `🎮 Welcome to QuizBlitz Bot!\n\n` +
-                         `Commands:\n` +
-                         `/join <quiz_code> - Join a live quiz\n` +
-                         `/leave - Leave current quiz\n` +
-                         `/status - Check your quiz status`;
-      
+      const welcomeText = '🎮 Welcome to QuizBlitz Bot!\n\n' +
+                         'Commands:\n' +
+                         '/join <quiz_code> - Join a live quiz\n' +
+                         '/leave - Leave current quiz\n' +
+                         '/status - Check your quiz status';
+
       this.bot.sendMessage(chatId, welcomeText);
     });
 
@@ -210,7 +210,7 @@ class TelegramQuizBotPolling {
     this.bot.onText(/\/join (.+)/, async (msg, match) => {
       const chatId = msg.chat.id;
       const quizCode = match[1].toUpperCase();
-      
+
       try {
         // Check if quiz exists and is active
         const quizSession = await this.db.collection('quizSessions').findOne({
@@ -225,8 +225,8 @@ class TelegramQuizBotPolling {
 
         // Add user to quiz
         if (!this.activeQuizzes.has(quizCode)) {
-          this.activeQuizzes.set(quizCode, { 
-            chatIds: new Set(), 
+          this.activeQuizzes.set(quizCode, {
+            chatIds: new Set(),
             currentQuestion: null,
             lastQuestionIndex: -1,
             lastTimerUpdate: -1
@@ -255,7 +255,7 @@ class TelegramQuizBotPolling {
             options: currentQuestion.options,
             timeLimit: quizSession.timerDuration
           };
-          
+
           await this.sendQuestionToUser(chatId, questionData, quizCode);
         }
 
@@ -270,7 +270,7 @@ class TelegramQuizBotPolling {
     this.bot.onText(/\/leave/, async (msg) => {
       const chatId = msg.chat.id;
       const session = this.playerSessions.get(chatId);
-      
+
       if (!session) {
         await this.bot.sendMessage(chatId, '❌ You are not in any quiz.');
         return;
@@ -278,11 +278,11 @@ class TelegramQuizBotPolling {
 
       const { quizCode } = session;
       const quiz = this.activeQuizzes.get(quizCode);
-      
+
       if (quiz) {
         quiz.chatIds.delete(chatId);
       }
-      
+
       this.playerSessions.delete(chatId);
       await this.bot.sendMessage(chatId, `✅ Left quiz ${quizCode}.`);
     });
@@ -291,7 +291,7 @@ class TelegramQuizBotPolling {
     this.bot.onText(/\/status/, async (msg) => {
       const chatId = msg.chat.id;
       const session = this.playerSessions.get(chatId);
-      
+
       if (!session) {
         await this.bot.sendMessage(chatId, '❌ You are not in any quiz.');
         return;
@@ -320,7 +320,7 @@ class TelegramQuizBotPolling {
 
         // Submit answer to the backend
         try {
-          const response = await fetch(`http://localhost:3001/api/quizblitz/submit-answer`, {
+          const response = await fetch('http://localhost:3001/api/quizblitz/submit-answer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

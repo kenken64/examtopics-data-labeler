@@ -29,34 +29,15 @@ jobs:
         cd telegram-bot
         npm ci
     
-    - name: Install ESLint
+    - name: Install ESLint and dependencies
       run: |
         cd telegram-bot
-        npm install --save-dev eslint eslint-config-standard eslint-plugin-node
-    
-    - name: Create ESLint config
-      run: |
-        cd telegram-bot
-        echo '{
-          "extends": ["eslint:recommended", "standard"],
-          "env": {
-            "node": true,
-            "es2022": true
-          },
-          "parserOptions": {
-            "ecmaVersion": 2022,
-            "sourceType": "commonjs"
-          },
-          "rules": {
-            "no-console": "off",
-            "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
-          }
-        }' > .eslintrc.json
+        npm install --save-dev eslint @eslint/js
     
     - name: Run ESLint
       run: |
         cd telegram-bot
-        npx eslint . --ext .js
+        npx eslint *.js --max-warnings 20
     
     - name: Validate Node.js syntax
       run: |

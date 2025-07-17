@@ -30,15 +30,15 @@ class TelegramBotDebugger {
   async processQuizNotifications() {
     try {
       console.log('🔍 Processing quiz notifications...');
-      
+
       if (!this.db) {
         console.error('❌ Database connection not available');
         return;
       }
-      
+
       // Check for active quiz sessions
       const activeSessions = await this.db.collection('quizSessions')
-        .find({ 
+        .find({
           status: 'active'
         })
         .toArray();
@@ -50,7 +50,7 @@ class TelegramBotDebugger {
         console.log(`   - Current question index: ${session.currentQuestionIndex}`);
         console.log(`   - Last notified index: ${session.lastNotifiedQuestionIndex || -1}`);
         console.log(`   - Status: ${session.status}`);
-        
+
         // Check if there are Telegram players for this quiz
         const telegramPlayers = [];
         for (const [telegramId, userSession] of this.userSessions.entries()) {
@@ -69,18 +69,18 @@ class TelegramBotDebugger {
           const currentQuestionIndex = session.currentQuestionIndex || 0;
           if (session.questions && session.questions[currentQuestionIndex]) {
             const currentQuestion = session.questions[currentQuestionIndex];
-            
+
             // Check if we need to send this question (based on lastNotifiedQuestionIndex)
             const lastNotifiedIndex = session.lastNotifiedQuestionIndex || -1;
-            
-            console.log(`📝 Question details:`);
+
+            console.log('📝 Question details:');
             console.log(`   - Question: ${currentQuestion.question.substring(0, 100)}...`);
             console.log(`   - Options: ${JSON.stringify(currentQuestion.options)}`);
             console.log(`   - Current index: ${currentQuestionIndex}, Last notified: ${lastNotifiedIndex}`);
-            
+
             if (currentQuestionIndex > lastNotifiedIndex) {
               console.log(`📤 SHOULD SEND question ${currentQuestionIndex + 1} to ${telegramPlayers.length} Telegram players`);
-              
+
               // Simulate sending to Telegram users
               for (const player of telegramPlayers) {
                 console.log(`📱 [SIMULATED] Sending question to ${player.username}:`);
@@ -90,7 +90,7 @@ class TelegramBotDebugger {
 
               // Simulate updating the last notified question index
               console.log(`📝 [SIMULATED] Updating lastNotifiedQuestionIndex to ${currentQuestionIndex}`);
-              
+
             } else {
               console.log(`⏭️ Question ${currentQuestionIndex + 1} already sent (last notified: ${lastNotifiedIndex})`);
             }
@@ -107,16 +107,16 @@ class TelegramBotDebugger {
 
   async start() {
     console.log('🚀 Starting Telegram Bot Debugger...');
-    
+
     if (!(await this.connectToDatabase())) {
       return;
     }
 
     console.log('🔄 Starting notification polling (every 3 seconds)...');
-    
+
     // Run once immediately
     await this.processQuizNotifications();
-    
+
     // Then every 3 seconds
     setInterval(async () => {
       console.log('\n' + '='.repeat(50));
