@@ -182,11 +182,15 @@ export default function ProfilePage() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log('🚀 ProfilePage: Form submission started...');
     e.preventDefault();
     setMessage('');
     setErrors({});
 
+    console.log('📋 ProfilePage: Current profile data:', profile);
+
     // Validate with Zod
+    console.log('🔍 ProfilePage: Validating form data with schema...');
     const validation = profileSchema.safeParse({
       firstName: profile.firstName,
       lastName: profile.lastName,
@@ -196,6 +200,7 @@ export default function ProfilePage() {
     });
 
     if (!validation.success) {
+      console.error('❌ ProfilePage: Form validation failed:', validation.error.errors);
       const fieldErrors: Record<string, string> = {};
       validation.error.errors.forEach((error) => {
         if (error.path[0]) {
@@ -206,33 +211,46 @@ export default function ProfilePage() {
       return;
     }
 
+    console.log('✅ ProfilePage: Form validation passed');
+    
     setIsSaving(true);
     try {
+      const requestData = {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        contactNumber: profile.contactNumber,
+        dateOfBirth: profile.dateOfBirth,
+        location: profile.location,
+      };
+      
+      console.log('📤 ProfilePage: Sending PUT request with data:', requestData);
+      
       const response = await fetch('/api/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          contactNumber: profile.contactNumber,
-          dateOfBirth: profile.dateOfBirth,
-          location: profile.location,
-        }),
+        body: JSON.stringify(requestData),
       });
 
+      console.log('📊 ProfilePage: API response status:', response.status);
+      console.log('📊 ProfilePage: API response headers:', Object.fromEntries(response.headers.entries()));
+
       if (response.ok) {
+        const responseData = await response.json();
+        console.log('✅ ProfilePage: Profile update successful:', responseData);
         setMessage('Profile updated successfully!');
       } else {
         const errorData = await response.json();
+        console.error('❌ ProfilePage: Profile update failed:', errorData);
         setMessage(errorData.error || 'Failed to update profile');
       }
     } catch (error) {
-      console.error('Error updating profile:', error);
+      console.error('❌ ProfilePage: Exception during profile update:', error);
       setMessage('Failed to update profile');
     } finally {
       setIsSaving(false);
+      console.log('🔄 ProfilePage: Form submission completed');
     }
   };
 
