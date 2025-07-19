@@ -59,9 +59,19 @@ export default function ProfilePage() {
   useEffect(() => {
     const loadProfile = async () => {
       console.log('🔄 ProfilePage: Starting to load profile data...');
+      console.log('🌍 ProfilePage: Current window location:', window.location.href);
+      console.log('🍪 ProfilePage: Current cookies:', document.cookie);
+      
       try {
         console.log('📡 ProfilePage: Making API request to /api/profile');
-        const response = await fetch('/api/profile');
+        const response = await fetch('/api/profile', {
+          method: 'GET',
+          credentials: 'include', // Ensure cookies are sent
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
         
         console.log('📊 ProfilePage: API response status:', response.status);
         console.log('📊 ProfilePage: API response headers:', Object.fromEntries(response.headers.entries()));
@@ -90,6 +100,19 @@ export default function ProfilePage() {
           
           setProfile(newProfile);
           console.log('✅ ProfilePage: Profile state updated successfully');
+          
+          // Verify the state was actually set by logging it after a brief delay
+          setTimeout(() => {
+            console.log('🔍 ProfilePage: Verifying profile state was set correctly...');
+            console.log('📊 ProfilePage: Current profile state in component:', {
+              firstName: newProfile.firstName,
+              lastName: newProfile.lastName,
+              contactNumber: newProfile.contactNumber,
+              dateOfBirth: newProfile.dateOfBirth,
+              location: newProfile.location,
+              email: newProfile.email
+            });
+          }, 100);
         } else {
           console.error('❌ ProfilePage: API request failed with status:', response.status);
           const errorText = await response.text();
