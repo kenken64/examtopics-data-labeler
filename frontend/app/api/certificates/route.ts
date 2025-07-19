@@ -82,6 +82,11 @@ const certificateSchema = new mongoose.Schema({
     trim: true,        // Remove leading/trailing whitespace
     default: '',       // Default to empty string if not provided
   },
+  userId: {
+    type: String,
+    required: true,    // Track who created this certificate
+    index: true,       // Index for efficient ownership queries
+  },
 }, {
   timestamps: true,    // Automatically add createdAt and updatedAt fields
 });
@@ -115,14 +120,23 @@ const Certificate = mongoose.models.Certificate || mongoose.model('Certificate',
  * @param request - Authenticated HTTP request
  * @returns JSON response with certificates array or error message
  */
-export const GET = withAuth(async (_request: AuthenticatedRequest) => {
+export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
     // Establish database connection
     await connectDB();
     
-    // Fetch all certificates, sorted by creation date (newest first)
-    // This ordering ensures recently added certificates appear at the top
-    const certificates = await Certificate.find({}).sort({ createdAt: -1 });
+    // Implement role-based data filtering
+    let query = {};
+    if (request.user?.role === 'admin') {
+      // Admins can see all certificates
+      query = {};
+    } else {
+      // Regular users only see their own certificates
+      query = { userId: request.user?.userId };
+    }
+    
+    // Fetch certificates based on user role, sorted by creation date (newest first)
+    const certificates = await Certificate.find(query).sort({ createdAt: -1 });
     
     // Return the certificates array as JSON response
     return NextResponse.json(certificates);
@@ -200,6 +214,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
       logoUrl: logoUrl?.trim() || '',       // Optional field with fallback
       pdfFileUrl: pdfFileUrl?.trim() || '', // Optional field with fallback
       pdfFileName: pdfFileName?.trim() || '',// Optional field with fallback
+      userId: request.user?.userId,         // Associate certificate with creator
     });
 
     // Save certificate to database

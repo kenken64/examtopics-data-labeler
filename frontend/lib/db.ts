@@ -143,6 +143,35 @@ const userSchema = new mongoose.Schema({
     unique: true,     // Username must be unique across the system
   },
   passkeys: [passkeySchema],  // Array of registered passkey credentials
+  role: {
+    type: String,
+    default: 'user',  // Default role for all users
+    enum: ['user', 'admin'], // Allowed role values
+  },
+  // Profile fields
+  firstName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  lastName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  contactNumber: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  dateOfBirth: {
+    type: Date,
+  },
+  location: {
+    type: String,
+    trim: true,
+    default: '',
+  },
 });
 
 /**
