@@ -22,6 +22,7 @@ interface ProfileData {
   dateOfBirth: string;
   location: string;
   email: string; // readonly
+  profilePhotoUrl?: string;
 }
 
 interface City {
@@ -41,7 +42,8 @@ export default function ProfilePage() {
     contactNumber: '',
     dateOfBirth: '',
     location: '',
-    email: ''
+    email: '',
+    profilePhotoUrl: undefined
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
@@ -51,6 +53,12 @@ export default function ProfilePage() {
   const [cities, setCities] = useState<City[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Photo upload states
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isDeletingPhoto, setIsDeletingPhoto] = useState(false);
   const locationInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -86,7 +94,8 @@ export default function ProfilePage() {
             contactNumber: data.contactNumber || '',
             dateOfBirth: data.dateOfBirth ? data.dateOfBirth.split('T')[0] : '', // Format date for input
             location: data.location || '',
-            email: data.username || '' // username is email
+            email: data.username || '', // username is email
+            profilePhotoUrl: data.profilePhotoUrl || undefined
           };
           
           console.log('📋 ProfilePage: Processed profile data:', newProfile);
@@ -277,6 +286,122 @@ export default function ProfilePage() {
     }
   };
 
+  // Photo upload functions
+  const handlePhotoSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      console.log('📸 ProfilePage: Photo selected:', file.name, file.size, file.type);
+      
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        setMessage('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.');
+        return;
+      }
+
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024;
+      if (file.size > maxSize) {
+        setMessage('File too large. Maximum size is 5MB.');
+        return;
+      }
+
+      setSelectedPhoto(file);
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPhotoPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handlePhotoUpload = async () => {
+    if (!selectedPhoto) return;
+
+    console.log('📸 ProfilePage: Starting photo upload...');
+    setIsUploadingPhoto(true);
+    setMessage('');
+
+    try {
+      const formData = new FormData();
+      formData.append('photo', selectedPhoto);
+
+      const response = await fetch('/api/profile/photo', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ ProfilePage: Photo upload successful:', data);
+        
+        // Update profile with new photo URL
+        setProfile(prev => ({
+          ...prev,
+          profilePhotoUrl: data.photo.url
+        }));
+        
+        // Clear selection
+        setSelectedPhoto(null);
+        setPhotoPreview(null);
+        
+        setMessage('Profile photo updated successfully!');
+      } else {
+        const errorData = await response.json();
+        console.error('❌ ProfilePage: Photo upload failed:', errorData);
+        setMessage(errorData.error || 'Failed to upload photo');
+      }
+    } catch (error) {
+      console.error('❌ ProfilePage: Exception during photo upload:', error);
+      setMessage('Failed to upload photo');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
+    console.log('🗑️ ProfilePage: Starting photo deletion...');
+    setIsDeletingPhoto(true);
+    setMessage('');
+
+    try {
+      const response = await fetch('/api/profile/photo', {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        console.log('✅ ProfilePage: Photo deletion successful');
+        
+        // Update profile to remove photo
+        setProfile(prev => ({
+          ...prev,
+          profilePhotoUrl: undefined
+        }));
+        
+        setMessage('Profile photo deleted successfully!');
+      } else {
+        const errorData = await response.json();
+        console.error('❌ ProfilePage: Photo deletion failed:', errorData);
+        setMessage(errorData.error || 'Failed to delete photo');
+      }
+    } catch (error) {
+      console.error('❌ ProfilePage: Exception during photo deletion:', error);
+      setMessage('Failed to delete photo');
+    } finally {
+      setIsDeletingPhoto(false);
+    }
+  };
+
+  const cancelPhotoSelection = () => {
+    setSelectedPhoto(null);
+    setPhotoPreview(null);
+    // Clear the file input
+    const fileInput = document.getElementById('photo-upload') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -308,6 +433,158 @@ export default function ProfilePage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+            {/* Profile Photo Upload */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-4">
+                Profile Photo
+              </label>
+              
+              <div className="flex items-center space-x-6">
+                {/* Current/Preview Photo */}
+                <div className="relative">
+                  {photoPreview || profile.profilePhotoUrl ? (
+                    <div className="w-20 h-20 rounded-full border-2 border-gray-300 overflow-hidden">
+                      <img
+                        src={photoPreview || profile.profilePhotoUrl}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-full border-2 border-gray-300 bg-gray-100 flex items-center justify-center">
+                      <svg
+                        className="w-8 h-8 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                {/* Upload Controls */}
+                <div className="flex-1">
+                  {!selectedPhoto ? (
+                    <div className="space-y-2">
+                      <input
+                        id="photo-upload"
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        onChange={handlePhotoSelect}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="photo-upload"
+                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <svg
+                          className="w-4 h-4 mr-2"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                          />
+                        </svg>
+                        Choose Photo
+                      </label>
+                      {profile.profilePhotoUrl && (
+                        <button
+                          type="button"
+                          onClick={handlePhotoDelete}
+                          disabled={isDeletingPhoto}
+                          className="ml-3 inline-flex items-center px-4 py-2 border border-red-300 rounded-lg shadow-sm bg-white text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {isDeletingPhoto ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-500 mr-2"></div>
+                              Deleting...
+                            </>
+                          ) : (
+                            <>
+                              <svg
+                                className="w-4 h-4 mr-2"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                              Remove Photo
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-600">
+                        Selected: {selectedPhoto.name} ({Math.round(selectedPhoto.size / 1024)} KB)
+                      </p>
+                      <div className="flex space-x-2">
+                        <button
+                          type="button"
+                          onClick={handlePhotoUpload}
+                          disabled={isUploadingPhoto}
+                          className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {isUploadingPhoto ? (
+                            <>
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <svg
+                                className="w-4 h-4 mr-2"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 12l2 2 4-4"
+                                />
+                              </svg>
+                              Upload Photo
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelPhotoSelection}
+                          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <p className="mt-2 text-xs text-gray-500">
+                    Supported formats: JPEG, PNG, GIF, WebP. Maximum size: 5MB.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Email (readonly) */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">

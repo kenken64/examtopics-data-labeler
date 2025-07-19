@@ -34,6 +34,7 @@ const SlidingMenu = () => {
     firstName: string;
     lastName: string;
     role: string;
+    profilePhotoUrl?: string;
   } | null>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -59,7 +60,8 @@ const SlidingMenu = () => {
           setUserProfile({
             firstName: data.firstName || 'User',
             lastName: data.lastName || '',
-            role: data.role || 'user'
+            role: data.role || 'user',
+            profilePhotoUrl: data.profilePhotoUrl
           });
         } else {
           console.error('❌ SlidingMenu: Failed to load profile:', response.status);
@@ -112,6 +114,13 @@ const SlidingMenu = () => {
         <SheetHeader className="p-6 pb-4 flex-shrink-0">
           <div className="flex items-center space-x-3">
             <Avatar className="h-12 w-12 ring-2 ring-primary/10">
+              {userProfile?.profilePhotoUrl ? (
+                <AvatarImage 
+                  src={userProfile.profilePhotoUrl} 
+                  alt="Profile photo"
+                  className="object-cover"
+                />
+              ) : null}
               <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
                 {userProfile 
                   ? `${userProfile.firstName.charAt(0)}${userProfile.lastName.charAt(0) || ''}`.toUpperCase()

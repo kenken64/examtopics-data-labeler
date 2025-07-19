@@ -80,9 +80,10 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
       firstName: user.firstName || '',
       lastName: user.lastName || '',
       contactNumber: user.contactNumber || '',
-      dateOfBirth: user.dateOfBirth,
+      dateOfBirth: user.dateOfBirth || '',
       location: user.location || '',
       role: user.role,
+      profilePhotoUrl: user.profilePhotoUrl || null,
     };
     
     console.log('📤 GET /api/profile: Sending response data:', responseData);

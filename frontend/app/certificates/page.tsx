@@ -221,7 +221,7 @@ export default function Certificates() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/upload/google-drive', {
+      const response = await fetch('/api/upload/files', {
         method: 'POST',
         body: formData,
       });

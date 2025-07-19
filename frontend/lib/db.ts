@@ -172,6 +172,17 @@ const userSchema = new mongoose.Schema({
     trim: true,
     default: '',
   },
+  // Profile photo fields
+  profilePhotoId: {
+    type: String, // Google Drive file ID
+    default: null,
+  },
+  profilePhotoUrl: {
+    type: String, // Direct Google Drive URL for display
+    default: null,
+  },
+}, {
+  timestamps: true // Add createdAt and updatedAt timestamps
 });
 
 /**
