@@ -142,6 +142,8 @@ class CertificationBot {
     this.offlineMode = false; // Track if running in offline mode
     this.pollingIssue = false; // Track if polling has issues but API works
     this.lastKnownQuizStates = new Map(); // Track quiz state changes for debugging
+    this.lastKnownTimerStates = new Map(); // Track previous timer values for transition validation
+    this.quizAnswerStates = new Map(); // Track who has answered each question in each quiz
 
     // Start health server immediately for Railway
     console.log('🔧 DEBUG: Setting up health check...');
@@ -160,13 +162,16 @@ class CertificationBot {
       console.log('🔧 DEBUG: Environment check - MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT SET');
       console.log('🔧 DEBUG: Environment check - MONGODB_DB_NAME:', process.env.MONGODB_DB_NAME || 'NOT SET');
 
-      // Set a timeout for initialization (reduced for faster feedback)
+      // Set a timeout for initialization (increased to allow for MongoDB setup)
       const timeout = setTimeout(() => {
         if (!this.isReady && !this.offlineMode) {
-          this.startupError = new Error('Bot initialization timeout after 25 seconds');
-          console.error('❌ Bot initialization timed out');
+          this.startupError = new Error('Bot initialization timeout after 45 seconds');
+          console.error('❌ Bot initialization timed out - but continuing with change stream setup');
+          // Don't stop here - continue with change stream setup even if bot initialization times out
+          console.log('🔄 [TELEGRAM] Continuing with change stream setup despite bot timeout...');
+          this.startNotificationPolling();
         }
-      }, 25000);
+      }, 45000);
 
       console.log('🔧 Setting up bot handlers...');
       this.initializeBot();
@@ -244,11 +249,11 @@ class CertificationBot {
       console.log('🔧 DEBUG: MongoDB DB Name:', process.env.MONGODB_DB_NAME || 'NOT SET');
 
       try {
-        // Add timeout for MongoDB connection
+        // Add timeout for MongoDB connection (increased for better reliability)
         console.log('🔧 DEBUG: Creating connection promise...');
         const connectionPromise = this.mongoClient.connect();
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('MongoDB connection timeout after 10 seconds')), 10000);
+          setTimeout(() => reject(new Error('MongoDB connection timeout after 20 seconds')), 20000);
         });
 
         console.log('🔧 DEBUG: Waiting for MongoDB connection...');
@@ -2292,6 +2297,19 @@ ${explanation}
         return;
       }
 
+      // Check if user already answered this question
+      const answerKey = `${quizCode}_${userId}`;
+      if (this.quizAnswerStates.has(answerKey)) {
+        await ctx.answerCallbackQuery('⚠️ You have already answered this question!', { show_alert: true });
+        return;
+      }
+
+      // Mark user as having answered this question
+      this.quizAnswerStates.set(answerKey, {
+        answer: selectedAnswer,
+        timestamp: Date.now()
+      });
+
       // Submit answer to quiz system
       try {
         const submitResult = await this.submitQuizAnswer(
@@ -2301,25 +2319,35 @@ ${explanation}
         );
 
         if (submitResult.success) {
+          // Remove the keyboard to prevent additional answers
           await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
-          const resultText = submitResult.isCorrect
-            ? `✅ *Correct!* +${submitResult.points} points`
-            : `❌ *Incorrect.* Correct answer: ${submitResult.correctAnswer}`;
+          // Send confirmation callback
+          await ctx.answerCallbackQuery(`✅ Answer ${selectedAnswer} submitted!`);
 
+          // Send waiting message to user
           await ctx.reply(
-            `${resultText}\n\n` +
-            `📊 *Your Score:* ${submitResult.totalScore} points\n` +
-            '⏳ *Waiting for next question...*',
-            { parse_mode: 'Markdown' }
+            `✅ <b>Answer Submitted: ${selectedAnswer}</b>\n\n` +
+            `⏳ Please wait for other players to answer...\n` +
+            `📊 The results will be shown when the timer expires or all players have answered.\n\n` +
+            `🔄 <b>Current Status:</b> Waiting for timer to complete...`,
+            { parse_mode: 'HTML' }
           );
+
+          console.log(`✅ Answer submitted: ${session.username || session.firstName || userId} -> ${selectedAnswer} for quiz ${quizCode}`);
         } else {
-          await ctx.reply('❌ Error submitting answer. Please try again.');
+          // Remove from answered state if submission failed
+          this.quizAnswerStates.delete(answerKey);
+          
+          await ctx.answerCallbackQuery(submitResult.error || '❌ Failed to submit answer', { show_alert: true });
         }
 
       } catch (error) {
+        // Remove from answered state if submission failed
+        this.quizAnswerStates.delete(answerKey);
+        
         console.error('Error submitting quiz answer:', error);
-        await ctx.reply('❌ Error submitting answer.');
+        await ctx.answerCallbackQuery('❌ Network error - please try again', { show_alert: true });
       }
 
     } catch (error) {
@@ -2367,40 +2395,61 @@ ${explanation}
   // Send quiz question to player
   async sendQuizQuestion(telegramId, questionData, quizCode) {
     try {
-      console.log(`🔧 DEBUG: sendQuizQuestion called for user ${telegramId}`);
-      console.log(`🔧 DEBUG: Quiz code: ${quizCode}`);
-      console.log('🔧 DEBUG: Question data received:', JSON.stringify(questionData, null, 2));
+      console.log('📨 [TELEGRAM] ========== SENDING QUIZ QUESTION FUNCTION CALLED ==========');
+      console.log('📨 [TELEGRAM] *** THIS IS THE FUNCTION THAT RENDERS QUESTIONS AND ANSWERS ***');
+      console.log(`🔧 DEBUG: [TELEGRAM] sendQuizQuestion ENTRY POINT - User: ${telegramId}`);
+      console.log(`🔧 DEBUG: [TELEGRAM] sendQuizQuestion ENTRY POINT - Quiz code: ${quizCode}`);
+      console.log('🔧 DEBUG: [TELEGRAM] sendQuizQuestion ENTRY POINT - Question data:', JSON.stringify(questionData, null, 2));
+      
+      // Add call stack trace to see where this is being called from
+      console.log('🔧 DEBUG: [TELEGRAM] Function call stack:');
+      console.trace('sendQuizQuestion called from:');
 
-      const session = this.userSessions.get(telegramId);
-      console.log('🔧 DEBUG: User session found:', !!session);
-      console.log('🔧 DEBUG: User quiz joined:', session?.quizJoined);
-
-      if (!session || !session.quizJoined) {
-        console.log(`⚠️ User ${telegramId} not in quiz session`);
-        return;
+      // Clear previous answer state for this user/quiz when new question arrives
+      const answerKey = `${quizCode}_${telegramId}`;
+      if (this.quizAnswerStates.has(answerKey)) {
+        console.log(`🔧 DEBUG: Clearing previous answer state for user ${telegramId} in quiz ${quizCode}`);
+        this.quizAnswerStates.delete(answerKey);
       }
+
+      // Skip session validation for change stream questions - players are validated by quizRooms collection
+      console.log('🔧 DEBUG: [TELEGRAM] Bypassing user session validation for change stream questions');
+      console.log('🔧 DEBUG: [TELEGRAM] Player already validated via quizRooms collection lookup');
 
       console.log(`📤 Sending question to Telegram user ${telegramId}`);
       console.log('Question data:', JSON.stringify(questionData, null, 2));
 
       const keyboard = new InlineKeyboard();
 
+      console.log('🔧 DEBUG: [TELEGRAM] *** PROCESSING QUESTION OPTIONS FOR DISPLAY ***');
+      
       // Check if options exist and format them properly
       if (!questionData.options) {
-        console.error('No options provided for question:', questionData);
+        console.error('❌ [TELEGRAM] *** NO OPTIONS PROVIDED - QUESTION WILL NOT RENDER ***');
+        console.error('❌ [TELEGRAM] Question data without options:', questionData);
         return;
       }
 
+      console.log('✅ [TELEGRAM] *** OPTIONS FOUND - PROCESSING FOR TELEGRAM KEYBOARD ***');
+      console.log('🔧 DEBUG: [TELEGRAM] Raw options object:', JSON.stringify(questionData.options, null, 2));
+
       // Add answer options - handle both object and direct format
       const optionsToShow = [];
+      console.log('🔧 DEBUG: [TELEGRAM] Processing each option for keyboard...');
+      
       Object.entries(questionData.options).forEach(([key, value]) => {
+        console.log(`🔧 DEBUG: [TELEGRAM] Processing option ${key}: "${value}"`);
         if (value && value.trim()) {
           optionsToShow.push({ key, value: value.trim() });
           keyboard.text(`${key}. ${value.trim()}`, `quiz_answer_${key}_${quizCode}`).row();
+          console.log(`✅ [TELEGRAM] Added option ${key} to keyboard`);
+        } else {
+          console.log(`⚠️ [TELEGRAM] Skipped empty option ${key}`);
         }
       });
 
-      console.log(`📝 Question has ${optionsToShow.length} options:`, optionsToShow);
+      console.log(`📝 [TELEGRAM] *** FINAL KEYBOARD HAS ${optionsToShow.length} OPTIONS ***`);
+      console.log('🔧 DEBUG: [TELEGRAM] Final options to show:', optionsToShow);
 
       // Format the question text with options displayed
       let questionOptionsText = '';
@@ -2420,12 +2469,23 @@ ${explanation}
         `⏱️ *Time remaining: ${questionData.timeLimit} seconds*\n` +
         `🏆 *Points: ${questionData.points}*`;
 
+      console.log('📤 [TELEGRAM] *** ABOUT TO SEND MESSAGE TO TELEGRAM API ***');
+      console.log('📤 [TELEGRAM] *** THIS IS WHERE THE QUESTION GETS DISPLAYED ***');
+      console.log('🔧 DEBUG: [TELEGRAM] Target user ID:', telegramId);
+      console.log('🔧 DEBUG: [TELEGRAM] Message text preview:', questionText.substring(0, 200) + '...');
+      console.log('🔧 DEBUG: [TELEGRAM] Full message text:');
+      console.log(questionText);
+      console.log('🔧 DEBUG: [TELEGRAM] Keyboard buttons count:', keyboard.inline_keyboard?.length || 0);
+      console.log('🔧 DEBUG: [TELEGRAM] Keyboard structure:', JSON.stringify(keyboard.inline_keyboard, null, 2));
+      
+      console.log('📡 [TELEGRAM] *** CALLING bot.api.sendMessage NOW ***');
       await this.bot.api.sendMessage(telegramId, questionText, {
         parse_mode: 'Markdown',
         reply_markup: keyboard
       });
 
-      console.log(`✅ Question sent successfully to user ${telegramId}`);
+      console.log(`✅ [TELEGRAM] *** QUESTION SUCCESSFULLY SENT TO TELEGRAM API ***`);
+      console.log(`✅ [TELEGRAM] *** USER ${telegramId} SHOULD NOW SEE THE QUESTION ***`);
 
     } catch (error) {
       console.error('Error sending quiz question:', error);
@@ -2435,36 +2495,426 @@ ${explanation}
 
   // Start polling for notifications from frontend
   startNotificationPolling() {
-    console.log('🔧 DEBUG: ========== ENTERED startNotificationPolling() ==========');
-    console.log('🔧 DEBUG: Starting notification polling (every 3 seconds)');
-    console.log('🔧 DEBUG: POLLING MECHANISM: Simple timer-based polling, NOT Change Streams');
+    console.log('🔧 DEBUG: ========== STARTING CHANGE STREAM SYSTEM ==========');
+    console.log('🔧 DEBUG: Switching from polling to MongoDB Change Streams for real-time updates');
     console.log('🔧 DEBUG: Database connection status:', this.db ? 'CONNECTED' : 'NOT CONNECTED');
+    console.log('🔧 DEBUG: Bot ready status:', this.isReady);
+    console.log('🔧 DEBUG: Offline mode:', this.offlineMode);
+    
+    // Start change stream monitoring with retry logic
+    this.startChangeStreamMonitoringWithRetry();
+  }
+
+  async startChangeStreamMonitoringWithRetry() {
+    let retryCount = 0;
+    const maxRetries = 5;
+    const retryDelay = 3000; // 3 seconds
+
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`🔄 [TELEGRAM] Attempting to start change stream monitoring (attempt ${retryCount + 1}/${maxRetries})`);
+        await this.startChangeStreamMonitoring();
+        console.log('✅ [TELEGRAM] Change stream monitoring started successfully');
+        break;
+      } catch (error) {
+        retryCount++;
+        console.error(`❌ [TELEGRAM] Change stream setup failed (attempt ${retryCount}/${maxRetries}):`, error.message);
+        
+        if (retryCount < maxRetries) {
+          console.log(`⏳ [TELEGRAM] Retrying in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        } else {
+          console.error('❌ [TELEGRAM] All change stream retry attempts failed, falling back to polling');
+          this.startPollingFallback();
+        }
+      }
+    }
+  }
+
+  async startChangeStreamMonitoring() {
+    try {
+      console.log('📡 [TELEGRAM] Starting MongoDB Change Streams for real-time quiz notifications...');
+      console.log('🔧 DEBUG: [TELEGRAM] MongoDB client status:', {
+        isConnected: this.mongoClient.topology?.isConnected(),
+        hasTopology: !!this.mongoClient.topology,
+        dbExists: !!this.db
+      });
+      
+      // Ensure MongoDB client is connected before creating change stream
+      if (!this.mongoClient.topology || !this.mongoClient.topology.isConnected()) {
+        console.log('🔗 [TELEGRAM] MongoDB client not connected, establishing connection...');
+        await this.mongoClient.connect();
+        console.log('✅ [TELEGRAM] MongoDB client connected successfully');
+      }
+      
+      const db = await this.connectToDatabase();
+      console.log('✅ [TELEGRAM] Database connection established');
+      
+      // Watch for changes in the quizEvents collection
+      const changeStream = db.collection('quizEvents').watch([
+        {
+          $match: {
+            $or: [
+              // New quiz events (insert/replace operations)
+              {
+                'operationType': { $in: ['insert', 'replace'] },
+                'fullDocument.type': { $in: ['quiz_started', 'question_started', 'quiz_ended'] }
+              },
+              // Timer updates on existing question_started events (update operations)
+              {
+                'operationType': 'update',
+                'fullDocument.type': 'question_started',
+                'updateDescription.updatedFields': { $exists: true }
+              }
+            ]
+          }
+        }
+      ], { fullDocument: 'updateLookup' });
+
+      console.log('✅ Change stream established on quizEvents collection');
+      console.log('🔧 DEBUG: Monitoring for: quiz_started, question_started, quiz_ended');
+
+      changeStream.on('change', async (change) => {
+        try {
+          console.log('🔔 [TELEGRAM] Change detected in quizEvents collection:', {
+            operationType: change.operationType,
+            documentKey: change.documentKey,
+            fullDocument: change.fullDocument ? {
+              _id: change.fullDocument._id,
+              quizCode: change.fullDocument.quizCode,
+              type: change.fullDocument.type,
+              questionIndex: change.fullDocument.data?.currentQuestionIndex,
+              timeRemaining: change.fullDocument.data?.timeRemaining,
+              hasQuestionData: !!(change.fullDocument.data?.question),
+              questionTitle: change.fullDocument.data?.question?.question?.substring(0, 50) + '...',
+              optionsCount: change.fullDocument.data?.question?.options ? Object.keys(change.fullDocument.data.question.options).length : 0,
+              lastUpdated: change.fullDocument.lastUpdated
+            } : null,
+            updatedFields: change.updateDescription?.updatedFields
+          });
+
+          if (change.fullDocument) {
+            console.log('🔧 DEBUG: [TELEGRAM] Analyzing event for processing...');
+            console.log('🔧 DEBUG: [TELEGRAM] Event type:', change.fullDocument.type);
+            console.log('🔧 DEBUG: [TELEGRAM] Operation type:', change.operationType);
+            
+            // Only process question_started and quiz_ended events
+            // Timer updates are handled by the frontend SSE, not by Telegram bot
+            if (change.fullDocument.type === 'question_started') {
+              // Check if this is ONLY a timer update (no question data changes)
+              const updatedFields = change.updateDescription?.updatedFields || {};
+              const isTimerOnlyUpdate = change.operationType === 'update' && 
+                                      (updatedFields['data.timeRemaining'] || updatedFields['data.lastTimerUpdate']) &&
+                                      !updatedFields['data.question'] &&
+                                      !updatedFields['type'] &&
+                                      !updatedFields['data.currentQuestionIndex'] &&
+                                      // Only consider it timer-only if ONLY timer fields are updated
+                                      Object.keys(updatedFields).every(key => 
+                                        key.includes('timeRemaining') || 
+                                        key.includes('lastTimerUpdate') || 
+                                        key === 'lastUpdated'
+                                      );
+              
+              console.log('🔧 DEBUG: [TELEGRAM] Timer update analysis:', {
+                isUpdate: change.operationType === 'update',
+                hasTimeRemaining: !!updatedFields['data.timeRemaining'],
+                hasQuestionData: !!(change.fullDocument.data?.question),
+                updatedFieldsKeys: Object.keys(updatedFields),
+                isTimerOnlyUpdate
+              });
+              
+              if (isTimerOnlyUpdate) {
+                console.log('⏰ [TELEGRAM] Timer-only update detected (skipping):', {
+                  quizCode: change.fullDocument.quizCode,
+                  timeRemaining: change.fullDocument.data?.timeRemaining
+                });
+              } else {
+                console.log('✅ [TELEGRAM] Question_started event detected - processing...');
+                console.log('🔧 DEBUG: [TELEGRAM] Operation type:', change.operationType);
+                console.log('🔧 DEBUG: [TELEGRAM] Updated fields:', updatedFields);
+                // New question started or question data updated - send to Telegram
+                await this.processQuizEvent(change.fullDocument);
+              }
+            } else if (change.fullDocument.type === 'quiz_ended') {
+              console.log('✅ [TELEGRAM] Quiz ended event detected - processing...');
+              // Quiz ended - send completion messages
+              await this.processQuizEvent(change.fullDocument);
+            } else {
+              console.log('⏸️ [TELEGRAM] Event skipped - not a question_started or quiz_ended:', {
+                type: change.fullDocument.type,
+                operationType: change.operationType
+              });
+            }
+          } else {
+            console.log('⚠️ [TELEGRAM] Change event without fullDocument');
+          }
+        } catch (error) {
+          console.error('❌ Error processing change event:', error);
+        }
+      });
+
+      changeStream.on('error', (error) => {
+        console.error('❌ Change stream error:', error);
+        // Restart change stream after error
+        setTimeout(() => {
+          console.log('🔄 Restarting change stream...');
+          this.startChangeStreamMonitoring();
+        }, 5000);
+      });
+
+      changeStream.on('close', () => {
+        console.log('⚠️ Change stream closed, attempting to reconnect...');
+        setTimeout(() => {
+          this.startChangeStreamMonitoring();
+        }, 3000);
+      });
+
+      console.log('🎯 Change stream monitoring active - real-time quiz notifications enabled');
+      
+    } catch (error) {
+      console.error('❌ Failed to start change stream monitoring:', error);
+      console.log('🔄 Falling back to polling mode...');
+      // Fallback to polling if change streams fail
+      this.startPollingFallback();
+    }
+  }
+
+  async processQuizEvent(quizEvent) {
+    try {
+      console.log('🔄 [TELEGRAM] ========== PROCESSING QUIZ EVENT ==========');
+      console.log('🔄 [TELEGRAM] Processing quiz event:', {
+        quizCode: quizEvent.quizCode,
+        type: quizEvent.type,
+        questionIndex: quizEvent.data?.currentQuestionIndex,
+        timeRemaining: quizEvent.data?.timeRemaining,
+        hasQuestionData: !!(quizEvent.data?.question),
+        questionDataKeys: quizEvent.data?.question ? Object.keys(quizEvent.data.question) : [],
+      });
+      console.log('🔧 DEBUG: [TELEGRAM] Full event data:', JSON.stringify(quizEvent, null, 2));
+
+      // Check if there are Telegram players for this quiz
+      console.log('🔍 [TELEGRAM] Looking up quiz room for:', quizEvent.quizCode);
+      const quizRoom = await this.db.collection('quizRooms').findOne({
+        quizCode: quizEvent.quizCode
+      });
+
+      console.log('🔧 DEBUG: [TELEGRAM] Quiz room lookup result:', {
+        found: !!quizRoom,
+        hasPlayers: !!(quizRoom?.players),
+        playersCount: quizRoom?.players?.length || 0,
+        players: quizRoom?.players?.map(p => ({ id: p.id, name: p.name, source: p.source })) || []
+      });
+
+      if (!quizRoom || !quizRoom.players) {
+        console.log(`👥 [TELEGRAM] No players found for quiz ${quizEvent.quizCode} - exiting`);
+        return;
+      }
+
+      // Find Telegram players
+      console.log('🔍 [TELEGRAM] Filtering for Telegram players...');
+      const telegramPlayers = quizRoom.players.filter(player => {
+        const isTelegram = player.id && (String(player.id).length >= 7 || player.source === 'telegram');
+        console.log(`🔧 DEBUG: Player ${player.name} (${player.id}) - isTelegram: ${isTelegram}`);
+        return isTelegram;
+      });
+
+      console.log(`📱 [TELEGRAM] Found ${telegramPlayers.length} Telegram players for quiz ${quizEvent.quizCode}:`, 
+        telegramPlayers.map(p => `${p.name} (${p.id})`));
+
+      if (telegramPlayers.length === 0) {
+        console.log(`👥 No Telegram players in quiz ${quizEvent.quizCode}`);
+        return;
+      }
+
+      // Add synchronization delay for timer coordination
+      const SYNC_DELAY = 500; // 500ms delay for better sync between frontend and Telegram
+      console.log(`⏳ Adding ${SYNC_DELAY}ms synchronization delay for timer coordination...`);
+      await new Promise(resolve => setTimeout(resolve, SYNC_DELAY));
+
+      // Process based on event type
+      console.log('🔧 DEBUG: [TELEGRAM] Checking event type processing conditions...');
+      console.log('🔧 DEBUG: [TELEGRAM] Event type check:', quizEvent.type === 'question_started');
+      console.log('🔧 DEBUG: [TELEGRAM] Question data check:', !!(quizEvent.data?.question));
+      
+      if (quizEvent.type === 'question_started' && quizEvent.data?.question) {
+        console.log('✅ [TELEGRAM] Sending question to Telegram players...');
+        await this.sendQuestionToTelegramPlayers(quizEvent, telegramPlayers);
+      } else if (quizEvent.type === 'quiz_ended') {
+        console.log('✅ [TELEGRAM] Sending quiz completion to Telegram players...');
+        await this.sendQuizCompletionToTelegramPlayers(quizEvent, telegramPlayers);
+      } else {
+        console.log('⏸️ [TELEGRAM] Event not processed - conditions not met:', {
+          type: quizEvent.type,
+          hasQuestionData: !!(quizEvent.data?.question),
+          expectedType: 'question_started or quiz_ended'
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ Error processing quiz event:', error);
+    }
+  }
+
+  async sendQuestionToTelegramPlayers(quizEvent, telegramPlayers) {
+    try {
+      console.log('📤 [TELEGRAM] sendQuestionToTelegramPlayers called');
+      console.log('🔧 DEBUG: [TELEGRAM] Raw quizEvent.data:', JSON.stringify(quizEvent.data, null, 2));
+      
+      const questionData = quizEvent.data.question || quizEvent.data;
+      console.log('🔧 DEBUG: [TELEGRAM] Extracted questionData:', JSON.stringify(questionData, null, 2));
+      
+      console.log('📤 [TELEGRAM] Sending question to Telegram players:', {
+        questionIndex: questionData.questionIndex,
+        playersCount: telegramPlayers.length,
+        timeLimit: questionData.timeLimit,
+        hasQuestion: !!questionData.question,
+        hasOptions: !!questionData.options,
+        questionText: questionData.question?.substring(0, 100) + '...',
+        optionsCount: questionData.options ? Object.keys(questionData.options).length : 0
+      });
+
+      let successCount = 0;
+      console.log('🔄 [TELEGRAM] Starting to send questions to players...');
+      
+      for (const player of telegramPlayers) {
+        try {
+          console.log(`📤 [TELEGRAM] Sending question to ${player.name} (${player.id})`);
+          console.log('🔧 DEBUG: [TELEGRAM] Question data being sent:', {
+            index: questionData.questionIndex,
+            hasQuestion: !!questionData.question,
+            hasOptions: !!questionData.options,
+            timeLimit: questionData.timeLimit || 30,
+            questionPreview: questionData.question?.substring(0, 50) + '...',
+            optionsCount: questionData.options ? Object.keys(questionData.options).length : 0
+          });
+          
+          const questionToSend = {
+            index: questionData.questionIndex,
+            question: questionData.question,
+            options: questionData.options,
+            timeLimit: questionData.timeLimit || 30,
+            points: 1000
+          };
+          
+          console.log('🔧 DEBUG: [TELEGRAM] Full question object:', JSON.stringify(questionToSend, null, 2));
+          
+          console.log('🚀 [TELEGRAM] *** CALLING sendQuizQuestion FROM CHANGE STREAM ***');
+          await this.sendQuizQuestion(player.id, questionToSend, quizEvent.quizCode);
+          console.log('🏁 [TELEGRAM] *** sendQuizQuestion CALL COMPLETED FROM CHANGE STREAM ***');
+          
+          console.log(`✅ [TELEGRAM] Question sent successfully to ${player.name}`);
+          successCount++;
+          
+          // Small delay between sends to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+        } catch (error) {
+          console.error(`❌ [TELEGRAM] Failed to send question to ${player.name}:`, error);
+          console.error(`❌ [TELEGRAM] Error stack:`, error.stack);
+        }
+      }
+      
+      console.log(`📊 [TELEGRAM] Question sending completed: ${successCount}/${telegramPlayers.length} successful`);
+
+      // Mark event as processed
+      if (successCount > 0) {
+        await this.db.collection('quizEvents').updateOne(
+          { quizCode: quizEvent.quizCode },
+          {
+            $set: {
+              type: 'question_sent',
+              'data.deliveredAt': new Date(),
+              'data.successfulDeliveries': successCount,
+              'data.totalRecipients': telegramPlayers.length,
+              lastUpdated: new Date()
+            }
+          }
+        );
+        console.log(`✅ Marked event as question_sent (${successCount}/${telegramPlayers.length} delivered)`);
+      }
+
+    } catch (error) {
+      console.error('❌ Error sending question to Telegram players:', error);
+    }
+  }
+
+  async sendQuizCompletionToTelegramPlayers(quizEvent, telegramPlayers) {
+    try {
+      console.log(`🏁 Sending quiz completion to ${telegramPlayers.length} Telegram players`);
+
+      // Get quiz room details to include access code
+      const quizRoom = await this.db.collection('quizRooms').findOne({
+        quizCode: quizEvent.quizCode
+      });
+
+      const accessCode = quizRoom?.accessCode || 'N/A';
+      console.log('🔧 DEBUG: [TELEGRAM] Quiz completion - Quiz Code:', quizEvent.quizCode, 'Access Code:', accessCode);
+
+      for (const player of telegramPlayers) {
+        try {
+          // Mark user session as completed
+          const session = this.userSessions.get(player.id);
+          if (session && session.quizJoined && session.quizCode === quizEvent.quizCode) {
+            session.quizCompleted = true;
+          }
+
+          // Send completion message with quiz code and access code
+          await this.bot.api.sendMessage(player.id,
+            '🏁 *Quiz Complete!*\n\n' +
+            `📝 *Quiz Code:* \`${quizEvent.quizCode}\`\n` +
+            `🔑 *Access Code:* \`${accessCode}\`\n\n` +
+            '⏰ Time limit reached!\n\n' +
+            '📊 Final results will be shown shortly...\n\n' +
+            '💡 *Note:* Save these codes for your records!',
+            { parse_mode: 'Markdown' }
+          );
+
+          console.log(`✅ Completion notice sent to ${player.name} with codes: ${quizEvent.quizCode}/${accessCode}`);
+          
+        } catch (error) {
+          console.error(`❌ Failed to send completion notice to ${player.name}:`, error);
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Error sending quiz completion to Telegram players:', error);
+    }
+  }
+
+  // Fallback polling method (only used if change streams fail)
+  startPollingFallback() {
+    console.log('⚠️ Starting fallback polling mode...');
+    console.log('🔧 DEBUG: Change streams failed, using polling as backup');
+    
+    if (!this.lastKnownQuizStates) {
+      this.lastKnownQuizStates = new Map();
+    }
+    if (!this.lastKnownTimerStates) {
+      this.lastKnownTimerStates = new Map();
+    }
+
+    const pollInterval = 2000; // 2 second interval for fallback
+    console.log(`🔄 Polling every ${pollInterval}ms as fallback`);
 
     let pollCount = 0;
 
-    // Poll every 3 seconds for new notifications
-    console.log('🔧 DEBUG: Setting up setInterval for polling...');
-
-    const intervalId = setInterval(async () => {
+    this.pollingInterval = setInterval(async () => {
       pollCount++;
       try {
         const timestamp = new Date().toISOString();
-        console.log(`🔄 POLL #${pollCount} - ${timestamp.split('T')[1].split('.')[0]} - Checking quizEvents collection...`);
+        console.log(`🔄 FALLBACK POLL #${pollCount} - ${timestamp.split('T')[1].split('.')[0]} - Checking quizEvents collection...`);
 
-        await this.processQuizNotifications();
+        await this.processQuizNotificationsFallback();
 
-        console.log(`✅ POLL #${pollCount} - Completed - Next poll in 3 seconds`);
+        console.log(`✅ FALLBACK POLL #${pollCount} - Completed - Next poll in ${pollInterval}ms`);
       } catch (error) {
-        console.error(`❌ POLL #${pollCount} - Error:`, error);
+        console.error(`❌ FALLBACK POLL #${pollCount} - Error:`, error);
       }
-    }, 3000);
-
-    console.log('🔧 DEBUG: setInterval created with ID:', intervalId);
-    console.log('🔧 DEBUG: First poll will start in 3 seconds...');
+    }, pollInterval);
   }
 
-  // Process quiz notifications from frontend
-  async processQuizNotifications() {
+  // Fallback process quiz notifications (used when change streams fail)
+  async processQuizNotificationsFallback() {
     try {
       if (!this.db) {
         console.error('❌ Database connection not available for processing notifications');
@@ -2499,16 +2949,50 @@ ${explanation}
           lastUpdated: quizEvent.lastUpdated
         });
 
-        // Check if quiz state has changed since last poll
+        // IMPROVED STATE CHANGE DETECTION: Check if quiz state has changed since last poll
+        // but also prevent premature question transitions
         const currentState = `${quizEvent.type}-${quizEvent.data?.currentQuestionIndex}-${quizEvent.data?.timeRemaining}`;
         const lastKnownState = this.lastKnownQuizStates.get(quizEvent.quizCode);
+
+        // Store previous timer value for transition validation
+        if (!this.lastKnownTimerStates) {
+          this.lastKnownTimerStates = new Map();
+        }
+        const previousTimer = this.lastKnownTimerStates.get(quizEvent.quizCode) || -1;
+        const currentTimer = quizEvent.data?.timeRemaining || 0;
+        this.lastKnownTimerStates.set(quizEvent.quizCode, currentTimer);
 
         if (lastKnownState !== currentState) {
           console.log(`    🔄 STATE CHANGE DETECTED for ${quizEvent.quizCode}:`);
           console.log(`       Previous: ${lastKnownState || 'NONE'}`);
           console.log(`       Current:  ${currentState}`);
-          console.log('       Action:   PROCESSING EVENT');
-          this.lastKnownQuizStates.set(quizEvent.quizCode, currentState);
+          console.log(`       Timer transition: ${previousTimer}s -> ${currentTimer}s`);
+
+          // VALIDATION: Only allow question transitions if timer logic is correct
+          const previousParts = lastKnownState ? lastKnownState.split('-') : ['', '-1', '0'];
+          const currentQuestionIndex = parseInt(quizEvent.data?.currentQuestionIndex || 0);
+          const previousQuestionIndex = parseInt(previousParts[1] || -1);
+
+          // Check if this is a question transition (not just a timer update)
+          if (quizEvent.type === 'question_started' && currentQuestionIndex > previousQuestionIndex) {
+            // Question transition detected - validate it's legitimate
+            const isQuizStart = previousQuestionIndex === -1 && currentQuestionIndex === 0;
+            const isTimerExpired = previousTimer <= 1; // Allow transition if timer was almost expired
+            const isLegitimateTransition = isQuizStart || isTimerExpired;
+
+            if (isLegitimateTransition) {
+              console.log('       ✅ Legitimate question transition - PROCESSING');
+              this.lastKnownQuizStates.set(quizEvent.quizCode, currentState);
+            } else {
+              console.log(`       ⏸️ Premature question transition blocked - timer was ${previousTimer}s`);
+              console.log('       Action: SKIPPING to prevent premature transition');
+              continue; // Skip processing this premature transition
+            }
+          } else {
+            // Not a question transition, process normally
+            console.log('       Action: PROCESSING EVENT');
+            this.lastKnownQuizStates.set(quizEvent.quizCode, currentState);
+          }
         } else {
           console.log(`    ⏸️ STATE UNCHANGED for ${quizEvent.quizCode}: ${currentState}`);
           console.log('       Action: SKIPPING');
@@ -2567,12 +3051,20 @@ ${explanation}
                     console.log(`✅ Marked quiz as completed for user ${player.name}`);
                   }
 
-                  // Send completion message
+                  // Get quiz room details for access code
+                  const quizRoomForAccessCode = await this.db.collection('quizRooms').findOne({
+                    quizCode: quizEvent.quizCode
+                  });
+                  const accessCodeForCompletion = quizRoomForAccessCode?.accessCode || 'N/A';
+                  
+                  // Send completion message with quiz code and access code
                   await this.bot.api.sendMessage(player.id,
                     '🏁 *Quiz Complete!*\n\n' +
-                    `The quiz "${quizEvent.quizCode}" has ended.\n` +
+                    `📝 *Quiz Code:* \`${quizEvent.quizCode}\`\n` +
+                    `🔑 *Access Code:* \`${accessCodeForCompletion}\`\n\n` +
                     '⏰ Time limit reached!\n\n' +
-                    '📊 Final results will be shown shortly...',
+                    '📊 Final results will be shown shortly...\n\n' +
+                    '💡 *Note:* Save these codes for your records!',
                     { parse_mode: 'Markdown' }
                   );
 

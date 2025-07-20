@@ -16,6 +16,7 @@ export interface QuestionData {
   options: { [key: string]: string };
   timeLimit: number;
   timeRemaining?: number;
+  questionStartedAt?: number; // Synchronized timestamp for perfect timing
 }
 
 export interface AnswerSubmission {
@@ -274,7 +275,7 @@ export class QuizPubSub {
       });
     }
 
-    // IMPORTANT: Timer updates should NOT overwrite question events!
+    // IMPORTANT: Timer updates should use upsert to maintain single record per quiz
     // Only update the timeRemaining field, preserve existing type and question data
     console.log('🔧 DEBUG: [PUBSUB] Updating timeRemaining only, preserving existing event type');
     
@@ -287,12 +288,22 @@ export class QuizPubSub {
             'data.lastTimerUpdate': new Date(),
             lastUpdated: new Date()
           }
-        }
+        },
+        { upsert: false } // Don't create new record, only update existing ones
       );
-      
+
       if (timeRemaining % 10 === 0 || timeRemaining <= 5) {
-        console.log('🔧 DEBUG: [PUBSUB] Timer update - matched:', result.matchedCount, 'modified:', result.modifiedCount);
+        console.log('🔧 DEBUG: [PUBSUB] Timer update successful:', {
+          matchedCount: result.matchedCount,
+          modifiedCount: result.modifiedCount
+        });
       }
+
+      // If no document was found to update, it means quiz event doesn't exist yet
+      if (result.matchedCount === 0) {
+        console.log('⚠️ [PUBSUB] No quiz event found to update timer for:', quizCode.toUpperCase());
+      }
+      
     } catch (error) {
       console.error('❌ Failed to update timer:', error);
       throw error;
@@ -348,11 +359,19 @@ export class QuizPubSub {
     const cutoffDate = new Date(Date.now() - (olderThanHours * 60 * 60 * 1000));
     
     try {
+      // Clean up old quiz events
       const result = await this.db.collection('quizEvents').deleteMany({
-        timestamp: { $lt: cutoffDate }
+        lastUpdated: { $lt: cutoffDate }
       });
       
-      console.log(`🧹 Cleaned up ${result.deletedCount} old quiz events`);
+      // Also clean up timer events older than 1 hour to prevent bloat
+      const timerCutoff = new Date(Date.now() - (60 * 60 * 1000));
+      const timerResult = await this.db.collection('quizEvents').deleteMany({
+        type: 'timer_update',
+        lastUpdated: { $lt: timerCutoff }
+      });
+      
+      console.log(`🧹 Cleaned up ${result.deletedCount} old quiz events and ${timerResult.deletedCount} timer events`);
     } catch (error) {
       console.error('❌ Failed to cleanup old events:', error);
     }

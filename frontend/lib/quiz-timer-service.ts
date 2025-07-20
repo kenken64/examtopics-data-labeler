@@ -12,6 +12,7 @@ interface ActiveQuiz {
   timerDuration: number;
   totalQuestions: number;
   timerId?: NodeJS.Timeout;
+  questionStartedAt?: number; // Synchronized timestamp for precise timing
 }
 
 class QuizTimerService {
@@ -142,12 +143,16 @@ class QuizTimerService {
       // Publish question started event
       console.log('🔧 DEBUG: [TIMER] Publishing question started event');
       const pubsub = await getQuizPubSub();
+      // Calculate synchronized start time for perfect frontend-backend sync
+      const questionStartedAt = Date.now() + 1000; // Add 1 second buffer for message propagation
+      
       const questionData = {
         questionIndex: currentQuestionIndex,
         question: currentQuestion.question,
         options: currentQuestion.options,
         timeLimit: timerDuration,
-        timeRemaining: timerDuration
+        timeRemaining: timerDuration,
+        questionStartedAt: questionStartedAt // Synchronized timestamp for all systems
       };
 
       console.log('🔧 DEBUG: [TIMER] Question data for PubSub:', {
@@ -160,13 +165,19 @@ class QuizTimerService {
       await pubsub.publishQuestionStarted(quizCode, questionData);
       console.log('🔧 DEBUG: [TIMER] Question started event published successfully');
 
-      // Reset timer
-      activeQuiz.timeRemaining = timerDuration;
-      console.log('🔧 DEBUG: [TIMER] Timer reset to:', timerDuration);
+      // Reduced synchronization delay for better coordination with frontend fallback timer
+      const TIMER_SYNC_DELAY = 500; // 500ms delay for frontend/telegram sync
+      console.log(`⏳ [TIMER] Adding ${TIMER_SYNC_DELAY}ms synchronization delay before starting countdown...`);
+      await new Promise(resolve => setTimeout(resolve, TIMER_SYNC_DELAY));
+
+      // Store synchronized start time for accurate countdown
+      activeQuiz.questionStartedAt = questionStartedAt;
+      activeQuiz.timerDuration = timerDuration;
+      console.log('🔧 DEBUG: [TIMER] Question will start at:', new Date(questionStartedAt).toISOString());
       
-      // Start countdown timer
-      console.log('🔧 DEBUG: [TIMER] Starting countdown timer');
-      this.startCountdown(activeQuiz);
+      // Start synchronized countdown timer
+      console.log('🔧 DEBUG: [TIMER] Starting synchronized countdown timer');
+      this.startSynchronizedCountdown(activeQuiz);
 
       console.log(`📝 Started question ${currentQuestionIndex + 1}/${totalQuestions} for quiz ${quizCode}`);
     } catch (error) {
@@ -214,6 +225,64 @@ class QuizTimerService {
         }
       } catch (error) {
         console.error(`❌ Timer update failed for quiz ${activeQuiz.quizCode}:`, error);
+      }
+    }, 1000);
+  }
+
+  private startSynchronizedCountdown(activeQuiz: ActiveQuiz): void {
+    // Clear existing timer if any
+    if (activeQuiz.timerId) {
+      clearInterval(activeQuiz.timerId);
+    }
+
+    console.log('🔧 DEBUG: [TIMER] Starting SYNCHRONIZED countdown for quiz:', activeQuiz.quizCode);
+    console.log('🔧 DEBUG: [TIMER] Question starts at:', new Date(activeQuiz.questionStartedAt!).toISOString());
+    console.log('🔧 DEBUG: [TIMER] Timer duration:', activeQuiz.timerDuration, 'seconds');
+
+    activeQuiz.timerId = setInterval(async () => {
+      // Calculate remaining time based on synchronized start time (MUCH MORE ACCURATE)
+      const now = Date.now();
+      const elapsed = Math.max(0, (now - activeQuiz.questionStartedAt!) / 1000);
+      const calculatedTimeRemaining = Math.max(0, activeQuiz.timerDuration - elapsed);
+      
+      // Update with calculated value instead of unreliable decrementing
+      activeQuiz.timeRemaining = Math.ceil(calculatedTimeRemaining);
+
+      // Log timer updates at key intervals
+      if (activeQuiz.timeRemaining % 10 === 0 || activeQuiz.timeRemaining <= 5) {
+        console.log('🔧 DEBUG: [TIMER] ✨ SYNCHRONIZED time remaining for quiz', activeQuiz.quizCode, ':', activeQuiz.timeRemaining);
+        console.log('🔧 DEBUG: [TIMER] ✨ Calculated from elapsed:', elapsed.toFixed(2), 'seconds since', new Date(activeQuiz.questionStartedAt!).toISOString());
+      }
+
+      try {
+        const pubsub = await getQuizPubSub();
+        
+        // Publish timer update every second
+        await pubsub.publishTimerUpdate(activeQuiz.quizCode, activeQuiz.timeRemaining);
+
+        // Update database every 5 seconds or when time is almost up
+        if (activeQuiz.timeRemaining % 5 === 0 || activeQuiz.timeRemaining <= 5) {
+          console.log('🔧 DEBUG: [TIMER] ✨ Updating database with SYNCHRONIZED time remaining:', activeQuiz.timeRemaining);
+          const db = await connectToDatabase();
+          await db.collection('quizSessions').updateOne(
+            { quizCode: activeQuiz.quizCode },
+            { 
+              $set: { 
+                timeRemaining: activeQuiz.timeRemaining,
+                questionStartedAt: activeQuiz.questionStartedAt // Store sync timestamp
+              } 
+            }
+          );
+        }
+
+        // Time's up!
+        if (activeQuiz.timeRemaining <= 0) {
+          console.log('🔧 DEBUG: [TIMER] ✨ SYNCHRONIZED timer expired for quiz:', activeQuiz.quizCode);
+          clearInterval(activeQuiz.timerId!);
+          await this.endQuestion(activeQuiz);
+        }
+      } catch (error) {
+        console.error(`❌ Synchronized timer update failed for quiz ${activeQuiz.quizCode}:`, error);
       }
     }, 1000);
   }

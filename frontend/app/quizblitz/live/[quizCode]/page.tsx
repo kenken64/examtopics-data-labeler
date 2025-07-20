@@ -36,6 +36,15 @@ interface QuestionResult {
   leaderboard: Player[];
 }
 
+// Utility function to validate timer duration and handle NaN values
+const validateTimerDuration = (duration: any, context: string = 'unknown'): number => {
+  if (isNaN(duration) || duration == null || duration <= 0) {
+    console.warn(`🔧 WARN: [FRONTEND] Invalid timer duration in ${context}, using default 30 seconds. Received:`, duration);
+    return 30; // Default fallback
+  }
+  return Number(duration);
+};
+
 function LiveQuizPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -59,7 +68,27 @@ function LiveQuizPageContent() {
   const [quizStatus, setQuizStatus] = useState<string>('waiting');
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const nextQuestionInProgress = useRef<boolean>(false); // Add debouncing flag
+
+  // Centralized timer cleanup function
+  const cleanupTimers = (context: string = '') => {
+    console.log(`⏹️ [FRONTEND] Cleaning up timers${context ? ` (${context})` : ''}`);
+    
+    if (timerRef.current) {
+      if (typeof timerRef.current === 'number') {
+        clearTimeout(timerRef.current);
+      } else {
+        clearInterval(timerRef.current);
+      }
+      timerRef.current = null;
+    }
+    
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+  };
 
   // Use SSE for real-time quiz session updates instead of polling
   const { sessionData, isConnected: sseConnected, error: sseError } = useSessionSSE(quizCode || null);
@@ -67,89 +96,192 @@ function LiveQuizPageContent() {
   // Update component state when SSE data changes
   useEffect(() => {
     if (sessionData) {
-      setCurrentQuestion(sessionData.currentQuestion);
-      setQuestionIndex(sessionData.currentQuestionIndex);
-      setTotalQuestions(sessionData.totalQuestions);
+      // Don't update question state if quiz is already finished (prevents back-and-forth transitions)
+      if (!quizFinished) {
+        setCurrentQuestion(sessionData.currentQuestion);
+        setQuestionIndex(sessionData.currentQuestionIndex);
+        setTotalQuestions(sessionData.totalQuestions);
+        setQuizStatus(sessionData.status);
+      }
+      
+      // Always update players (for leaderboard on completion page)
       setPlayers(sessionData.players || []);
-      setQuizStatus(sessionData.status);
-      setQuizFinished(sessionData.isQuizCompleted || false);
+      // Handle quiz completion from SSE
+      if (sessionData.isQuizCompleted && !quizFinished) {
+        console.log('🏁 [FRONTEND] Quiz completion detected via SSE');
+        cleanupTimers('SSE quiz completion');
+        setTimeRemaining(0); // Stop timer display
+      }
+      
+      // Only update quizFinished if we're not already finished (prevent back-and-forth transitions)
+      if (!quizFinished) {
+        setQuizFinished(sessionData.isQuizCompleted || false);
+      }
       setLoading(false);
 
-      // Handle quiz status transitions
-      if (sessionData.status === 'active' && sessionData.currentQuestion) {
+      // Handle quiz status transitions (only if not finished)
+      if (!quizFinished && sessionData.status === 'active' && sessionData.currentQuestion) {
         // Quiz has started with an active question
         if (sessionData.timerDuration) {
-          setTimeRemaining(sessionData.timerDuration);
+          const timerDuration = validateTimerDuration(sessionData.timerDuration, 'SSE sessionData');
+          setTimeRemaining(timerDuration);
           startTimer();
         }
       }
     }
-  }, [sessionData]);
+  }, [sessionData, quizFinished]);
 
   // Handle timer expiration - show results when timer reaches 0
   useEffect(() => {
-    if (timeRemaining === 0 && currentQuestion && !showResults) {
+    if (timeRemaining === 0 && currentQuestion && !showResults && !quizFinished) {
       console.log('⏰ Timer expired! Showing question results...');
       handleTimeUp();
     }
-  }, [timeRemaining, currentQuestion, showResults]);
+  }, [timeRemaining, currentQuestion, showResults, quizFinished]);
 
   // Real-time quiz event sync (MongoDB Change Streams)
   useQuizEvents(quizCode, {
     onQuestionStarted: (question) => {
+      // Prevent processing new questions if quiz is already finished
+      if (quizFinished) {
+        console.log('⏸️ [FRONTEND] Ignoring question started event - quiz already finished');
+        return;
+      }
+      
       console.log('🔧 DEBUG: [FRONTEND] onQuestionStarted called:', {
         questionIndex: question.questionIndex,
         question: question.question?.substring(0, 50) + '...',
         timeLimit: question.timeLimit
       });
       
+      console.log('🔧 DEBUG: [FRONTEND] Current state before update:', {
+        showResults,
+        currentQuestion: currentQuestion?.question?.substring(0, 50) + '...',
+        questionIndex,
+        timeRemaining
+      });
+      
+      // Clear ALL existing timers/timeouts
+      if (timerRef.current) {
+        if (typeof timerRef.current === 'number') {
+          clearTimeout(timerRef.current);
+        } else {
+          clearInterval(timerRef.current);
+        }
+        timerRef.current = null;
+      }
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+      
+      // Reset state for new question
       setCurrentQuestion(question);
       setQuestionIndex(question.questionIndex);
       setSelectedAnswer('');
       setHasAnswered(false);
-      setShowResults(false);
-      setQuestionResult(null);
-      setTimeRemaining(question.timeLimit || 30);
+      setShowResults(false); // Ensure results are hidden
+      setQuestionResult(null); // Clear previous results
+      // Validate and set timer duration with NaN protection
+      const validTimer = validateTimerDuration(question.timeLimit, 'onQuestionStarted');
+      setTimeRemaining(validTimer);
       
-      console.log('🔧 DEBUG: [FRONTEND] State reset for new question');
+      console.log('🔧 DEBUG: [FRONTEND] Question state updated, relying on backend timer updates via SSE');
+      console.log('🔧 DEBUG: [FRONTEND] Backend should start publishing timer_update events now');
+      
+      // Set a timeout to start fallback timer if backend timer doesn't work
+      // Increased delay to account for server sync delay (500ms) + buffer
+      fallbackTimerRef.current = setTimeout(() => {
+        console.log('⚠️ [FRONTEND] No backend timer updates after 1.5 seconds, starting fallback timer');
+        const validDuration = validateTimerDuration(question.timeLimit, 'fallback timer');
+        startTimer(validDuration);
+      }, 1500);
+      
+      console.log('✅ [FRONTEND] onQuestionStarted processing complete');
     },
     onTimerUpdate: (data) => {
-      // Only log timer updates at key intervals to avoid spam
-      if (data.timeRemaining % 10 === 0 || data.timeRemaining <= 5) {
-        console.log('🔧 DEBUG: [FRONTEND] Timer update:', data.timeRemaining);
+      // Prevent processing timer updates if quiz is already finished
+      if (quizFinished) {
+        console.log('⏸️ [FRONTEND] Ignoring timer update - quiz already finished');
+        return;
       }
-      setTimeRemaining(data.timeRemaining);
+      
+      // Cancel backup timer/timeout since backend timer is working
+      if (timerRef.current) {
+        if (typeof timerRef.current === 'number') {
+          // It's a timeout (backup timer not started yet)
+          clearTimeout(timerRef.current);
+        } else {
+          // It's an interval (backup timer is running)
+          clearInterval(timerRef.current);
+        }
+        timerRef.current = null;
+        console.log('🔧 DEBUG: [FRONTEND] Backend timer working, cancelled backup timer/timeout');
+      }
+      
+      // Cancel fallback timer since backend timer is working
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+      
+      // Handle both old format (number) and new format (object) for backward compatibility
+      let timeRemaining = typeof data === 'number' ? data : (data.timeRemaining || data.data?.timeRemaining);
+      
+      // Handle NaN values by falling back to current question's time limit or default
+      if (isNaN(timeRemaining) || timeRemaining == null) {
+        const fallbackDuration = currentQuestion?.timeLimit || sessionData?.timerDuration || 30;
+        timeRemaining = validateTimerDuration(fallbackDuration, 'onTimerUpdate fallback');
+      }
+      
+      // Only log timer updates at key intervals to avoid spam
+      if (timeRemaining % 10 === 0 || timeRemaining <= 5) {
+        console.log('🔧 DEBUG: [FRONTEND] Timer update from backend:', timeRemaining);
+      }
+      
+      setTimeRemaining(timeRemaining);
+      
+      // Handle time up when backend timer reaches 0
+      if (timeRemaining <= 0) {
+        console.log('🔧 DEBUG: [FRONTEND] Backend timer reached 0, calling handleTimeUp');
+        handleTimeUp();
+      }
     },
     onQuestionEnded: (data) => {
-      console.log('🔧 DEBUG: [FRONTEND] onQuestionEnded called:', {
+      // Prevent processing question ended events if quiz is already finished
+      if (quizFinished) {
+        console.log('⏸️ [FRONTEND] Ignoring question ended event - quiz already finished');
+        return;
+      }
+      
+      console.log('🔧 DEBUG: [FRONTEND] onQuestionEnded called - skipping results display:', {
         correctAnswer: data.results?.correctAnswer,
         hasResults: !!data.results,
         leaderboardCount: data.results?.leaderboard?.length || 0
       });
       
-      setShowResults(true);
-      // Ensure data.results has the required structure
-      const results = data.results || {};
-      const safeResults = {
-        correctAnswer: results.correctAnswer || '',
-        explanation: results.explanation || '',
-        playerAnswers: results.playerAnswers || {},
-        leaderboard: results.leaderboard || []
-      };
-      setQuestionResult(safeResults);
+      // SKIP showing results - go directly to waiting for next question
+      console.log('⏭️ [FRONTEND] Skipping question results display - waiting for next question...');
       
-      console.log('🔧 DEBUG: [FRONTEND] Results will be shown for 5 seconds');
-      // Auto-advance to next question after 5 seconds
-      setTimeout(() => {
-        console.log('🔧 DEBUG: [FRONTEND] 5-second results timeout expired, hiding results');
-        setShowResults(false);
-        setQuestionResult(null);
-      }, 5000);
+      // Just clear any existing results state
+      setShowResults(false);
+      setQuestionResult(null);
+      
+      // The next question will arrive via onQuestionStarted handler
+      console.log('⏱️ [FRONTEND] Next question should arrive via onQuestionStarted handler');
     },
     onQuizEnded: (data) => {
+      console.log('🏁 [FRONTEND] Quiz ended event received, cleaning up and navigating to completion');
+      
+      cleanupTimers('quiz_ended event');
+      
+      // Set final state
       setQuizFinished(true);
       setShowResults(false);
       setQuestionResult(null);
+      setTimeRemaining(0); // Stop timer display
+      
+      console.log('✅ [FRONTEND] Quiz completion page should now display');
     }
   });
 
@@ -167,12 +299,31 @@ function LiveQuizPageContent() {
     }, [quizCode, router]);
 
   const startTimer = (duration?: number) => {
-    const initialTime = duration || timeRemaining;
+    // Don't start timer if quiz is already finished
+    if (quizFinished) {
+      console.log('⏸️ [FRONTEND] Ignoring startTimer call - quiz already finished');
+      return;
+    }
+    
+    const fallbackDuration = duration || timeRemaining;
+    const initialTime = validateTimerDuration(fallbackDuration, 'startTimer');
+    
+    console.log('🔧 DEBUG: [FRONTEND] startTimer called with duration:', initialTime);
+    
     setTimeRemaining(initialTime);
 
+    // Clear any existing timers
     if (timerRef.current) {
-      clearInterval(timerRef.current);
+      if (typeof timerRef.current === 'number') {
+        clearTimeout(timerRef.current);
+      } else {
+        clearInterval(timerRef.current);
+      }
+      timerRef.current = null;
     }
+    
+    // Start immediate fallback timer since backend timer has failed to sync
+    console.log('🔧 DEBUG: [FRONTEND] Starting fallback timer immediately');
     
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
@@ -186,6 +337,12 @@ function LiveQuizPageContent() {
   };
 
   const handleTimeUp = async () => {
+    // Don't process time up if quiz is already finished
+    if (quizFinished) {
+      console.log('⏸️ [FRONTEND] Ignoring handleTimeUp call - quiz already finished');
+      return;
+    }
+    
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
@@ -209,19 +366,40 @@ function LiveQuizPageContent() {
     const isLastQuestion = questionIndex + 1 >= totalQuestions;
     
     if (isLastQuestion) {
-      console.log('🏁 [FRONTEND] Last question completed! Going directly to final results...');
-      // Go directly to final results without showing individual question results
-      setQuizFinished(true);
-      setShowResults(false);
-      setQuestionResult(null);
-    } else {
-      console.log('📊 [FRONTEND] Not last question, showing results and waiting for backend timer service...');
-      // Show results for current question
-      showQuestionResults();
+      console.log('🏁 [FRONTEND] Last question completed! Waiting for backend quiz_ended event...');
+      // Don't set quiz finished here - wait for backend quiz_ended event
+      // The backend timer service will send quiz_ended event after processing final question
+      // This prevents race conditions between frontend and backend quiz completion
+      console.log('⏳ [FRONTEND] Backend should send quiz_ended event shortly...');
       
-      // IMPORTANT: The quiz timer service will automatically advance after 5 seconds
+      // Fallback: If no quiz_ended event arrives within 10 seconds, force completion
+      setTimeout(() => {
+        if (!quizFinished) {
+          console.warn('⚠️ [FRONTEND] No quiz_ended event received, forcing quiz completion');
+          setQuizFinished(true);
+          setShowResults(false);
+          setQuestionResult(null);
+          setTimeRemaining(0);
+          
+          cleanupTimers('fallback timeout');
+        }
+      }, 10000);
+    } else {
+      console.log('⏭️ [FRONTEND] Not last question - skipping results display, waiting for next question...');
+      // SKIP showing results - just wait for backend timer service to send next question
+      // The quiz timer service will automatically advance after 5 seconds
       // The backend timer service will send a new question_started event
       // The onQuestionStarted handler will reset the state for the next question
+      
+      // Clear any existing timer
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      
+      // Set a simple "waiting for next question" state
+      setShowResults(false);
+      setQuestionResult(null);
+      
       console.log('⏱️ [FRONTEND] Backend timer service should send next question in 5 seconds...');
     }
   };
@@ -262,36 +440,8 @@ function LiveQuizPageContent() {
     }
   };
 
-  const showQuestionResults = () => {
-    console.log('📊 [FRONTEND] showQuestionResults called');
-    
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    // Create results with real player data
-    const questionResult: QuestionResult = {
-      correctAnswer: currentQuestion?.correctAnswer || '',
-      explanation: currentQuestion?.explanation || '',
-      playerAnswers: {
-        'current-player': selectedAnswer || '' // Only show current player's answer
-      },
-      leaderboard: players.map(player => ({
-        id: player.id,
-        name: player.name,
-        score: player.score
-      }))
-    };
-
-    setQuestionResult(questionResult);
-    setShowResults(true);
-    
-    console.log('📊 [FRONTEND] Question results displayed, showResults=true');
-    console.log('⏱️ [FRONTEND] Backend timer service should send next question in 5 seconds...');
-
-    // REMOVED: Don't manually advance question here - let the timer service handle it
-    // The quiz timer service will automatically advance after 5 seconds
-  };
+  // REMOVED: showQuestionResults function - no longer showing results
+  // Results display has been disabled to streamline the quiz experience
 
   const nextQuestion = async () => {
     // Debouncing: Prevent multiple simultaneous calls
@@ -327,8 +477,13 @@ function LiveQuizPageContent() {
       }
 
       if (data.action === 'quiz-finished') {
-        // Quiz finished
+        // Quiz finished - clean up timers and navigate to completion
+        console.log('🏁 [FRONTEND] Quiz finished via nextQuestion API');
+        
+        cleanupTimers('quiz finished via API');
+        
         setQuizFinished(true);
+        setTimeRemaining(0);
         return;
       }
 
@@ -342,8 +497,9 @@ function LiveQuizPageContent() {
         setShowResults(false);
         setQuestionResult(null);
 
-        // Start timer for new question
-        startTimer(data.timerDuration);
+        // Start timer for new question with NaN validation
+        const timerDuration = validateTimerDuration(data.timerDuration, 'nextQuestion');
+        startTimer(timerDuration);
         
         console.log(`📝 Advanced to question ${data.currentQuestionIndex + 1}/${data.totalQuestions}`);
       }
@@ -483,56 +639,7 @@ function LiveQuizPageContent() {
             <p className="text-xl text-muted-foreground">Here are your final results</p>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-8 mb-8">
-            {/* Your Stats */}
-            <Card className="bg-white/90 backdrop-blur-sm border-2 border-blue-200">
-              <CardHeader className="text-center">
-                <CardTitle className="text-2xl flex items-center justify-center gap-2">
-                  <Users className="h-6 w-6" />
-                  Your Performance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="text-center">
-                  <div className="text-6xl font-bold text-blue-600 mb-2">
-                    {currentPlayerRank}
-                  </div>
-                  <p className="text-lg text-muted-foreground">
-                    out of {totalPlayers} players
-                  </p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 text-center">
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <div className="text-3xl font-bold text-green-600">
-                      {correctAnswers}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Correct Answers
-                    </p>
-                  </div>
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <div className="text-3xl font-bold text-blue-600">
-                      {currentPlayer.score}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Total Points
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <div className="text-lg font-semibold">
-                    Accuracy: {totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0}%
-                  </div>
-                  <Progress 
-                    value={totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0} 
-                    className="mt-2"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
+          <div className="max-w-2xl mx-auto mb-8">
             {/* Final Leaderboard */}
             <Card className="bg-white/90 backdrop-blur-sm">
               <CardHeader>
@@ -589,80 +696,13 @@ function LiveQuizPageContent() {
     );
   }
 
-  if (showResults && questionResult) {
-    // If this is the last question, skip showing results and go directly to final results
-    if (questionIndex + 1 >= totalQuestions) {
-      setQuizFinished(true);
-      setShowResults(false);
-      return null; // This will trigger the quiz finished view
-    }
-    
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 p-4 sm:p-6 lg:p-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Results Header - Removed individual correct/incorrect status */}
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold">Question {questionIndex + 1} Results</h2>
-            <p className="text-muted-foreground mt-2">See how everyone performed</p>
-          </div>
+  // REMOVED: Question results view - skip showing results, go directly to next question
+  // if (showResults && questionResult) {
+  //   return <ResultsView />; // This view has been removed
+  // }
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Answer Explanation */}
-            <Card className="bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  Correct Answer: {questionResult.correctAnswer}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  {currentQuestion?.question}
-                </p>
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <p className="text-sm">{questionResult.explanation}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Current Leaderboard */}
-            <Card className="bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5 text-yellow-600" />
-                  Leaderboard
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {questionResult?.leaderboard?.slice(0, 5).map((player, index) => (
-                    <div key={player.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
-                      <span className="font-bold text-sm w-6">{index + 1}</span>
-                      <span className="flex-1 text-sm font-medium">{player.name}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {player.score}
-                      </Badge>
-                    </div>
-                  )) || (
-                    <div className="text-center py-4 text-muted-foreground">
-                      <p className="text-sm">No leaderboard data available</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Next Question Info */}
-          <div className="text-center mt-6">
-            <p className="text-muted-foreground">
-              Next question in 5 seconds...
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Skip results display entirely - results are handled by the backend timer service
+  // Questions will automatically advance when timer expires via useQuizEvents
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 p-4 sm:p-6 lg:p-8">
@@ -682,7 +722,7 @@ function LiveQuizPageContent() {
           <div className="flex items-center gap-2">
             <Timer className="h-4 w-4" />
             <span className={`font-mono text-lg font-bold ${timeRemaining <= 10 ? 'text-red-600' : ''}`}>
-              {timeRemaining}s
+              {isNaN(timeRemaining) ? '30' : timeRemaining}s
             </span>
           </div>
         </div>
@@ -728,7 +768,12 @@ function LiveQuizPageContent() {
 
                 {/* Answer Status */}
                 <div className="text-center pt-6 border-t">
-                  {hasAnswered ? (
+                  {timeRemaining === 0 && !hasAnswered ? (
+                    <div className="inline-flex items-center gap-2 px-8 py-4 bg-yellow-100 text-yellow-800 rounded-lg text-lg">
+                      <Timer className="h-6 w-6" />
+                      Time's up! Waiting for next question...
+                    </div>
+                  ) : hasAnswered ? (
                     <div className="inline-flex items-center gap-2 px-8 py-4 bg-green-100 text-green-800 rounded-lg text-lg">
                       <CheckCircle className="h-6 w-6" />
                       Answer Submitted: {selectedAnswer}

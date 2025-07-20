@@ -152,13 +152,33 @@ export const DELETE = withAuth(async (request: AuthenticatedRequest) => {
       username: request.user?.username
     });
 
-    // Delete from Google Drive
-    console.log('☁️ DELETE /api/profile/photo: Deleting from Google Drive...');
-    await googleDriveService.deleteProfilePhoto(request.user?.userId);
+    await connectToDatabase();
+
+    // Get user's current profile photo info
+    const user = await User.findById(request.user?.userId);
+    if (!user) {
+      console.error('❌ DELETE /api/profile/photo: User not found');
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Delete from Cloudinary if photo exists
+    if (CloudinaryService.hasCredentials()) {
+      console.log('☁️ DELETE /api/profile/photo: Deleting from Cloudinary...');
+      try {
+        const cloudinaryService = new CloudinaryService();
+        await cloudinaryService.deleteExistingProfilePhoto(request.user?.userId);
+        console.log('✅ DELETE /api/profile/photo: Photo deleted from Cloudinary');
+      } catch (error) {
+        console.error('⚠️ DELETE /api/profile/photo: Failed to delete from Cloudinary:', error);
+        // Continue with database update even if Cloudinary deletion fails
+      }
+    }
 
     // Update user profile in database
     console.log('💾 DELETE /api/profile/photo: Updating user profile...');
-    await connectToDatabase();
 
     const updatedUser = await User.findByIdAndUpdate(
       request.user?.userId,

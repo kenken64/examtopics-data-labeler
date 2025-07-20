@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { toast, Toaster } from "sonner";
 import { 
   Trash2, 
   Edit, 
@@ -119,12 +120,15 @@ export default function Certificates() {
         setIsAddingNew(false);
         fetchCertificates();
         setError(null);
+        toast.success('Certificate created successfully!');
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to create certificate');
+        toast.error('Failed to create certificate');
       }
     } catch (err) {
       setError('Error creating certificate');
+      toast.error('Error creating certificate');
     }
   };
 
@@ -148,12 +152,15 @@ export default function Certificates() {
         setEditCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
         fetchCertificates();
         setError(null);
+        toast.success('Certificate updated successfully!');
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to update certificate');
+        toast.error('Failed to update certificate');
       }
     } catch (err) {
       setError('Error updating certificate');
+      toast.error('Error updating certificate');
     }
   };
 
@@ -170,12 +177,15 @@ export default function Certificates() {
       if (response.ok) {
         fetchCertificates();
         setError(null);
+        toast.success('Certificate deleted successfully!');
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to delete certificate');
+        toast.error('Failed to delete certificate');
       }
     } catch (err) {
       setError('Error deleting certificate');
+      toast.error('Error deleting certificate');
     }
   };
 
@@ -240,6 +250,9 @@ export default function Certificates() {
           setNewCertificate(prev => ({ ...prev, ...updateData }));
         }
 
+        // Show success toast notification
+        toast.success(`PDF "${file.name}" uploaded successfully!`);
+
         // Show a message if this was a mock upload
         if (result.mock) {
           console.log('File uploaded in mock mode - configure Google Drive credentials for real uploads');
@@ -248,10 +261,12 @@ export default function Certificates() {
         return result;
       } else {
         setError(result.error || 'Failed to upload file');
+        toast.error('Failed to upload PDF file');
         return null;
       }
     } catch (err) {
       setError('Error uploading file');
+      toast.error('Error uploading PDF file');
       return null;
     } finally {
       setUploadingFile(false);
@@ -340,9 +355,13 @@ export default function Certificates() {
               )}
             </div>
             <div className="flex space-x-2">
-              <Button onClick={handleCreate} className="flex items-center space-x-2">
+              <Button 
+                onClick={handleCreate} 
+                disabled={uploadingFile}
+                className="flex items-center space-x-2"
+              >
                 <Save className="h-4 w-4" />
-                <span>Save</span>
+                <span>{uploadingFile ? 'Uploading...' : 'Save'}</span>
               </Button>
               <Button variant="outline" onClick={cancelAdd} className="flex items-center space-x-2">
                 <X className="h-4 w-4" />
@@ -482,6 +501,7 @@ export default function Certificates() {
                                   href={certificate.pdfFileUrl} 
                                   target="_blank" 
                                   rel="noopener noreferrer"
+                                  download={certificate.pdfFileName}
                                   className="text-blue-600 hover:underline"
                                 >
                                   {certificate.pdfFileName}
@@ -499,10 +519,11 @@ export default function Certificates() {
                           <Button 
                             size="sm" 
                             onClick={() => handleUpdate(certificate._id)}
+                            disabled={uploadingFile}
                             className="flex items-center space-x-1"
                           >
                             <Save className="h-4 w-4" />
-                            <span>Save</span>
+                            <span>{uploadingFile ? 'Uploading...' : 'Save'}</span>
                           </Button>
                           <Button 
                             size="sm" 
@@ -544,6 +565,7 @@ export default function Certificates() {
           </div>
         </div>
       </div>
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

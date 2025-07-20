@@ -53,11 +53,17 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
         
         console.log(`File uploaded successfully to Cloudinary: ${file.name}`);
         console.log(`File URL: ${uploadResult.url}`);
+        console.log(`File public_id: ${uploadResult.id}`);
+        
+        // Encode the public_id to make it URL-safe (replace / with --)
+        const encodedFileId = uploadResult.id.replace(/\//g, '--');
+        const proxyUrl = `/api/files/${encodedFileId}`;
         
         return NextResponse.json({
           success: true,
           fileId: uploadResult.id,
-          fileUrl: uploadResult.url,
+          fileUrl: proxyUrl, // Use our proxy URL instead of direct Cloudinary
+          cloudinaryUrl: uploadResult.url, // Keep original as fallback
           fileName: file.name,
           fileSize: file.size,
         });
