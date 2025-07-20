@@ -101,6 +101,10 @@ export async function GET(
 
           // Get current question from active session
           const currentQuestion = quizSession.questions?.[quizSession.currentQuestionIndex] || null;
+          
+          // Use database timeRemaining as authoritative source for RxJS observable synchronization
+          // The backend timer service is the single source of truth
+          const calculatedTimeRemaining = quizSession.timeRemaining;
 
           const updateData = {
             type: 'session_update',
@@ -113,10 +117,13 @@ export async function GET(
               currentQuestionIndex: quizSession.currentQuestionIndex,
               totalQuestions: quizSession.questions?.length || 0,
               timerDuration: quizSession.timerDuration,
+              timeRemaining: calculatedTimeRemaining, // Use synchronized time
+              questionStartedAt: quizSession.questionStartedAt, // Include sync timestamp
               isQuizCompleted: quizSession.status === 'completed',
-              startedAt: quizSession.startedAt,            timestamp: new Date().toISOString()
-          }
-        };
+              startedAt: quizSession.startedAt,
+              timestamp: new Date().toISOString()
+            }
+          };
 
         if (!isControllerClosed) {
           controller.enqueue(`data: ${JSON.stringify(updateData)}\n\n`);
@@ -134,10 +141,8 @@ export async function GET(
       }
     };
 
-    // Send updates every 3 seconds (same as original polling)
-    intervalId = setInterval(sendUpdate, 3000);
-
-    // Send initial update
+        // Send updates every 2 seconds for better timer sync (matches backend update frequency)
+        intervalId = setInterval(sendUpdate, 2000);    // Send initial update
     sendUpdate();
 
     // Cleanup function

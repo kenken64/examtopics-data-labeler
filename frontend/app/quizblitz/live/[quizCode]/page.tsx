@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Trophy, Timer, Users, ArrowRight, CheckCircle, XCircle } from 'lucide-r
 import { toast } from 'sonner';
 import { useSessionSSE } from '@/lib/use-sse';
 import { useQuizEvents } from '@/lib/use-quiz-events';
+import { useTimerObservable, useTimerMilestones } from '@/lib/use-timer-observable';
 
 interface Question {
   _id: string;
@@ -57,7 +58,6 @@ function LiveQuizPageContent() {
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(30);
   const [selectedAnswer, setSelectedAnswer] = useState<string>('');
   const [hasAnswered, setHasAnswered] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -66,29 +66,107 @@ function LiveQuizPageContent() {
   const [quizFinished, setQuizFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [quizStatus, setQuizStatus] = useState<string>('waiting');
+  const [questionStartedAt, setQuestionStartedAt] = useState<number | null>(null); // Synchronized timestamp
+  const [timerDuration, setTimerDuration] = useState<number>(30); // Store timer duration for sync calculations
   
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   const nextQuestionInProgress = useRef<boolean>(false); // Add debouncing flag
 
-  // Centralized timer cleanup function
-  const cleanupTimers = (context: string = '') => {
-    console.log(`⏹️ [FRONTEND] Cleaning up timers${context ? ` (${context})` : ''}`);
+  // Define handleTimeUp before useEffect that depends on it
+  const handleTimeUp = useCallback(async () => {
+    // Don't process time up if quiz is already finished
+    if (quizFinished) {
+      console.log('⏸️ [FRONTEND-OBS] Ignoring handleTimeUp call - quiz already finished');
+      return;
+    }
+
+    // Timer up logic should proceed regardless of answer status
+    console.log('⏰ [FRONTEND-OBS] Time up! Processing...');
+    console.log('🔧 DEBUG: [FRONTEND-OBS] Current state:', {
+      questionIndex: questionIndex + 1,
+      totalQuestions,
+      hasAnswered,
+      showResults
+    });
     
-    if (timerRef.current) {
-      if (typeof timerRef.current === 'number') {
-        clearTimeout(timerRef.current);
-      } else {
-        clearInterval(timerRef.current);
-      }
-      timerRef.current = null;
+    // Auto-submit empty answer if not answered yet
+    if (!hasAnswered) {
+      setHasAnswered(true);
+      console.log('📝 [FRONTEND-OBS] Auto-submitting empty answer...');
     }
     
-    if (fallbackTimerRef.current) {
-      clearTimeout(fallbackTimerRef.current);
-      fallbackTimerRef.current = null;
+    // Check if this is the last question (7/7)
+    const isLastQuestion = questionIndex + 1 >= totalQuestions;
+    
+    if (isLastQuestion) {
+      console.log('🏁 [FRONTEND-OBS] Last question completed! Waiting for backend quiz_ended event...');
+      // Don't set quiz finished here - wait for backend quiz_ended event
+      // The backend timer service will send quiz_ended event after processing final question
+      // This prevents race conditions between frontend and backend quiz completion
+      console.log('⏳ [FRONTEND-OBS] Backend should send quiz_ended event shortly...');
+      
+      // Fallback: If no quiz_ended event arrives within 10 seconds, force completion
+      setTimeout(() => {
+        if (!quizFinished) {
+          console.warn('⚠️ [FRONTEND-OBS] No quiz_ended event received, forcing quiz completion');
+          setQuizFinished(true);
+          setShowResults(false);
+          setQuestionResult(null);
+          
+          stopTimer(); // Stop observable timer
+        }
+      }, 10000);
+    } else {
+      console.log('⏭️ [FRONTEND-OBS] Not last question - skipping results display, waiting for next question...');
+      // SKIP showing results - just wait for backend timer service to send next question
+      // The quiz timer service will automatically advance after 5 seconds
+      // The backend timer service will send a new question_started event
+      // The onQuestionStarted handler will reset the state for the next question
+      
+      // Set a simple "waiting for next question" state
+      setShowResults(false);
+      setQuestionResult(null);
+      
+      console.log('⏱️ [FRONTEND-OBS] Backend timer service should send next question in 5 seconds...');
     }
-  };
+  }, [quizFinished, questionIndex, totalQuestions, hasAnswered, showResults]);
+
+  // Define timer callbacks with useCallback to prevent recreation
+  const onTimerExpired = useCallback(() => {
+    console.log('⏰ [FRONTEND-OBS] Timer expired callback triggered');
+    handleTimeUp();
+  }, [handleTimeUp]);
+
+  const onProgressMilestone = useCallback((milestone: number, state: any) => {
+    console.log(`🎯 [FRONTEND-OBS] Timer reached ${milestone}% milestone:`, state);
+    if (milestone === 90) {
+      toast.warning('⏰ Only 10% time remaining!');
+    } else if (milestone === 95) {
+      toast.error('🚨 Time almost up!');
+    }
+  }, []);
+
+  // Initialize observable-based timer system
+  const {
+    timeRemaining,
+    progress,
+    isTimerActive,
+    isTimerExpired,
+    timerSource,
+    formattedTime,
+    startTimer,
+    updateFromSSE,
+    stopTimer,
+    resetTimer,
+    getTimerColor,
+    getProgressColor
+  } = useTimerObservable({
+    onTimerExpired,
+    onProgressMilestone,
+    enableDebugLogging: true
+  });
+
+  // Timer milestones for additional feedback
+  const { reachedMilestones, resetMilestones } = useTimerMilestones([25, 50, 75, 90, 95]);
 
   // Use SSE for real-time quiz session updates instead of polling
   const { sessionData, isConnected: sseConnected, error: sseError } = useSessionSSE(quizCode || null);
@@ -96,21 +174,47 @@ function LiveQuizPageContent() {
   // Update component state when SSE data changes
   useEffect(() => {
     if (sessionData) {
+      console.log('🔧 DEBUG: [FRONTEND] SSE data received:', {
+        status: sessionData.status,
+        currentQuestion: !!sessionData.currentQuestion,
+        questionIndex: sessionData.currentQuestionIndex,
+        timeRemaining: sessionData.timeRemaining,
+        questionStartedAt: sessionData.questionStartedAt,
+        timerDuration: sessionData.timerDuration,
+        isQuizCompleted: sessionData.isQuizCompleted
+      });
+
       // Don't update question state if quiz is already finished (prevents back-and-forth transitions)
       if (!quizFinished) {
         setCurrentQuestion(sessionData.currentQuestion);
         setQuestionIndex(sessionData.currentQuestionIndex);
         setTotalQuestions(sessionData.totalQuestions);
         setQuizStatus(sessionData.status);
+        
+        // CRITICAL: Update timer from SSE using observable system
+        if (sessionData.timeRemaining !== undefined) {
+          console.log('� [FRONTEND-OBS] SSE timer update (primary source):', sessionData.timeRemaining);
+          updateFromSSE(sessionData.timeRemaining);
+        }
+        
+        // Store timing metadata for sync calculations
+        if (sessionData.timerDuration) {
+          setTimerDuration(sessionData.timerDuration);
+        }
+        
+        if (sessionData.questionStartedAt) {
+          setQuestionStartedAt(new Date(sessionData.questionStartedAt).getTime());
+          console.log('🔧 DEBUG: [FRONTEND] Synchronized start time from SSE:', new Date(sessionData.questionStartedAt).toISOString());
+        }
       }
       
       // Always update players (for leaderboard on completion page)
       setPlayers(sessionData.players || []);
+      
       // Handle quiz completion from SSE
       if (sessionData.isQuizCompleted && !quizFinished) {
-        console.log('🏁 [FRONTEND] Quiz completion detected via SSE');
-        cleanupTimers('SSE quiz completion');
-        setTimeRemaining(0); // Stop timer display
+        console.log('🏁 [FRONTEND-OBS] Quiz completion detected via SSE');
+        stopTimer(); // Stop observable timer
       }
       
       // Only update quizFinished if we're not already finished (prevent back-and-forth transitions)
@@ -119,17 +223,17 @@ function LiveQuizPageContent() {
       }
       setLoading(false);
 
-      // Handle quiz status transitions (only if not finished)
-      if (!quizFinished && sessionData.status === 'active' && sessionData.currentQuestion) {
-        // Quiz has started with an active question
-        if (sessionData.timerDuration) {
-          const timerDuration = validateTimerDuration(sessionData.timerDuration, 'SSE sessionData');
-          setTimeRemaining(timerDuration);
-          startTimer();
-        }
+      // Start synchronized timer if we have complete timing data
+      if (!quizFinished && sessionData.status === 'active' && sessionData.currentQuestion && sessionData.questionStartedAt && sessionData.timerDuration) {
+        console.log('🔧 DEBUG: [FRONTEND-OBS] Starting synchronized observable timer from SSE data');
+        startTimer({
+          duration: sessionData.timerDuration,
+          questionStartedAt: new Date(sessionData.questionStartedAt).getTime(),
+          updateInterval: 100 // Update every 100ms for smooth progress
+        });
       }
     }
-  }, [sessionData, quizFinished]);
+  }, [sessionData, quizFinished, startTimer, updateFromSSE, stopTimer]);
 
   // Handle timer expiration - show results when timer reaches 0
   useEffect(() => {
@@ -137,7 +241,7 @@ function LiveQuizPageContent() {
       console.log('⏰ Timer expired! Showing question results...');
       handleTimeUp();
     }
-  }, [timeRemaining, currentQuestion, showResults, quizFinished]);
+  }, [timeRemaining, currentQuestion, showResults, quizFinished, handleTimeUp]);
 
   // Real-time quiz event sync (MongoDB Change Streams)
   useQuizEvents(quizCode, {
@@ -161,19 +265,9 @@ function LiveQuizPageContent() {
         timeRemaining
       });
       
-      // Clear ALL existing timers/timeouts
-      if (timerRef.current) {
-        if (typeof timerRef.current === 'number') {
-          clearTimeout(timerRef.current);
-        } else {
-          clearInterval(timerRef.current);
-        }
-        timerRef.current = null;
-      }
-      if (fallbackTimerRef.current) {
-        clearTimeout(fallbackTimerRef.current);
-        fallbackTimerRef.current = null;
-      }
+      // Reset timer observables for new question
+      resetTimer();
+      resetMilestones();
       
       // Reset state for new question
       setCurrentQuestion(question);
@@ -182,70 +276,27 @@ function LiveQuizPageContent() {
       setHasAnswered(false);
       setShowResults(false); // Ensure results are hidden
       setQuestionResult(null); // Clear previous results
+      
       // Validate and set timer duration with NaN protection
       const validTimer = validateTimerDuration(question.timeLimit, 'onQuestionStarted');
-      setTimeRemaining(validTimer);
       
-      console.log('🔧 DEBUG: [FRONTEND] Question state updated, relying on backend timer updates via SSE');
-      console.log('🔧 DEBUG: [FRONTEND] Backend should start publishing timer_update events now');
+      console.log('🔧 DEBUG: [FRONTEND-OBS] Question state updated, starting observable timer');
       
-      // Set a timeout to start fallback timer if backend timer doesn't work
-      // Increased delay to account for server sync delay (500ms) + buffer
-      fallbackTimerRef.current = setTimeout(() => {
-        console.log('⚠️ [FRONTEND] No backend timer updates after 1.5 seconds, starting fallback timer');
-        const validDuration = validateTimerDuration(question.timeLimit, 'fallback timer');
-        startTimer(validDuration);
-      }, 1500);
+      // Start observable timer for the new question
+      startTimer({
+        duration: validTimer,
+        questionStartedAt: questionStartedAt ?? undefined,
+        updateInterval: 100
+      });
       
       console.log('✅ [FRONTEND] onQuestionStarted processing complete');
     },
     onTimerUpdate: (data) => {
-      // Prevent processing timer updates if quiz is already finished
-      if (quizFinished) {
-        console.log('⏸️ [FRONTEND] Ignoring timer update - quiz already finished');
-        return;
-      }
-      
-      // Cancel backup timer/timeout since backend timer is working
-      if (timerRef.current) {
-        if (typeof timerRef.current === 'number') {
-          // It's a timeout (backup timer not started yet)
-          clearTimeout(timerRef.current);
-        } else {
-          // It's an interval (backup timer is running)
-          clearInterval(timerRef.current);
-        }
-        timerRef.current = null;
-        console.log('🔧 DEBUG: [FRONTEND] Backend timer working, cancelled backup timer/timeout');
-      }
-      
-      // Cancel fallback timer since backend timer is working
-      if (fallbackTimerRef.current) {
-        clearTimeout(fallbackTimerRef.current);
-        fallbackTimerRef.current = null;
-      }
-      
-      // Handle both old format (number) and new format (object) for backward compatibility
-      let timeRemaining = typeof data === 'number' ? data : (data.timeRemaining || data.data?.timeRemaining);
-      
-      // Handle NaN values by falling back to current question's time limit or default
-      if (isNaN(timeRemaining) || timeRemaining == null) {
-        const fallbackDuration = currentQuestion?.timeLimit || sessionData?.timerDuration || 30;
-        timeRemaining = validateTimerDuration(fallbackDuration, 'onTimerUpdate fallback');
-      }
-      
-      // Only log timer updates at key intervals to avoid spam
-      if (timeRemaining % 10 === 0 || timeRemaining <= 5) {
-        console.log('🔧 DEBUG: [FRONTEND] Timer update from backend:', timeRemaining);
-      }
-      
-      setTimeRemaining(timeRemaining);
-      
-      // Handle time up when backend timer reaches 0
-      if (timeRemaining <= 0) {
-        console.log('🔧 DEBUG: [FRONTEND] Backend timer reached 0, calling handleTimeUp');
-        handleTimeUp();
-      }
+      // DISABLED: SSE is now the primary timer source (every 1 second, synchronized)
+      // Change Streams timer updates are slower and cause conflicts
+      console.log('⚠️ [FRONTEND] Ignoring Change Streams timer update - SSE is primary timer source');
+      console.log('🔧 DEBUG: [FRONTEND] Change Streams timer data (ignored):', typeof data === 'number' ? data : data?.timeRemaining);
+      return;
     },
     onQuestionEnded: (data) => {
       // Prevent processing question ended events if quiz is already finished
@@ -271,15 +322,14 @@ function LiveQuizPageContent() {
       console.log('⏱️ [FRONTEND] Next question should arrive via onQuestionStarted handler');
     },
     onQuizEnded: (data) => {
-      console.log('🏁 [FRONTEND] Quiz ended event received, cleaning up and navigating to completion');
+      console.log('🏁 [FRONTEND-OBS] Quiz ended event received, cleaning up and navigating to completion');
       
-      cleanupTimers('quiz_ended event');
+      stopTimer(); // Stop observable timer
       
       // Set final state
       setQuizFinished(true);
       setShowResults(false);
       setQuestionResult(null);
-      setTimeRemaining(0); // Stop timer display
       
       console.log('✅ [FRONTEND] Quiz completion page should now display');
     }
@@ -291,125 +341,15 @@ function LiveQuizPageContent() {
       return;
     }
 
+    // Cleanup timer observables on unmount
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      console.log('🧹 [FRONTEND-OBS] Component unmounting, cleaning up timer observables');
+      stopTimer();
+      resetTimer();
     };
-    }, [quizCode, router]);
+  }, [quizCode, router, stopTimer, resetTimer]);
 
-  const startTimer = (duration?: number) => {
-    // Don't start timer if quiz is already finished
-    if (quizFinished) {
-      console.log('⏸️ [FRONTEND] Ignoring startTimer call - quiz already finished');
-      return;
-    }
-    
-    const fallbackDuration = duration || timeRemaining;
-    const initialTime = validateTimerDuration(fallbackDuration, 'startTimer');
-    
-    console.log('🔧 DEBUG: [FRONTEND] startTimer called with duration:', initialTime);
-    
-    setTimeRemaining(initialTime);
-
-    // Clear any existing timers
-    if (timerRef.current) {
-      if (typeof timerRef.current === 'number') {
-        clearTimeout(timerRef.current);
-      } else {
-        clearInterval(timerRef.current);
-      }
-      timerRef.current = null;
-    }
-    
-    // Start immediate fallback timer since backend timer has failed to sync
-    console.log('🔧 DEBUG: [FRONTEND] Starting fallback timer immediately');
-    
-    timerRef.current = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          handleTimeUp();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const handleTimeUp = async () => {
-    // Don't process time up if quiz is already finished
-    if (quizFinished) {
-      console.log('⏸️ [FRONTEND] Ignoring handleTimeUp call - quiz already finished');
-      return;
-    }
-    
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
-    // Timer up logic should proceed regardless of answer status
-    console.log('⏰ [FRONTEND] Time up! Processing...');
-    console.log('🔧 DEBUG: [FRONTEND] Current state:', {
-      questionIndex: questionIndex + 1,
-      totalQuestions,
-      hasAnswered,
-      showResults
-    });
-    
-    // Auto-submit empty answer if not answered yet
-    if (!hasAnswered) {
-      setHasAnswered(true);
-      console.log('📝 [FRONTEND] Auto-submitting empty answer...');
-    }
-    
-    // Check if this is the last question (7/7)
-    const isLastQuestion = questionIndex + 1 >= totalQuestions;
-    
-    if (isLastQuestion) {
-      console.log('🏁 [FRONTEND] Last question completed! Waiting for backend quiz_ended event...');
-      // Don't set quiz finished here - wait for backend quiz_ended event
-      // The backend timer service will send quiz_ended event after processing final question
-      // This prevents race conditions between frontend and backend quiz completion
-      console.log('⏳ [FRONTEND] Backend should send quiz_ended event shortly...');
-      
-      // Fallback: If no quiz_ended event arrives within 10 seconds, force completion
-      setTimeout(() => {
-        if (!quizFinished) {
-          console.warn('⚠️ [FRONTEND] No quiz_ended event received, forcing quiz completion');
-          setQuizFinished(true);
-          setShowResults(false);
-          setQuestionResult(null);
-          setTimeRemaining(0);
-          
-          cleanupTimers('fallback timeout');
-        }
-      }, 10000);
-    } else {
-      console.log('⏭️ [FRONTEND] Not last question - skipping results display, waiting for next question...');
-      // SKIP showing results - just wait for backend timer service to send next question
-      // The quiz timer service will automatically advance after 5 seconds
-      // The backend timer service will send a new question_started event
-      // The onQuestionStarted handler will reset the state for the next question
-      
-      // Clear any existing timer
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      
-      // Set a simple "waiting for next question" state
-      setShowResults(false);
-      setQuestionResult(null);
-      
-      console.log('⏱️ [FRONTEND] Backend timer service should send next question in 5 seconds...');
-    }
-  };
-
-  const handleAnswerSelection = async (answer: string) => {
-    if (hasAnswered) return;
-
-    setSelectedAnswer(answer);
-    setHasAnswered(true);
-
+  const submitAnswer = async (answer: string) => {
     try {
       const response = await fetch('/api/quizblitz/submit-answer', {
         method: 'POST',
@@ -420,7 +360,7 @@ function LiveQuizPageContent() {
           quizCode,
           questionIndex,
           answer: answer,
-          playerId: 'current-player-id', // Replace with actual player ID
+          playerId: currentPlayerId || 'current-player-id',
           timestamp: Date.now()
         }),
       });
@@ -429,15 +369,24 @@ function LiveQuizPageContent() {
         throw new Error('Failed to submit answer');
       }
 
-      toast.success('Answer submitted!');
+      console.log('✅ [FRONTEND-OBS] Answer submitted successfully:', answer);
+      if (answer) {
+        toast.success('Answer submitted!');
+      }
 
     } catch (error) {
-      console.error('Failed to submit answer:', error);
+      console.error('❌ [FRONTEND-OBS] Failed to submit answer:', error);
       toast.error('Failed to submit answer');
-      // Reset state on error
-      setHasAnswered(false);
-      setSelectedAnswer('');
     }
+  };
+
+  const handleAnswerSelection = async (answer: string) => {
+    if (hasAnswered) return;
+
+    setSelectedAnswer(answer);
+    setHasAnswered(true);
+
+    await submitAnswer(answer);
   };
 
   // REMOVED: showQuestionResults function - no longer showing results
@@ -478,12 +427,11 @@ function LiveQuizPageContent() {
 
       if (data.action === 'quiz-finished') {
         // Quiz finished - clean up timers and navigate to completion
-        console.log('🏁 [FRONTEND] Quiz finished via nextQuestion API');
+        console.log('🏁 [FRONTEND-OBS] Quiz finished via nextQuestion API');
         
-        cleanupTimers('quiz finished via API');
+        stopTimer(); // Stop observable timer
         
         setQuizFinished(true);
-        setTimeRemaining(0);
         return;
       }
 
@@ -497,9 +445,13 @@ function LiveQuizPageContent() {
         setShowResults(false);
         setQuestionResult(null);
 
-        // Start timer for new question with NaN validation
-        const timerDuration = validateTimerDuration(data.timerDuration, 'nextQuestion');
-        startTimer(timerDuration);
+        // Start observable timer for new question with NaN validation
+        const validatedDuration = validateTimerDuration(data.timerDuration, 'nextQuestion');
+        startTimer({
+          duration: validatedDuration,
+          questionStartedAt: Date.now(),
+          updateInterval: 100
+        });
         
         console.log(`📝 Advanced to question ${data.currentQuestionIndex + 1}/${data.totalQuestions}`);
       }
@@ -721,17 +673,52 @@ function LiveQuizPageContent() {
           {/* Timer */}
           <div className="flex items-center gap-2">
             <Timer className="h-4 w-4" />
-            <span className={`font-mono text-lg font-bold ${timeRemaining <= 10 ? 'text-red-600' : ''}`}>
-              {isNaN(timeRemaining) ? '30' : timeRemaining}s
+            <span className={`font-mono text-lg font-bold ${getTimerColor()}`}>
+              {formattedTime}
             </span>
+            {timerSource !== 'sse' && (
+              <Badge variant="secondary" className="text-xs">
+                {timerSource.toUpperCase()}
+              </Badge>
+            )}
           </div>
         </div>
 
-        {/* Progress Bar */}
-        <Progress 
-          value={(questionIndex / totalQuestions) * 100} 
-          className="mb-6 h-2"
-        />
+        {/* Progress Bars */}
+        <div className="space-y-3 mb-6">
+          {/* Question Progress */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Quiz Progress</span>
+              <span>Question {questionIndex + 1} of {totalQuestions}</span>
+            </div>
+            <Progress 
+              value={(questionIndex / totalQuestions) * 100} 
+              className="h-2"
+            />
+          </div>
+          
+          {/* Timer Progress */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Time Progress</span>
+              <span className={getTimerColor()}>{progress.toFixed(1)}%</span>
+            </div>
+            <Progress 
+              value={progress} 
+              className={`h-1 ${getProgressColor()}`}
+            />
+            {reachedMilestones.length > 0 && (
+              <div className="flex gap-1">
+                {reachedMilestones.map(milestone => (
+                  <Badge key={milestone} variant="secondary" className="text-xs">
+                    {milestone}%
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Main Content: Question and Player Progress Side by Side */}
         <div className="grid xl:grid-cols-4 lg:grid-cols-3 gap-8">
@@ -773,17 +760,12 @@ function LiveQuizPageContent() {
                       <Timer className="h-6 w-6" />
                       Time's up! Waiting for next question...
                     </div>
-                  ) : hasAnswered ? (
-                    <div className="inline-flex items-center gap-2 px-8 py-4 bg-green-100 text-green-800 rounded-lg text-lg">
-                      <CheckCircle className="h-6 w-6" />
-                      Answer Submitted: {selectedAnswer}
-                    </div>
-                  ) : (
+                  ) : !hasAnswered ? (
                     <div className="inline-flex items-center gap-2 px-8 py-4 bg-blue-100 text-blue-800 rounded-lg text-lg">
                       <Timer className="h-6 w-6" />
                       Select your answer above
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </CardContent>
             </Card>

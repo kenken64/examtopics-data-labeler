@@ -207,8 +207,8 @@ class QuizTimerService {
         // Publish timer update every second
         await pubsub.publishTimerUpdate(activeQuiz.quizCode, activeQuiz.timeRemaining);
 
-        // Update database every 5 seconds or when time is almost up
-        if (activeQuiz.timeRemaining % 5 === 0 || activeQuiz.timeRemaining <= 5) {
+        // Update database every 2 seconds or when time is almost up (better SSE synchronization)
+        if (activeQuiz.timeRemaining % 2 === 0 || activeQuiz.timeRemaining <= 5) {
           console.log('🔧 DEBUG: [TIMER] Updating database with time remaining:', activeQuiz.timeRemaining);
           const db = await connectToDatabase();
           await db.collection('quizSessions').updateOne(
@@ -260,8 +260,8 @@ class QuizTimerService {
         // Publish timer update every second
         await pubsub.publishTimerUpdate(activeQuiz.quizCode, activeQuiz.timeRemaining);
 
-        // Update database every 5 seconds or when time is almost up
-        if (activeQuiz.timeRemaining % 5 === 0 || activeQuiz.timeRemaining <= 5) {
+        // Update database every 2 seconds or when time is almost up (more frequent for better SSE sync)
+        if (activeQuiz.timeRemaining % 2 === 0 || activeQuiz.timeRemaining <= 5) {
           console.log('🔧 DEBUG: [TIMER] ✨ Updating database with SYNCHRONIZED time remaining:', activeQuiz.timeRemaining);
           const db = await connectToDatabase();
           await db.collection('quizSessions').updateOne(

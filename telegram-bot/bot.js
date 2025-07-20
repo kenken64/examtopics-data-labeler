@@ -2327,7 +2327,6 @@ ${explanation}
 
           // Send waiting message to user
           await ctx.reply(
-            `✅ <b>Answer Submitted: ${selectedAnswer}</b>\n\n` +
             `⏳ Please wait for other players to answer...\n` +
             `📊 The results will be shown when the timer expires or all players have answered.\n\n` +
             `🔄 <b>Current Status:</b> Waiting for timer to complete...`,
@@ -2461,12 +2460,25 @@ ${explanation}
 
       // Also wrap the main question text for better readability
       const wrappedQuestion = this.wrapText(questionData.question, 60);
+      
+      // Calculate synchronized time remaining for more accurate display
+      let displayTimeRemaining = questionData.timeLimit;
+      if (questionData.questionStartedAt) {
+        const now = Date.now();
+        const elapsed = Math.max(0, (now - questionData.questionStartedAt) / 1000);
+        displayTimeRemaining = Math.max(0, Math.ceil(questionData.timeLimit - elapsed));
+        console.log('🔧 DEBUG: [TELEGRAM] Using synchronized time:', {
+          startedAt: new Date(questionData.questionStartedAt).toISOString(),
+          elapsed: elapsed.toFixed(2),
+          remaining: displayTimeRemaining
+        });
+      }
 
       const questionText =
         `🎯 *Question ${questionData.index + 1}*\n\n` +
         `${wrappedQuestion}\n\n` +
         `📋 *Options:*\n${questionOptionsText}` +
-        `⏱️ *Time remaining: ${questionData.timeLimit} seconds*\n` +
+        `⏱️ *Time remaining: ${displayTimeRemaining} seconds*\n` +
         `🏆 *Points: ${questionData.points}*`;
 
       console.log('📤 [TELEGRAM] *** ABOUT TO SEND MESSAGE TO TELEGRAM API ***');
@@ -2574,83 +2586,110 @@ ${explanation}
       console.log('✅ Change stream established on quizEvents collection');
       console.log('🔧 DEBUG: Monitoring for: quiz_started, question_started, quiz_ended');
 
-      changeStream.on('change', async (change) => {
-        try {
-          console.log('🔔 [TELEGRAM] Change detected in quizEvents collection:', {
-            operationType: change.operationType,
-            documentKey: change.documentKey,
-            fullDocument: change.fullDocument ? {
-              _id: change.fullDocument._id,
-              quizCode: change.fullDocument.quizCode,
-              type: change.fullDocument.type,
-              questionIndex: change.fullDocument.data?.currentQuestionIndex,
-              timeRemaining: change.fullDocument.data?.timeRemaining,
-              hasQuestionData: !!(change.fullDocument.data?.question),
-              questionTitle: change.fullDocument.data?.question?.question?.substring(0, 50) + '...',
-              optionsCount: change.fullDocument.data?.question?.options ? Object.keys(change.fullDocument.data.question.options).length : 0,
-              lastUpdated: change.fullDocument.lastUpdated
-            } : null,
-            updatedFields: change.updateDescription?.updatedFields
-          });
+      // Queue for sequential processing of change events
+      let isProcessing = false;
+      const changeQueue = [];
 
-          if (change.fullDocument) {
-            console.log('🔧 DEBUG: [TELEGRAM] Analyzing event for processing...');
-            console.log('🔧 DEBUG: [TELEGRAM] Event type:', change.fullDocument.type);
-            console.log('🔧 DEBUG: [TELEGRAM] Operation type:', change.operationType);
-            
-            // Only process question_started and quiz_ended events
-            // Timer updates are handled by the frontend SSE, not by Telegram bot
-            if (change.fullDocument.type === 'question_started') {
-              // Check if this is ONLY a timer update (no question data changes)
-              const updatedFields = change.updateDescription?.updatedFields || {};
-              const isTimerOnlyUpdate = change.operationType === 'update' && 
-                                      (updatedFields['data.timeRemaining'] || updatedFields['data.lastTimerUpdate']) &&
-                                      !updatedFields['data.question'] &&
-                                      !updatedFields['type'] &&
-                                      !updatedFields['data.currentQuestionIndex'] &&
-                                      // Only consider it timer-only if ONLY timer fields are updated
-                                      Object.keys(updatedFields).every(key => 
-                                        key.includes('timeRemaining') || 
-                                        key.includes('lastTimerUpdate') || 
-                                        key === 'lastUpdated'
-                                      );
-              
-              console.log('🔧 DEBUG: [TELEGRAM] Timer update analysis:', {
-                isUpdate: change.operationType === 'update',
-                hasTimeRemaining: !!updatedFields['data.timeRemaining'],
-                hasQuestionData: !!(change.fullDocument.data?.question),
-                updatedFieldsKeys: Object.keys(updatedFields),
-                isTimerOnlyUpdate
-              });
-              
-              if (isTimerOnlyUpdate) {
-                console.log('⏰ [TELEGRAM] Timer-only update detected (skipping):', {
-                  quizCode: change.fullDocument.quizCode,
-                  timeRemaining: change.fullDocument.data?.timeRemaining
-                });
-              } else {
-                console.log('✅ [TELEGRAM] Question_started event detected - processing...');
-                console.log('🔧 DEBUG: [TELEGRAM] Operation type:', change.operationType);
-                console.log('🔧 DEBUG: [TELEGRAM] Updated fields:', updatedFields);
-                // New question started or question data updated - send to Telegram
-                await this.processQuizEvent(change.fullDocument);
-              }
-            } else if (change.fullDocument.type === 'quiz_ended') {
-              console.log('✅ [TELEGRAM] Quiz ended event detected - processing...');
-              // Quiz ended - send completion messages
-              await this.processQuizEvent(change.fullDocument);
-            } else {
-              console.log('⏸️ [TELEGRAM] Event skipped - not a question_started or quiz_ended:', {
-                type: change.fullDocument.type,
-                operationType: change.operationType
-              });
-            }
-          } else {
-            console.log('⚠️ [TELEGRAM] Change event without fullDocument');
-          }
-        } catch (error) {
-          console.error('❌ Error processing change event:', error);
+      const processChangeQueue = async () => {
+        if (isProcessing || changeQueue.length === 0) {
+          return;
         }
+        
+        isProcessing = true;
+        console.log(`🔄 [TELEGRAM] Processing change queue (${changeQueue.length} events pending)`);
+        
+        while (changeQueue.length > 0) {
+          const change = changeQueue.shift();
+          try {
+            console.log('🔔 [TELEGRAM] Change detected in quizEvents collection:', {
+              operationType: change.operationType,
+              documentKey: change.documentKey,
+              fullDocument: change.fullDocument ? {
+                _id: change.fullDocument._id,
+                quizCode: change.fullDocument.quizCode,
+                type: change.fullDocument.type,
+                questionIndex: change.fullDocument.data?.currentQuestionIndex,
+                timeRemaining: change.fullDocument.data?.timeRemaining,
+                hasQuestionData: !!(change.fullDocument.data?.question),
+                questionTitle: change.fullDocument.data?.question?.question?.substring(0, 50) + '...',
+                optionsCount: change.fullDocument.data?.question?.options ? Object.keys(change.fullDocument.data.question.options).length : 0,
+                lastUpdated: change.fullDocument.lastUpdated
+              } : null,
+              updatedFields: change.updateDescription?.updatedFields
+            });
+
+            if (change.fullDocument) {
+              console.log('🔧 DEBUG: [TELEGRAM] Analyzing event for processing...');
+              console.log('🔧 DEBUG: [TELEGRAM] Event type:', change.fullDocument.type);
+              console.log('🔧 DEBUG: [TELEGRAM] Operation type:', change.operationType);
+              
+              // Only process question_started and quiz_ended events
+              // Timer updates are handled by the frontend SSE, not by Telegram bot
+              if (change.fullDocument.type === 'question_started') {
+                // Check if this is ONLY a timer update (no question data changes)
+                const updatedFields = change.updateDescription?.updatedFields || {};
+                const isTimerOnlyUpdate = change.operationType === 'update' && 
+                                        (updatedFields['data.timeRemaining'] || updatedFields['data.lastTimerUpdate']) &&
+                                        !updatedFields['data.question'] &&
+                                        !updatedFields['type'] &&
+                                        !updatedFields['data.currentQuestionIndex'] &&
+                                        // Only consider it timer-only if ONLY timer fields are updated
+                                        Object.keys(updatedFields).every(key => 
+                                          key.includes('timeRemaining') || 
+                                          key.includes('lastTimerUpdate') || 
+                                          key === 'lastUpdated'
+                                        );
+                
+                console.log('🔧 DEBUG: [TELEGRAM] Timer update analysis:', {
+                  isUpdate: change.operationType === 'update',
+                  hasTimeRemaining: !!updatedFields['data.timeRemaining'],
+                  hasQuestionData: !!(change.fullDocument.data?.question),
+                  updatedFieldsKeys: Object.keys(updatedFields),
+                  isTimerOnlyUpdate
+                });
+                
+                if (isTimerOnlyUpdate) {
+                  console.log('⏰ [TELEGRAM] Timer-only update detected (skipping):', {
+                    quizCode: change.fullDocument.quizCode,
+                    timeRemaining: change.fullDocument.data?.timeRemaining
+                  });
+                } else {
+                  console.log('✅ [TELEGRAM] Question_started event detected - processing...');
+                  console.log('🔧 DEBUG: [TELEGRAM] Operation type:', change.operationType);
+                  console.log('🔧 DEBUG: [TELEGRAM] Updated fields:', updatedFields);
+                  // New question started or question data updated - send to Telegram
+                  console.log('🔒 [TELEGRAM] BLOCKING: Processing event synchronously...');
+                  await this.processQuizEvent(change.fullDocument);
+                  console.log('✅ [TELEGRAM] BLOCKING: Event processing completed');
+                }
+              } else if (change.fullDocument.type === 'quiz_ended') {
+                console.log('✅ [TELEGRAM] Quiz ended event detected - processing...');
+                console.log('🔒 [TELEGRAM] BLOCKING: Processing quiz end synchronously...');
+                // Quiz ended - send completion messages
+                await this.processQuizEvent(change.fullDocument);
+                console.log('✅ [TELEGRAM] BLOCKING: Quiz end processing completed');
+              } else {
+                console.log('⏸️ [TELEGRAM] Event skipped - not a question_started or quiz_ended:', {
+                  type: change.fullDocument.type,
+                  operationType: change.operationType
+                });
+              }
+            } else {
+              console.log('⚠️ [TELEGRAM] Change event without fullDocument');
+            }
+          } catch (error) {
+            console.error('❌ Error processing change event:', error);
+          }
+        }
+        
+        isProcessing = false;
+        console.log('✅ [TELEGRAM] Change queue processing completed');
+      };
+
+      changeStream.on('change', (change) => {
+        console.log('🔄 [TELEGRAM] Change event received - adding to queue for sequential processing');
+        changeQueue.push(change);
+        processChangeQueue();
       });
 
       changeStream.on('error', (error) => {

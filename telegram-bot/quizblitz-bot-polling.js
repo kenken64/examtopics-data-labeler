@@ -493,7 +493,6 @@ class TelegramQuizBotPolling {
 
             // Send waiting message to user
             await this.bot.sendMessage(chatId, 
-              `✅ <b>Answer Submitted: ${answer}</b>\n\n` +
               `⏳ Please wait for other players to answer...\n` +
               `📊 The results will be shown when the timer expires or all players have answered.`,
               { parse_mode: 'HTML' }
