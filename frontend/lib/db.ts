@@ -181,6 +181,54 @@ const userSchema = new mongoose.Schema({
     type: String, // Direct Google Drive URL for display
     default: null,
   },
+  // Global scoring fields
+  totalPoints: {
+    type: Number,
+    default: 0,
+  },
+  quizzesTaken: {
+    type: Number,
+    default: 0,
+  },
+  correctAnswers: {
+    type: Number,
+    default: 0,
+  },
+  totalQuestions: {
+    type: Number,
+    default: 0,
+  },
+  averageScore: {
+    type: Number,
+    default: 0,
+  },
+  bestScore: {
+    type: Number,
+    default: 0,
+  },
+  currentStreak: {
+    type: Number,
+    default: 0,
+  },
+  bestStreak: {
+    type: Number,
+    default: 0,
+  },
+  lastQuizDate: {
+    type: Date,
+    default: null,
+  },
+  achievements: [{
+    name: String,
+    description: String,
+    unlockedAt: Date,
+    icon: String,
+  }],
+  rank: {
+    type: String,
+    default: 'Beginner',
+    enum: ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Expert', 'Master'],
+  },
 }, {
   timestamps: true // Add createdAt and updatedAt timestamps
 });

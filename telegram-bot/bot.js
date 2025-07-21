@@ -1386,6 +1386,69 @@ ${explanation}
 
       await db.collection('quiz-attempts').insertOne(quizAttempt);
       console.log('Quiz attempt saved successfully');
+
+      // Update user's global scoring fields
+      try {
+        const pointsEarned = session.correctAnswers * 10; // 10 points per correct answer
+        const percentage = Math.round((session.correctAnswers / session.questions.length) * 100);
+        
+        // Get current user data to calculate new average
+        const currentUser = await db.collection('users').findOne({ username: userId.toString() });
+        const currentQuizCount = currentUser?.quizzesTaken || 0;
+        const currentAverage = currentUser?.averageScore || 0;
+        
+        // Calculate new average score
+        const newAverageScore = currentQuizCount === 0 ? 
+          percentage : 
+          Math.round(((currentAverage * currentQuizCount) + percentage) / (currentQuizCount + 1));
+        
+        // Check for streak logic
+        const lastQuizDate = currentUser?.lastQuizDate;
+        const daysSinceLastQuiz = lastQuizDate ? 
+          Math.floor((endTime - new Date(lastQuizDate)) / (1000 * 60 * 60 * 24)) : null;
+        
+        let streakUpdate = {};
+        if (percentage >= 70) { // Quiz passed
+          if (daysSinceLastQuiz === null || daysSinceLastQuiz <= 1) {
+            // Continue or start streak
+            const newStreak = (currentUser?.currentStreak || 0) + 1;
+            streakUpdate = {
+              currentStreak: newStreak,
+              bestStreak: Math.max(newStreak, currentUser?.bestStreak || 0)
+            };
+          } else {
+            // Reset streak
+            streakUpdate = { currentStreak: 1 };
+          }
+        } else {
+          // Failed quiz, reset streak
+          streakUpdate = { currentStreak: 0 };
+        }
+
+        await db.collection('users').updateOne(
+          { username: userId.toString() },
+          {
+            $inc: {
+              totalPoints: pointsEarned,
+              quizzesTaken: 1,
+              correctAnswers: session.correctAnswers,
+              totalQuestions: session.questions.length
+            },
+            $max: {
+              bestScore: percentage
+            },
+            $set: {
+              lastQuizDate: endTime,
+              averageScore: newAverageScore,
+              ...streakUpdate
+            }
+          }
+        );
+        
+        console.log('User global scores updated successfully');
+      } catch (error) {
+        console.error('Error updating user global scores:', error);
+      }
     } catch (error) {
       console.error('Error saving quiz attempt:', error);
     }

@@ -25,7 +25,8 @@ import {
   Settings,
   CreditCard,
   KeySquare,
-  Zap
+  Zap,
+  Trophy
 } from "lucide-react";
 
 const SlidingMenu = () => {
@@ -201,6 +202,15 @@ const SlidingMenu = () => {
             >
               <Zap className="mr-3 h-5 w-5" />
               QuizBlitz
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start h-12 px-4 text-left font-normal hover:bg-accent hover:text-accent-foreground"
+              onClick={() => handleNavigation('/leaderboard')}
+            >
+              <Trophy className="mr-3 h-5 w-5" />
+              Leaderboard
             </Button>
 
             <Button 

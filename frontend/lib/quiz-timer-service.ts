@@ -421,6 +421,13 @@ class QuizTimerService {
         }
       );
 
+      // Calculate final player scores and update user global scores
+      if (quizSession.players && quizSession.players.length > 0) {
+        for (const player of quizSession.players) {
+          await this.updatePlayerGlobalScore(quizSession, player);
+        }
+      }
+
       // Calculate player scores (if players are tracked)
       const finalResults = {
         totalQuestions: quizSession.questions.length,
@@ -527,6 +534,107 @@ class QuizTimerService {
     
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
+    }
+  }
+
+  // Update player's global scoring fields after quiz completion
+  private async updatePlayerGlobalScore(quizSession: any, player: any): Promise<void> {
+    try {
+      const db = await connectToDatabase();
+      
+      // Calculate player's score from answers
+      let correctAnswers = 0;
+      const totalQuestions = quizSession.questions.length;
+      
+      // Count correct answers for this player
+      for (let qIndex = 0; qIndex < totalQuestions; qIndex++) {
+        const playerAnswer = quizSession.playerAnswers?.[qIndex]?.[player.id];
+        if (playerAnswer?.isCorrect) {
+          correctAnswers++;
+        }
+      }
+      
+      const percentage = Math.round((correctAnswers / totalQuestions) * 100);
+      const pointsEarned = correctAnswers * 10; // 10 points per correct answer
+      const endTime = new Date();
+      
+      // Try to find user by player ID (for Telegram users) or name
+      // This may need adjustment based on how players are linked to users
+      let userQuery;
+      if (player.source === 'telegram') {
+        userQuery = { username: player.id.toString() };
+      } else {
+        // For web players, try to find by display name or skip if not linked
+        userQuery = { 
+          $or: [
+            { username: player.name },
+            { firstName: player.name },
+            { lastName: player.name }
+          ]
+        };
+      }
+      
+      const currentUser = await db.collection('users').findOne(userQuery);
+      
+      if (!currentUser) {
+        console.log(`User not found for player ${player.name} (${player.id}), skipping score update`);
+        return;
+      }
+      
+      // Calculate new average score
+      const currentQuizCount = currentUser.quizzesTaken || 0;
+      const currentAverage = currentUser.averageScore || 0;
+      const newAverageScore = currentQuizCount === 0 ? 
+        percentage : 
+        Math.round(((currentAverage * currentQuizCount) + percentage) / (currentQuizCount + 1));
+      
+      // Check for streak logic
+      const lastQuizDate = currentUser.lastQuizDate;
+      const daysSinceLastQuiz = lastQuizDate ? 
+        Math.floor((endTime.getTime() - new Date(lastQuizDate).getTime()) / (1000 * 60 * 60 * 24)) : null;
+      
+      let streakUpdate = {};
+      if (percentage >= 70) { // Quiz passed
+        if (daysSinceLastQuiz === null || daysSinceLastQuiz <= 1) {
+          // Continue or start streak
+          const newStreak = (currentUser.currentStreak || 0) + 1;
+          streakUpdate = {
+            currentStreak: newStreak,
+            bestStreak: Math.max(newStreak, currentUser.bestStreak || 0)
+          };
+        } else {
+          // Reset streak
+          streakUpdate = { currentStreak: 1 };
+        }
+      } else {
+        // Failed quiz, reset streak
+        streakUpdate = { currentStreak: 0 };
+      }
+
+      // Update user's global scoring fields
+      await db.collection('users').updateOne(
+        userQuery,
+        {
+          $inc: {
+            totalPoints: pointsEarned,
+            quizzesTaken: 1,
+            correctAnswers: correctAnswers,
+            totalQuestions: totalQuestions
+          },
+          $max: {
+            bestScore: percentage
+          },
+          $set: {
+            lastQuizDate: endTime,
+            averageScore: newAverageScore,
+            ...streakUpdate
+          }
+        }
+      );
+      
+      console.log(`✅ Updated global scores for player ${player.name}: ${correctAnswers}/${totalQuestions} (${percentage}%)`);
+    } catch (error) {
+      console.error(`❌ Error updating global scores for player ${player.name}:`, error);
     }
   }
 }
