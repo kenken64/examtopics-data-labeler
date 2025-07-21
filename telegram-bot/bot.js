@@ -545,12 +545,12 @@ class CertificationBot {
       '🎓 Welcome to the AWS Certification Quiz Bot!\n\n' +
       'I\'ll help you practice for your AWS certifications.\n\n' +
       '📚 Quick Commands Reference:\n' +
-      'â€¢ /start - Start a new quiz\n' +
-      'â€¢ /help - Show detailed help guide\n' +
-      'â€¢ /menu - Show interactive command menu\n' +
-      'â€¢ /bookmark <number> - Save a question for later\n' +
-      'â€¢ /bookmarks - View your saved bookmarks\n' +
-      'â€¢ /revision - Review questions you answered incorrectly for current access code\n\n' +
+      '• /start - Start a new quiz\n' +
+      '• /help - Show detailed help guide\n' +
+      '• /menu - Show interactive command menu\n' +
+      '• /bookmark <number> - Save a question for later\n' +
+      '• /bookmarks - View your saved bookmarks\n' +
+      '• /revision - Review questions you answered incorrectly for current access code\n\n' +
       '💡 Type /menu for an interactive command menu or /help for detailed instructions!\n\n' +
       'Let\'s get started by selecting a certificate:'
     );
@@ -565,66 +565,66 @@ class CertificationBot {
       '📚 <b>Available Commands:</b>\n\n' +
 
       '🚀 <b>/start</b>\n' +
-      '   â€¢ Start a new quiz session\n' +
-      '   â€¢ Shows available certificates to choose from\n' +
-      '   â€¢ Clears any existing quiz session\n' +
-      '   â€¢ Usage: Simply type /start\n\n' +
+      '   • Start a new quiz session\n' +
+      '   • Shows available certificates to choose from\n' +
+      '   • Clears any existing quiz session\n' +
+      '   • Usage: Simply type /start\n\n' +
 
       'â“ <b>/help</b>\n' +
-      '   â€¢ Show this help guide with all commands\n' +
-      '   â€¢ Displays detailed instructions for each command\n' +
-      '   â€¢ Usage: Simply type /help\n\n' +
+      '   • Show this help guide with all commands\n' +
+      '   • Displays detailed instructions for each command\n' +
+      '   • Usage: Simply type /help\n\n' +
 
       '🎯 <b>/menu</b> or <b>/commands</b>\n' +
-      '   â€¢ Show interactive command menu with buttons\n' +
-      '   â€¢ Quick access to all bot functions\n' +
-      '   â€¢ Context-aware quick actions\n' +
-      '   â€¢ Usage: Simply type /menu\n\n' +
+      '   • Show interactive command menu with buttons\n' +
+      '   • Quick access to all bot functions\n' +
+      '   • Context-aware quick actions\n' +
+      '   • Usage: Simply type /menu\n\n' +
 
       '🔍– <b>/bookmark &lt;question_number&gt;</b>\n' +
-      '   â€¢ Save a specific question for later review\n' +
-      '   â€¢ Helps you mark important or difficult questions\n' +
-      '   â€¢ Usage: /bookmark 15 (saves question number 15)\n' +
-      '   â€¢ Example: /bookmark 42\n\n' +
+      '   • Save a specific question for later review\n' +
+      '   • Helps you mark important or difficult questions\n' +
+      '   • Usage: /bookmark 15 (saves question number 15)\n' +
+      '   • Example: /bookmark 42\n\n' +
 
       '🔒 <b>/bookmarks</b>\n' +
-      '   â€¢ View all your saved bookmarked questions for current access code\n' +
-      '   â€¢ Shows questions organized by certificate\n' +
-      '   â€¢ Allows you to quickly access saved questions\n' +
-      '   â€¢ Usage: Simply type /bookmarks\n\n' +
+      '   • View all your saved bookmarked questions for current access code\n' +
+      '   • Shows questions organized by certificate\n' +
+      '   • Allows you to quickly access saved questions\n' +
+      '   • Usage: Simply type /bookmarks\n\n' +
 
       '📖 <b>/revision</b>\n' +
-      '   â€¢ Review questions you answered incorrectly for current access code\n' +
-      '   â€¢ Shows wrong answers organized by certificate\n' +
-      '   â€¢ Perfect for focused study on weak areas\n' +
-      '   â€¢ Usage: Simply type /revision\n\n' +
+      '   • Review questions you answered incorrectly for current access code\n' +
+      '   • Shows wrong answers organized by certificate\n' +
+      '   • Perfect for focused study on weak areas\n' +
+      '   • Usage: Simply type /revision\n\n' +
 
       '🎮 <b>/quizblitz</b>\n' +
-      '   â€¢ Join live multiplayer quiz sessions\n' +
-      '   â€¢ Enter 6-digit quiz code from host\'s screen\n' +
-      '   â€¢ Compete with other players in real-time\n' +
-      '   â€¢ Usage: Simply type /quizblitz\n\n' +
+      '   • Join live multiplayer quiz sessions\n' +
+      '   • Enter 6-digit quiz code from host\'s screen\n' +
+      '   • Compete with other players in real-time\n' +
+      '   • Usage: Simply type /quizblitz\n\n' +
 
       '🎯 <b>Quiz Features:</b>\n\n' +
 
       '✅ <b>Question Navigation:</b>\n' +
-      '   â€¢ Answer questions using the A, B, C, D buttons\n' +
-      '   â€¢ Get immediate feedback on correct/incorrect answers\n' +
-      '   â€¢ See detailed explanations for each question\n' +
-      '   â€¢ Use "Next Question" button to continue\n\n' +
+      '   • Answer questions using the A, B, C, D buttons\n' +
+      '   • Get immediate feedback on correct/incorrect answers\n' +
+      '   • See detailed explanations for each question\n' +
+      '   • Use "Next Question" button to continue\n\n' +
 
       '🔍 <b>Access Code System:</b>\n' +
-      '   â€¢ Enter your generated access code when prompted\n' +
-      '   â€¢ Access codes link you to specific question sets\n' +
-      '   â€¢ Each certificate requires a valid access code\n' +
-      '   â€¢ Contact support if you do not have an access code\n\n' +
+      '   • Enter your generated access code when prompted\n' +
+      '   • Access codes link you to specific question sets\n' +
+      '   • Each certificate requires a valid access code\n' +
+      '   • Contact support if you do not have an access code\n\n' +
 
       '📊 <b>Progress Tracking:</b>\n' +
-      '   â€¢ Your answers are automatically saved\n' +
-      '   â€¢ Wrong answers are stored for revision\n' +
-      '   â€¢ Bookmarks and revision data are tied to your current access code\n' +
-      '   â€¢ Each access code maintains separate bookmark and revision history\n' +
-      '   â€¢ Track your progress per certificate\n\n' +
+      '   • Your answers are automatically saved\n' +
+      '   • Wrong answers are stored for revision\n' +
+      '   • Bookmarks and revision data are tied to your current access code\n' +
+      '   • Each access code maintains separate bookmark and revision history\n' +
+      '   • Track your progress per certificate\n\n' +
 
       '💡 <b>Tips for Best Experience:</b>\n\n' +
       '   🎯 Use /bookmark for difficult questions\n' +
@@ -634,10 +634,10 @@ class CertificationBot {
       '   📱 Bot works best in private chats\n\n' +
 
       '🆘 <b>Need More Help?</b>\n' +
-      '   â€¢ Contact support if you encounter issues: <code>bunnyppl@gmail.com</code>\n' +
-      '   â€¢ Report bugs or suggest improvements\n' +
-      '   â€¢ Check that you have a valid access code\n' +
-      '   â€¢ Ensure stable internet connection for best experience\n\n' +
+      '   • Contact support if you encounter issues: <code>bunnyppl@gmail.com</code>\n' +
+      '   • Report bugs or suggest improvements\n' +
+      '   • Check that you have a valid access code\n' +
+      '   • Ensure stable internet connection for best experience\n\n' +
 
       '🚀 <b>Ready to Start?</b> Type /start to begin your certification journey!';
 
@@ -747,9 +747,9 @@ class CertificationBot {
       await ctx.reply(
         '🎯 Access code verified!\n\n' +
         '📊 Quiz Details:\n' +
-        `â€¢ Certificate: ${session.certificate.name}\n` +
-        `â€¢ Total Questions: ${questions.length}\n` +
-        `â€¢ Access Code: ${accessCode}\n\n` +
+        `• Certificate: ${session.certificate.name}\n` +
+        `• Total Questions: ${questions.length}\n` +
+        `• Access Code: ${accessCode}\n\n` +
         '🚀 Starting your quiz now...'
       );
 
@@ -1110,7 +1110,7 @@ class CertificationBot {
         const keyboard = new InlineKeyboard();
 
         if (session.currentQuestionIndex < session.questions.length - 1) {
-          keyboard.text('Next Question âž¡ï¸', 'next_question');
+          keyboard.text('Next Question ➡️', 'next_question');
         } else {
           keyboard.text('Show Results 📊', 'next_question');
         }
@@ -1210,7 +1210,7 @@ class CertificationBot {
       const keyboard = new InlineKeyboard();
 
       if (session.currentQuestionIndex < session.questions.length - 1) {
-        keyboard.text('Next Question âž¡ï¸', 'next_question');
+        keyboard.text('Next Question ➡️', 'next_question');
       } else {
         keyboard.text('Show Results 📊', 'next_question');
       }
@@ -1346,11 +1346,11 @@ ${explanation}
     const resultsText =
       '🎉 Quiz Complete!\n\n' +
       '📊 Your Results:\n' +
-      `â€¢ Score: ${correctAnswers}/${totalQuestions} (${percentage}%)\n` +
-      `â€¢ Certificate: ${session.certificate.name}\n` +
-      `â€¢ Access Code: ${session.accessCode}\n` +
-      `â€¢ Duration: ${duration} minutes\n` +
-      `â€¢ Date: ${endTime.toLocaleString()}\n\n` +
+      `• Score: ${correctAnswers}/${totalQuestions} (${percentage}%)\n` +
+      `• Certificate: ${session.certificate.name}\n` +
+      `• Access Code: ${session.accessCode}\n` +
+      `• Duration: ${duration} minutes\n` +
+      `• Date: ${endTime.toLocaleString()}\n\n` +
       `${percentage >= 70 ? '✅ Congratulations! You passed!' : 'âŒ Keep studying and try again!'}`;
 
     const keyboard = new InlineKeyboard()
@@ -1762,7 +1762,7 @@ ${explanation}
           .slice(0, 10) // Show first 10 questions per certificate
           .forEach(wa => {
             const attemptText = wa.attemptCount > 1 ? ` (${wa.attemptCount} attempts)` : '';
-            message += `â€¢ Q${wa.questionNumber}: ${wa.selectedAnswer} â†’ ${wa.correctAnswer}${attemptText}\n`;
+            message += `• Q${wa.questionNumber}: ${wa.selectedAnswer} â†’ ${wa.correctAnswer}${attemptText}\n`;
           });
 
         if (category.wrongAnswers.length > 10) {
@@ -1909,17 +1909,17 @@ ${explanation}
       '🔒 View Bookmarks - See all your saved questions\n\n' +
       '📖 <b>Study Commands</b>\n' +
       '🔄 Revision Mode - Review questions you got wrong\n\n' +
-      'âš¡ <b>Quick Actions</b>\n' +
+      '⚡ <b>Quick Actions</b>\n' +
       '🎯 Quick Menu - Fast access to common actions\n\n' +
       '💡 <i>Tip: You can also type these commands directly:</i>\n' +
-      '<code>/start</code> â€¢ <code>/help</code> â€¢ <code>/quizblitz</code> â€¢ <code>/bookmarks</code> â€¢ <code>/revision</code>';
+      '<code>/start</code> • <code>/help</code> • <code>/quizblitz</code> • <code>/bookmarks</code> • <code>/revision</code>';
 
     const keyboard = new InlineKeyboard()
       .text('🚀 Start Quiz', 'menu_start').text('🎮 QuizBlitz', 'menu_quizblitz').row()
       .text('📚 Help Guide', 'menu_help').row()
       .text('🏁’¾ Add Bookmark', 'menu_bookmark').text('🔒 View Bookmarks', 'menu_bookmarks').row()
       .text('🔄 Revision Mode', 'menu_revision').row()
-      .text('âš¡ Quick Menu', 'quick_menu').row()
+      .text('⚡ Quick Menu', 'quick_menu').row()
       .text('âŒ Close Menu', 'menu_close');
 
     await ctx.reply(menuMessage, {
@@ -2038,7 +2038,7 @@ ${explanation}
     const userId = ctx.from.id;
     const session = this.userSessions.get(userId);
 
-    let menuMessage = 'âš¡ <b>Quick Actions Menu</b>\n\n';
+    let menuMessage = '⚡ <b>Quick Actions Menu</b>\n\n';
 
     if (session && session.questions) {
       // User is in an active quiz
@@ -2124,7 +2124,7 @@ ${explanation}
 
       await ctx.reply(
         '🎮 *QuizBlitz - Live Multiplayer Quiz*\n\n' +
-        'âš¡ Join a live quiz session!\n\n' +
+        '⚡ Join a live quiz session!\n\n' +
         'Please enter the *6-digit quiz code* shown on the host\'s screen:',
         { parse_mode: 'Markdown' }
       );
