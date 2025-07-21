@@ -113,7 +113,7 @@ class QuizTimerService {
       // Update session with current question - use atomic update to prevent race conditions
       const updateData = {
         currentQuestionIndex: currentQuestionIndex,
-        questionStartedAt: new Date(),
+        questionStartedAt: Date.now(), // Use timestamp number, not Date object
         timeRemaining: timerDuration,
         lastNotifiedQuestionIndex: currentQuestionIndex - 1, // Reset Telegram notification tracking
         version: (quizSession.version || 0) + 1

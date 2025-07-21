@@ -106,6 +106,16 @@ export async function GET(
           // The backend timer service is the single source of truth
           const calculatedTimeRemaining = quizSession.timeRemaining;
 
+          // Ensure questionStartedAt is a valid timestamp
+          let questionStartedAt = quizSession.questionStartedAt;
+          if (questionStartedAt && typeof questionStartedAt === 'object') {
+            // Convert Date object to timestamp if needed
+            questionStartedAt = new Date(questionStartedAt).getTime();
+          } else if (questionStartedAt && typeof questionStartedAt === 'string') {
+            // Convert string to timestamp if needed
+            questionStartedAt = new Date(questionStartedAt).getTime();
+          }
+
           const updateData = {
             type: 'session_update',
             data: {
@@ -118,7 +128,7 @@ export async function GET(
               totalQuestions: quizSession.questions?.length || 0,
               timerDuration: quizSession.timerDuration,
               timeRemaining: calculatedTimeRemaining, // Use synchronized time
-              questionStartedAt: quizSession.questionStartedAt, // Include sync timestamp
+              questionStartedAt: questionStartedAt, // Ensure it's a valid timestamp
               isQuizCompleted: quizSession.status === 'completed',
               startedAt: quizSession.startedAt,
               timestamp: new Date().toISOString()
