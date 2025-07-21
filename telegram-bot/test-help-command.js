@@ -41,7 +41,7 @@ function validateHelpMessage(helpMessage) {
   }
 
   // Check for main sections
-  validationResults.hasTitle = helpMessage.includes('AWS Certification Quiz Bot - Help Guide');
+  validationResults.hasTitle = helpMessage.includes('IT Certification Quiz Bot - Help Guide');
   validationResults.hasCommands = helpMessage.includes('Available Commands:');
   validationResults.hasQuizFeatures = helpMessage.includes('Quiz Features:');
   validationResults.hasTips = helpMessage.includes('Tips for Best Experience:');

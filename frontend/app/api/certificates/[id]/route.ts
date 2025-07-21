@@ -31,6 +31,11 @@ const certificateSchema = new mongoose.Schema({
     trim: true,
     unique: true,
   },
+  companyId: {
+    type: String,
+    trim: true,
+    default: '',
+  },
   logoUrl: {
     type: String,
     trim: true,
@@ -88,7 +93,7 @@ export const PUT = withAuth(async (
     await connectDB();
     const { id } = await params;
     const body = await request.json();
-    const { name, code, logoUrl, pdfFileUrl, pdfFileName } = body;
+    const { name, code, companyId, logoUrl, pdfFileUrl, pdfFileName } = body;
 
     if (!name || !code) {
       return NextResponse.json(
@@ -115,6 +120,7 @@ export const PUT = withAuth(async (
       {
         name: name.trim(),
         code: code.trim().toUpperCase(),
+        companyId: companyId?.trim() || '',
         logoUrl: logoUrl?.trim() || '',
         pdfFileUrl: pdfFileUrl?.trim() || '',
         pdfFileName: pdfFileName?.trim() || '',

@@ -14,8 +14,8 @@ class MessageHandlers {
     userSessions.delete(userId);
     
     await ctx.reply(
-      `🎓 Welcome to the AWS Certification Quiz Bot!\n\n` +
-      `I'll help you practice for your AWS certifications.\n\n` +
+      `🎓 Welcome to the IT Certification Quiz Bot!\n\n` +
+      `I'll help you practice for your IT certifications.\n\n` +
       `📚 Quick Commands Reference:\n` +
       `• /start - Start a new quiz\n` +
       `• /help - Show detailed help guide\n` +
@@ -32,7 +32,7 @@ class MessageHandlers {
 
   async handleHelp(ctx) {
     const helpMessage = 
-      `🤖 <b>AWS Certification Quiz Bot - Help Guide</b>\n\n` +
+      `🤖 <b>IT Certification Quiz Bot - Help Guide</b>\n\n` +
       
       `📚 <b>Available Commands:</b>\n\n` +
       

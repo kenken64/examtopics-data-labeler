@@ -67,6 +67,11 @@ const certificateSchema = new mongoose.Schema({
     trim: true,        // Remove leading/trailing whitespace
     unique: true,      // Prevent duplicate certificate codes
   },
+  companyId: {
+    type: String,
+    trim: true,        // Company ID reference
+    default: '',       // Default to empty string if not provided
+  },
   logoUrl: {
     type: String,
     trim: true,        // Remove leading/trailing whitespace
@@ -123,7 +128,7 @@ const Certificate = mongoose.models.Certificate || mongoose.model('Certificate',
 export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
     // Establish database connection
-    await connectDB();
+    const db = await connectDB();
     
     // Implement role-based data filtering
     let query = {};
@@ -138,8 +143,29 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
     // Fetch certificates based on user role, sorted by creation date (newest first)
     const certificates = await Certificate.find(query).sort({ createdAt: -1 });
     
-    // Return the certificates array as JSON response
-    return NextResponse.json(certificates);
+    // Populate company names for certificates that have companyId
+    const certificatesWithCompany = await Promise.all(
+      certificates.map(async (cert) => {
+        const certObj = cert.toObject();
+        if (certObj.companyId) {
+          try {
+            const company = await db.collection('companies').findOne({ 
+              _id: new mongoose.Types.ObjectId(certObj.companyId) 
+            });
+            certObj.companyName = company?.name || '';
+          } catch (error) {
+            console.warn(`Failed to fetch company for certificate ${certObj._id}:`, error);
+            certObj.companyName = '';
+          }
+        } else {
+          certObj.companyName = '';
+        }
+        return certObj;
+      })
+    );
+    
+    // Return the certificates array with company names
+    return NextResponse.json(certificatesWithCompany);
   } catch (error) {
     // Log error for debugging and monitoring purposes
     console.error('Error fetching certificates:', error);
@@ -186,7 +212,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     
     // Parse JSON request body containing certificate data
     const body = await request.json();
-    const { name, code, logoUrl, pdfFileUrl, pdfFileName } = body;
+    const { name, code, companyId, logoUrl, pdfFileUrl, pdfFileName } = body;
 
     // Validate required fields
     // Both name and code are essential for certificate identification
@@ -211,6 +237,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     const certificate = new Certificate({
       name: name.trim(),                    // Remove whitespace from name
       code: code.trim().toUpperCase(),      // Normalize code to uppercase
+      companyId: companyId?.trim() || '',   // Optional company ID reference
       logoUrl: logoUrl?.trim() || '',       // Optional field with fallback
       pdfFileUrl: pdfFileUrl?.trim() || '', // Optional field with fallback
       pdfFileName: pdfFileName?.trim() || '',// Optional field with fallback

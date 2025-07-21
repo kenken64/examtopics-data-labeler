@@ -103,7 +103,6 @@ export default function Certificates() {
   // Filter certificates based on selected company
   const filteredCertificates = certificates.filter(certificate => {
     if (selectedCompanyFilter === 'all') return true;
-    if (selectedCompanyFilter === 'no-company') return !certificate.companyId;
     return certificate.companyId === selectedCompanyFilter;
   });
 
@@ -354,7 +353,6 @@ export default function Certificates() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Companies</SelectItem>
-                <SelectItem value="no-company">No Company</SelectItem>
                 {companies.map((company) => (
                   <SelectItem key={company._id} value={company._id}>
                     {company.name} ({company.code})
@@ -398,14 +396,13 @@ export default function Certificates() {
               <div>
                 <Label htmlFor="new-company">Company</Label>
                 <Select
-                  value={newCertificate.companyId || "none"}
-                  onValueChange={(value) => setNewCertificate(prev => ({ ...prev, companyId: value === "none" ? "" : value }))}
+                  value={newCertificate.companyId || ""}
+                  onValueChange={(value) => setNewCertificate(prev => ({ ...prev, companyId: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select company" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No company</SelectItem>
                     {companies.map((company) => (
                       <SelectItem key={company._id} value={company._id}>
                         {company.name} ({company.code})
@@ -517,14 +514,13 @@ export default function Certificates() {
                           <div>
                             <Label htmlFor={`edit-company-${certificate._id}`}>Company</Label>
                             <Select
-                              value={editCertificate.companyId || "none"}
-                              onValueChange={(value) => setEditCertificate(prev => ({ ...prev, companyId: value === "none" ? "" : value }))}
+                              value={editCertificate.companyId || ""}
+                              onValueChange={(value) => setEditCertificate(prev => ({ ...prev, companyId: value }))}
                             >
                               <SelectTrigger>
                                 <SelectValue placeholder="Select company" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="none">No company</SelectItem>
                                 {companies.map((company) => (
                                   <SelectItem key={company._id} value={company._id}>
                                     {company.name} ({company.code})
