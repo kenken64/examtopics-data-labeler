@@ -189,9 +189,11 @@ export default function CompaniesPage() {
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold">Companies Management</h1>
-            <Button onClick={openCreateModal} className="flex items-center gap-2">
+          <div className="flex items-center mb-6 relative">
+            <div className="flex-1 text-center">
+              <h1 className="text-3xl font-bold">Companies Management</h1>
+            </div>
+            <Button onClick={openCreateModal} className="flex items-center gap-2 absolute right-0">
               <Plus size={16} />
               Add Company
             </Button>

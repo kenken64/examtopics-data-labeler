@@ -94,6 +94,11 @@ class DatabaseService {
     return await db.collection('certificates').find({}).toArray();
   }
 
+  async getCompanies() {
+    const db = await this.connectToDatabase();
+    return await db.collection('companies').find({}).sort({ name: 1 }).toArray();
+  }
+
   async getCertificateById(certificateId) {
     const db = await this.connectToDatabase();
     return await db.collection('certificates').findOne({

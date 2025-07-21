@@ -24,10 +24,10 @@ class MessageHandlers {
       `• /bookmarks - View your saved bookmarks\n` +
       `• /revision - Review questions you answered incorrectly for current access code\n\n` +
       `💡 Type /menu for an interactive command menu or /help for detailed instructions!\n\n` +
-      `Let's get started by selecting a certificate:`
+      `Let's get started by selecting a company:`
     );
 
-    await this.showCertificates(ctx);
+    await this.showCompanies(ctx);
   }
 
   async handleHelp(ctx) {
@@ -135,6 +135,75 @@ class MessageHandlers {
       });
     } catch (error) {
       console.error('Error fetching certificates:', error);
+      await ctx.reply('❌ Error loading certificates. Please try again later.');
+    }
+  }
+
+  async showCompanies(ctx) {
+    try {
+      const companies = await this.databaseService.getCompanies();
+
+      if (companies.length === 0) {
+        await ctx.reply('❌ No companies available. Showing all certificates instead.');
+        await this.showCertificates(ctx);
+        return;
+      }
+
+      const keyboard = new InlineKeyboard();
+      
+      // Add individual companies
+      companies.forEach(company => {
+        keyboard.text(`🏢 ${company.name} (${company.code})`, `company_${company._id}`).row();
+      });
+
+      await ctx.reply('🏢 Please select a company:', {
+        reply_markup: keyboard
+      });
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      await ctx.reply('❌ Error loading companies. Showing all certificates instead.');
+      await this.showCertificates(ctx);
+    }
+  }
+
+  async showCertificatesByCompany(ctx, companyId) {
+    try {
+      const db = await this.databaseService.connectToDatabase();
+      
+      // Get company info
+      const company = await db.collection('companies').findOne({ _id: new ObjectId(companyId) });
+      if (!company) {
+        await ctx.reply('❌ Company not found. Please try another company.');
+        return;
+      }
+      
+      const companyName = company.name;
+      
+      // Get certificates for this company
+      const certificates = await db.collection('certificates').find({ 
+        companyId: companyId 
+      }).toArray();
+
+      if (certificates.length === 0) {
+        await ctx.reply(`❌ No certificates available for ${companyName}. Please try another company.`);
+        return;
+      }
+
+      const keyboard = new InlineKeyboard();
+      
+      // Add back button
+      keyboard.text('⬅️ Back to Companies', 'back_to_companies').row();
+      
+      // Add certificates
+      certificates.forEach(cert => {
+        keyboard.text(`${cert.name} (${cert.code})`, `cert_${cert._id}`).row();
+      });
+
+      await ctx.reply(`📋 Certificates from ${companyName}:`, {
+        reply_markup: keyboard
+      });
+    } catch (error) {
+      console.error('Error fetching certificates by company:', error);
       await ctx.reply('❌ Error loading certificates. Please try again later.');
     }
   }

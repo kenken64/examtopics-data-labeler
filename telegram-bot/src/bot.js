@@ -155,6 +155,17 @@ class CertificationBot {
       await this.messageHandlers.handleBookmarks(ctx, this.userSessions);
     });
 
+    // Handle company selection
+    this.bot.callbackQuery(/^company_(.+)$/, async (ctx) => {
+      const companyId = ctx.match[1];
+      await this.messageHandlers.showCertificatesByCompany(ctx, companyId);
+    });
+
+    // Handle back to companies
+    this.bot.callbackQuery('back_to_companies', async (ctx) => {
+      await this.messageHandlers.showCompanies(ctx);
+    });
+
     // Handle certificate selection
     this.bot.callbackQuery(/^cert_(.+)$/, async (ctx) => {
       const certificateId = ctx.match[1];
