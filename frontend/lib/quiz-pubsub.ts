@@ -14,6 +14,7 @@ export interface QuestionData {
   questionIndex: number;
   question: string;
   options: { [key: string]: string };
+  correctAnswer: string; // CRITICAL: Include correctAnswer for multiple choice detection
   timeLimit: number;
   timeRemaining?: number;
   questionStartedAt?: number; // Synchronized timestamp for perfect timing

@@ -150,6 +150,7 @@ class QuizTimerService {
         questionIndex: currentQuestionIndex,
         question: currentQuestion.question,
         options: currentQuestion.options,
+        correctAnswer: currentQuestion.correctAnswer, // CRITICAL: Include correctAnswer for multiple choice detection
         timeLimit: timerDuration,
         timeRemaining: timerDuration,
         questionStartedAt: questionStartedAt // Synchronized timestamp for all systems
