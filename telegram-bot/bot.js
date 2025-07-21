@@ -1842,7 +1842,7 @@ ${explanation}
       '🎮 QuizBlitz - Join live multiplayer quiz\n' +
       '📚 Show Help Guide - Detailed instructions and tips\n\n' +
       '🔍– <b>Bookmark Commands</b>\n' +
-      'ðŸ’¾ Add Bookmark - Save a specific question by number\n' +
+      '🏁’¾ Add Bookmark - Save a specific question by number\n' +
       '🔒 View Bookmarks - See all your saved questions\n\n' +
       '📖 <b>Study Commands</b>\n' +
       '🔄 Revision Mode - Review questions you got wrong\n\n' +
@@ -1854,7 +1854,7 @@ ${explanation}
     const keyboard = new InlineKeyboard()
       .text('🚀 Start Quiz', 'menu_start').text('🎮 QuizBlitz', 'menu_quizblitz').row()
       .text('📚 Help Guide', 'menu_help').row()
-      .text('ðŸ’¾ Add Bookmark', 'menu_bookmark').text('🔒 View Bookmarks', 'menu_bookmarks').row()
+      .text('🏁’¾ Add Bookmark', 'menu_bookmark').text('🔒 View Bookmarks', 'menu_bookmarks').row()
       .text('🔄 Revision Mode', 'menu_revision').row()
       .text('âš¡ Quick Menu', 'quick_menu').row()
       .text('âŒ Close Menu', 'menu_close');
@@ -1889,7 +1889,7 @@ ${explanation}
         }, 1000);
         break;
 
-      case 'bookmark':          await this.safeEditMessage(ctx,             `ðŸ’¾ <b>Add Bookmark</b>
+      case 'bookmark':          await this.safeEditMessage(ctx,             `🏁’¾ <b>Add Bookmark</b>
 
 ` +            `To bookmark a question, type:
 ` +            `<code>/bookmark [question_number]</code>
@@ -1939,7 +1939,7 @@ ${explanation}
         if (this.userSessions.has(userId)) {
           this.userSessions.delete(userId);
           this.userSelections.delete(userId);
-          await this.safeEditMessage(ctx, 'ðŸ Quiz session ended. Type /start to begin a new quiz.');
+          await this.safeEditMessage(ctx, '🏁 Quiz session ended. Type /start to begin a new quiz.');
         } else {
           await this.safeEditMessage(ctx, 'âŒ No active quiz session to end.');
         }
@@ -1952,7 +1952,7 @@ ${explanation}
           const currentQuestion = session.questions[session.currentQuestionIndex];
           if (currentQuestion) {
             await this.saveBookmark(ctx.from.id, session, currentQuestion);
-            await this.safeEditMessage(ctx, `ðŸ’¾ Current question #${currentQuestion.question_no} bookmarked successfully!`);
+            await this.safeEditMessage(ctx, `🏁’¾ Current question #${currentQuestion.question_no} bookmarked successfully!`);
           } else {
             await this.safeEditMessage(ctx, 'âŒ No current question to bookmark.');
           }
@@ -1988,8 +1988,8 @@ ${explanation}
 
       const keyboard = new InlineKeyboard()
         .text('📍 Current Question', 'menu_current_question').row()
-        .text('🔄 Restart Quiz', 'menu_restart').text('ðŸ End Quiz', 'menu_end_quiz').row()
-        .text('ðŸ’¾ Bookmark Current', 'menu_bookmark_current').row()
+        .text('🔄 Restart Quiz', 'menu_restart').text('🏁 End Quiz', 'menu_end_quiz').row()
+        .text('🏁’¾ Bookmark Current', 'menu_bookmark_current').row()
         .text('🔒 View Bookmarks', 'menu_bookmarks').text('🔄 Revision Mode', 'menu_revision').row()
         .text('📚 Help', 'menu_help').text('âŒ Close', 'menu_close');
 
@@ -2121,7 +2121,7 @@ ${explanation}
           '✅ Quiz room found!\n\n' +
           `🎯 *Quiz Code:* ${cleanCode}\n` +
           `📊 *Status:* ${quizRoom.status === 'waiting' ? 'Waiting for players' : 'In progress'}\n\n` +
-          'ðŸ‘¤ Please enter your *player name* for the quiz:',
+          '🏁‘¤ Please enter your *player name* for the quiz:',
           { parse_mode: 'Markdown' }
         );
 
@@ -2176,9 +2176,9 @@ ${explanation}
 
           await ctx.reply(
             '🎉 *Successfully joined the quiz!*\n\n' +
-            `ðŸ‘¤ *Player Name:* ${cleanName}\n` +
+            `🏁‘¤ *Player Name:* ${cleanName}\n` +
             `🎯 *Quiz Code:* ${session.quizCode}\n` +
-            `ðŸ‘¥ *Players in room:* ${joinResult.playerCount}\n\n` +
+            `🏁‘¥ *Players in room:* ${joinResult.playerCount}\n\n` +
             'â³ *Waiting for the host to start the quiz...*\n\n' +
             'You\'ll receive questions here when the quiz begins!',
             { parse_mode: 'Markdown' }
@@ -2303,52 +2303,104 @@ ${explanation}
   }
 
   // Handle QuizBlitz answer selection
-  async handleQuizBlitzAnswer(ctx, selectedAnswer, quizCode) {
+  async handleQuizBlitzAnswer(ctx, selectedAnswer, quizCode, questionIndex = null) {
     try {
+      console.log('🔧 DEBUG: [CALLBACK] ========== ANSWER HANDLER CALLED ==========');
       const userId = ctx.from.id;
       const session = this.userSessions.get(userId);
 
-      if (!session || !session.quizJoined || session.quizCode !== quizCode) {
+      console.log(`🔧 DEBUG: [TELEGRAM] handleQuizBlitzAnswer called:`, {
+        userId,
+        selectedAnswer,
+        quizCode,
+        questionIndex,
+        sessionExists: !!session,
+        callbackData: ctx.callbackQuery?.data
+      });
+
+      // Check if user is part of this quiz - either through local session or Change Stream notification
+      const db = await this.connectToDatabase();
+      const quizRoom = await db.collection('quizRooms').findOne({ quizCode: quizCode.toUpperCase() });
+      
+      let isValidUser = false;
+      let playerName = null;
+      
+      // Check local session first (for /quizblitz command users)
+      if (session && session.quizJoined && session.quizCode === quizCode) {
+        isValidUser = true;
+        playerName = session.playerName || session.firstName || `User${userId}`;
+        console.log(`🔧 DEBUG: [SESSION] User ${userId} validated via local session`);
+      }
+      // Check quizRooms collection (for Change Stream users)
+      else if (quizRoom && quizRoom.players) {
+        const player = quizRoom.players.find(p => String(p.id) === String(userId));
+        if (player) {
+          isValidUser = true;
+          playerName = player.name || `User${userId}`;
+          console.log(`🔧 DEBUG: [QUIZROOM] User ${userId} validated via quizRooms collection`);
+        }
+      }
+      
+      if (!isValidUser) {
+        console.log(`🔧 DEBUG: [VALIDATION] User ${userId} not found in session or quizRoom for quiz ${quizCode}`);
         await ctx.reply('âŒ You are not part of this quiz session.');
         return;
       }
 
       // Check if quiz has ended
-      if (session.quizCompleted) {
-        await ctx.reply('ðŸ Quiz has already ended. You can no longer submit answers.');
+      if ((session && session.quizCompleted) || (quizRoom && quizRoom.status === 'completed')) {
+        await ctx.reply('🏁 Quiz has already ended. You can no longer submit answers.');
         return;
       }
 
       // Check if user already answered this question
-      const answerKey = `${quizCode}_${userId}`;
+      // Get current question index from quiz session
+      const quizSession = await db.collection('quizSessions').findOne({ 
+        quizCode: quizCode.toUpperCase() 
+      });
+      
+      if (!quizSession) {
+        console.error(`🔧 DEBUG: [ERROR] Quiz session not found for answer key creation: ${quizCode}`);
+        await ctx.reply('❌ Quiz session not found.');
+        return;
+      }
+      
+      const currentQuestionIndex = quizSession.currentQuestionIndex || 0;
+      console.log(`🔧 DEBUG: [ANSWER_KEY] Current question index: ${currentQuestionIndex}`);
+      
+      // Include question index in answer key to allow multiple questions
+      const answerKey = `${quizCode}_${userId}_${currentQuestionIndex}`;
+      console.log(`🔧 DEBUG: [ANSWER_KEY] Checking answer key: ${answerKey}`);
       if (this.quizAnswerStates.has(answerKey)) {
         await ctx.answerCallbackQuery('âš ï¸ You have already answered this question!', { show_alert: true });
         return;
       }
 
-      // Mark user as having answered this question
+      // Mark user as having answered this specific question
       this.quizAnswerStates.set(answerKey, {
         answer: selectedAnswer,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        questionIndex: currentQuestionIndex
       });
+      console.log(`🔧 DEBUG: [ANSWER_KEY] Marked question ${currentQuestionIndex} as answered for user ${userId}`);
 
       // Submit answer to quiz system
       try {
-        // Get current question index from quiz session
-        const db = await this.connectToDatabase();
-        const quizSession = await db.collection('quizSessions').findOne({ 
-          quizCode: quizCode.toUpperCase() 
+        console.log(`🔧 DEBUG: [TELEGRAM] Quiz session state:`, {
+          quizCode: quizSession.quizCode,
+          status: quizSession.status,
+          currentQuestionIndex: currentQuestionIndex,
+          totalQuestions: quizSession.questions?.length || 0,
+          questionStartedAt: quizSession.questionStartedAt,
+          timeRemaining: quizSession.timeRemaining
         });
-        
-        const currentQuestionIndex = quizSession?.currentQuestionIndex || 0;
-        console.log(`🔧 DEBUG: [TELEGRAM] Current question index from session: ${currentQuestionIndex}`);
         
         const submitResult = await this.submitQuizAnswer(
           quizCode,
           userId.toString(),
           selectedAnswer,
           currentQuestionIndex,
-          session.playerName || session.firstName || `User${userId}`
+          playerName
         );
 
         if (submitResult.success) {
@@ -2378,7 +2430,14 @@ ${explanation}
         // Remove from answered state if submission failed
         this.quizAnswerStates.delete(answerKey);
         
-        console.error('Error submitting quiz answer:', error);
+        console.error('🔧 DEBUG: [CATCH_ERROR] Error submitting quiz answer:', {
+          error: error.message,
+          stack: error.stack,
+          quizCode,
+          userId,
+          selectedAnswer,
+          currentQuestionIndex
+        });
         await ctx.answerCallbackQuery('âŒ Network error - please try again', { show_alert: true });
       }
 
@@ -2401,7 +2460,7 @@ ${explanation}
 
       const db = await this.connectToDatabase();
       
-      // Step 1: Get quiz session to find certificate ID
+      // Step 1: Get quiz session with embedded questions
       const quizSession = await db.collection('quizSessions').findOne({ 
         quizCode: quizCode.toUpperCase() 
       });
@@ -2411,23 +2470,21 @@ ${explanation}
         return { success: false, error: 'Quiz session not found' };
       }
 
-      const certificateId = quizSession.certificateId;
-      console.log(`🔍 Found certificate ID: ${certificateId} for quiz: ${quizCode}`);
+      console.log(`🔍 Found quiz session: ${quizCode} with ${quizSession.questions?.length || 0} questions`);
 
-      // Step 2: Get question from quizzes collection using certificate ID and question number
-      // Convert 0-based index to 1-based question number
-      const questionNumber = questionIndex + 1;
-      console.log(`🔍 Looking for question ${questionNumber} (index ${questionIndex}) in certificate ${certificateId}`);
+      // Step 2: Get question from embedded questions array using the question index
+      const questionNumber = questionIndex + 1; // Convert 0-based to 1-based for logging
+      console.log(`🔍 Looking for question at index ${questionIndex} (question ${questionNumber})`);
 
-      const question = await db.collection('quizzes').findOne({
-        certificateId: certificateId,
-        questionNumber: questionNumber
-      });
-
-      if (!question) {
-        console.error(`❌ Question ${questionNumber} not found for certificate ${certificateId}`);
+      if (!quizSession.questions || questionIndex >= quizSession.questions.length) {
+        console.error(`❌ Question index ${questionIndex} not found in quiz session (${quizSession.questions?.length || 0} questions available)`);
         return { success: false, error: `Question ${questionNumber} not found` };
       }
+
+      const question = quizSession.questions[questionIndex];
+
+      console.log(`🔍 Found question: "${question.question?.substring(0, 100)}..."`);
+      console.log(`🔍 Correct answer: ${question.correctAnswer}`);
 
       // Step 3: Validate answer using correctAnswer field
       const correctAnswer = question.correctAnswer;
@@ -2561,7 +2618,7 @@ ${explanation}
         `${wrappedQuestion}\n\n` +
         `📋 *Options:*\n${questionOptionsText}` +
         `â±ï¸ *Time remaining: ${displayTimeRemaining} seconds*\n` +
-        `ðŸ† *Points: ${questionData.points}*`;
+        `🏁† *Points: ${questionData.points}*`;
 
       console.log('📍¤ [TELEGRAM] *** ABOUT TO SEND MESSAGE TO TELEGRAM API ***');
       console.log('📍¤ [TELEGRAM] *** THIS IS WHERE THE QUESTION GETS DISPLAYED ***');
