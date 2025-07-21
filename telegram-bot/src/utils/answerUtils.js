@@ -14,8 +14,8 @@ function normalizeAnswer(answer) {
   // Convert to string if it's a number
   const answerStr = String(answer);
   
-  // Remove spaces and convert to uppercase
-  const normalized = answerStr.replace(/\s+/g, '').toUpperCase();
+  // Remove spaces, commas, and convert to uppercase
+  const normalized = answerStr.replace(/[\s,]+/g, '').toUpperCase();
   
   // Sort letters alphabetically for consistent comparison
   return normalized.split('').sort().join('');

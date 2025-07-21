@@ -737,8 +737,8 @@ function LiveQuizPageContent() {
         </div>
 
         {/* Main Content: Question and Player Progress Side by Side */}
-        <div className="grid xl:grid-cols-4 lg:grid-cols-3 gap-8">
-          {/* Question Card - Takes up 3/4 of the space on large screens */}
+        <div className="grid xl:grid-cols-5 lg:grid-cols-3 gap-8">
+          {/* Question Card - Takes up 3/5 of the space on XL screens, 2/3 on large screens */}
           <div className="xl:col-span-3 lg:col-span-2">
             <Card className="bg-white/80 backdrop-blur-sm min-h-[500px]">
               <CardHeader className="pb-6">
@@ -787,8 +787,8 @@ function LiveQuizPageContent() {
             </Card>
           </div>
 
-          {/* Players Progress - Takes up 1/4 of the space on large screens */}
-          <div className="xl:col-span-1 lg:col-span-1">
+          {/* Players Progress - Takes up 2/5 of the space on XL screens, 1/3 on large screens */}
+          <div className="xl:col-span-2 lg:col-span-1 min-w-[280px]">
             <Card className="bg-white/80 backdrop-blur-sm h-full">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
@@ -821,7 +821,7 @@ function LiveQuizPageContent() {
                     {players.map((player) => (
                       <div 
                         key={player.id} 
-                        className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 ${
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-all duration-200 ${
                           player.hasAnswered 
                             ? 'bg-green-50 border-green-200 shadow-sm' 
                             : 'bg-gray-50 border-gray-200'
@@ -841,17 +841,17 @@ function LiveQuizPageContent() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm truncate">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-sm break-words">
                               {player.name}
                             </span>
                             {player.source === 'telegram' && (
-                              <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-600">
+                              <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-600 flex-shrink-0">
                                 📱 TG
                               </Badge>
                             )}
                           </div>
-                          <span className={`text-xs ${
+                          <span className={`text-xs leading-tight ${
                             player.hasAnswered ? 'text-green-600' : 'text-gray-500'
                           }`}>
                             {player.hasAnswered 

@@ -4,25 +4,59 @@ import { connectToDatabase } from '@/lib/mongodb';
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const debug = searchParams.get('debug') === 'true';
     const limit = parseInt(searchParams.get('limit') || '50');
     const page = parseInt(searchParams.get('page') || '1');
     const skip = (page - 1) * limit;
 
     const db = await connectToDatabase();
 
-    // Get leaderboard combining both registered users and QuizBlitz players
-    const userLeaderboard = await db.collection('users').aggregate([
+    // Debug information
+    if (debug) {
+      const totalUsers = await db.collection('users').countDocuments();
+      const usersWithQuizzes = await db.collection('users').countDocuments({
+        quizzesTaken: { $gt: 0 }
+      });
+      const usersWithPoints = await db.collection('users').countDocuments({
+        totalPoints: { $gt: 0 }
+      });
+      
+      // Sample users
+      const sampleUsers = await db.collection('users')
+        .find({})
+        .project({
+          username: 1,
+          totalPoints: 1,
+          quizzesTaken: 1,
+          correctAnswers: 1,
+          totalQuestions: 1
+        })
+        .limit(5)
+        .toArray();
+      
+      return NextResponse.json({
+        debug: true,
+        stats: {
+          totalUsers,
+          usersWithQuizzes,
+          usersWithPoints
+        },
+        sampleUsers
+      });
+    }
+
+    // Get global leaderboard sorted by total points
+    const leaderboard = await db.collection('users').aggregate([
       {
         $match: {
           $or: [
-            { quizzesTaken: { $gt: 0 } },
-            { totalPoints: { $gt: 0 } }
+            { quizzesTaken: { $gt: 0 } }, // Users who took quizzes
+            { totalPoints: { $gt: 0 } }   // Users with points (QuizBlitz)
           ]
         }
       },
       {
         $project: {
-          _id: 1,
           username: 1,
           firstName: 1,
           lastName: 1,
@@ -37,7 +71,7 @@ export async function GET(request: NextRequest) {
           bestStreak: { $ifNull: ['$bestStreak', 0] },
           lastQuizDate: 1,
           rank: { $ifNull: ['$rank', 'Beginner'] },
-          source: { $literal: 'registered' },
+          // Calculate full name for display
           displayName: {
             $cond: {
               if: { $and: [{ $ne: ["$firstName", ""] }, { $ne: ["$lastName", ""] }] },
@@ -57,6 +91,7 @@ export async function GET(request: NextRequest) {
               }
             }
           },
+          // Calculate accuracy percentage
           accuracy: {
             $cond: {
               if: { $gt: ["$totalQuestions", 0] },
@@ -65,105 +100,81 @@ export async function GET(request: NextRequest) {
             }
           }
         }
+      },
+      {
+        $sort: { totalPoints: -1, averageScore: -1, quizzesTaken: -1 }
+      },
+      {
+        $skip: skip
+      },
+      {
+        $limit: limit
       }
     ]).toArray();
 
-    // Get top QuizBlitz players from completed sessions
-    const quizBlitzLeaderboard = await db.collection('quizSessions').aggregate([
-      {
-        $match: {
-          status: 'finished',
-          playerAnswers: { $exists: true, $ne: {} }
-        }
-      },
-      {
-        $unwind: {
-          path: "$playerAnswers",
-          preserveNullAndEmptyArrays: false
-        }
-      },
-      {
-        $unwind: {
-          path: "$playerAnswers",
-          preserveNullAndEmptyArrays: false
-        }
-      },
-      {
-        $group: {
-          _id: "$playerAnswers.playerId",
-          playerName: { $first: "$playerAnswers.playerName" },
-          totalScore: { $sum: "$playerAnswers.score" },
-          totalAnswers: { $sum: 1 },
-          correctAnswers: { $sum: { $cond: ["$playerAnswers.isCorrect", 1, 0] } },
-          gamesPlayed: { $addToSet: "$quizCode" },
-          lastPlayed: { $max: "$playerAnswers.timestamp" }
-        }
-      },
-      {
-        $project: {
-          _id: { $concat: ["quizblitz_", "$_id"] },
-          username: "$_id",
-          displayName: "$playerName",
-          totalPoints: "$totalScore",
-          quizzesTaken: { $size: "$gamesPlayed" },
-          correctAnswers: "$correctAnswers",
-          totalQuestions: "$totalAnswers",
-          averageScore: {
-            $cond: {
-              if: { $gt: ["$totalAnswers", 0] },
-              then: { $multiply: [{ $divide: ["$correctAnswers", "$totalAnswers"] }, 100] },
-              else: 0
-            }
-          },
-          bestScore: {
-            $cond: {
-              if: { $gt: ["$totalAnswers", 0] },
-              then: { $multiply: [{ $divide: ["$correctAnswers", "$totalAnswers"] }, 100] },
-              else: 0
-            }
-          },
-          currentStreak: { $literal: 0 },
-          bestStreak: { $literal: 0 },
-          lastQuizDate: "$lastPlayed",
-          rank: { $literal: "QuizBlitz Player" },
-          source: { $literal: "quizblitz" },
-          profilePhotoUrl: { $literal: null },
-          firstName: { $literal: "" },
-          lastName: { $literal: "" },
-          accuracy: {
-            $cond: {
-              if: { $gt: ["$totalAnswers", 0] },
-              then: { $multiply: [{ $divide: ["$correctAnswers", "$totalAnswers"] }, 100] },
-              else: 0
-            }
-          }
-        }
-      },
-      {
-        $match: {
-          totalPoints: { $gt: 0 }
-        }
-      }
-    ]).toArray();
-
-    // Combine and sort leaderboards
-    const combinedLeaderboard = [...userLeaderboard, ...quizBlitzLeaderboard];
-    combinedLeaderboard.sort((a, b) => {
-      if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      if (b.averageScore !== a.averageScore) return b.averageScore - a.averageScore;
-      return b.quizzesTaken - a.quizzesTaken;
-    });
-
-    // Apply pagination
-    const paginatedLeaderboard = combinedLeaderboard.slice(skip, skip + limit);
-    
     // Add rank position to each user
-    const rankedLeaderboard = paginatedLeaderboard.map((user, index) => ({
+    const rankedLeaderboard = leaderboard.map((user, index) => ({
       ...user,
       position: skip + index + 1
     }));
 
-    const totalUsers = combinedLeaderboard.length;
+    // Get total count for pagination
+    const totalUsers = await db.collection('users').countDocuments({
+      $or: [
+        { quizzesTaken: { $gt: 0 } },
+        { totalPoints: { $gt: 0 } }
+      ]
+    });
+
+    // Get current user's position if requested
+    const currentUserUsername = searchParams.get('currentUser');
+    let currentUserPosition = null;
+    
+    if (currentUserUsername) {
+      const currentUserRank = await db.collection('users').aggregate([
+        {
+          $match: {
+            $or: [
+              { quizzesTaken: { $gt: 0 } },
+              { totalPoints: { $gt: 0 } }
+            ]
+          }
+        },
+        {
+          $sort: { totalPoints: -1, averageScore: -1, quizzesTaken: -1 }
+        },
+        {
+          $group: {
+            _id: null,
+            users: { $push: "$$ROOT" }
+          }
+        },
+        {
+          $unwind: {
+            path: "$users",
+            includeArrayIndex: "position"
+          }
+        },
+        {
+          $match: {
+            "users.username": currentUserUsername
+          }
+        },
+        {
+          $project: {
+            position: { $add: ["$position", 1] },
+            user: "$users"
+          }
+        }
+      ]).toArray();
+      
+      if (currentUserRank.length > 0) {
+        currentUserPosition = {
+          position: currentUserRank[0].position,
+          user: currentUserRank[0].user
+        };
+      }
+    }
 
     return NextResponse.json({
       leaderboard: rankedLeaderboard,
@@ -174,6 +185,7 @@ export async function GET(request: NextRequest) {
         hasNextPage: skip + limit < totalUsers,
         hasPreviousPage: page > 1
       },
+      currentUserPosition,
       lastUpdated: new Date().toISOString()
     });
 
@@ -259,6 +271,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get user's rank position
+    const userRank = await db.collection('users').aggregate([
+      {
+        $match: {
+          $or: [
+            { quizzesTaken: { $gt: 0 } },
+            { totalPoints: { $gt: 0 } }
+          ]
+        }
+      },
+      {
+        $sort: { totalPoints: -1, averageScore: -1, quizzesTaken: -1 }
+      },
+      {
+        $group: {
+          _id: null,
+          users: { $push: "$$ROOT" }
+        }
+      },
+      {
+        $unwind: {
+          path: "$users",
+          includeArrayIndex: "position"
+        }
+      },
+      {
+        $match: {
+          "users.username": username
+        }
+      },
+      {
+        $project: {
+          position: { $add: ["$position", 1] }
+        }
+      }
+    ]).toArray();
+
+    const position = userRank.length > 0 ? userRank[0].position : null;
+
     // Get recent quiz attempts
     const recentQuizzes = await db.collection('quiz-attempts')
       .find({ userId: username })
@@ -277,7 +328,10 @@ export async function POST(request: NextRequest) {
       .toArray();
 
     return NextResponse.json({
-      user: userStats[0],
+      user: {
+        ...userStats[0],
+        position
+      },
       recentQuizzes,
       lastUpdated: new Date().toISOString()
     });

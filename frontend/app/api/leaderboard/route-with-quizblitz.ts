@@ -122,14 +122,14 @@ export async function GET(request: NextRequest) {
               else: 0
             }
           },
-          currentStreak: { $literal: 0 },
-          bestStreak: { $literal: 0 },
+          currentStreak: 0,
+          bestStreak: 0,
           lastQuizDate: "$lastPlayed",
-          rank: { $literal: "QuizBlitz Player" },
+          rank: "QuizBlitz Player",
           source: { $literal: "quizblitz" },
-          profilePhotoUrl: { $literal: null },
-          firstName: { $literal: "" },
-          lastName: { $literal: "" },
+          profilePhotoUrl: null,
+          firstName: "",
+          lastName: "",
           accuracy: {
             $cond: {
               if: { $gt: ["$totalAnswers", 0] },

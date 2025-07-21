@@ -56,12 +56,18 @@ export async function GET(
 
           // If quiz is still waiting, return waiting state
           if (quizRoom.status === 'waiting') {
+            // For waiting state, no one has answered yet
+            const playersWithStatus = (quizRoom.players || []).map((player: any) => ({
+              ...player,
+              hasAnswered: false
+            }));
+
             const updateData = {
               type: 'session_update',
               data: {
                 success: true,
                 status: 'waiting',
-                players: quizRoom.players || [],
+                players: playersWithStatus,
                 playerCount: quizRoom.players?.length || 0,
                 currentQuestion: null,
                 currentQuestionIndex: -1,
@@ -81,12 +87,17 @@ export async function GET(
 
           if (!quizSession) {
             // Quiz room exists but session hasn't started yet
+            const playersWithStatus = (quizRoom.players || []).map((player: any) => ({
+              ...player,
+              hasAnswered: false
+            }));
+
             const updateData = {
               type: 'session_update',
               data: {
                 success: true,
                 status: quizRoom.status,
-                players: quizRoom.players || [],
+                players: playersWithStatus,
                 playerCount: quizRoom.players?.length || 0,
                 currentQuestion: null,
                 currentQuestionIndex: -1,
@@ -116,12 +127,22 @@ export async function GET(
             questionStartedAt = new Date(questionStartedAt).getTime();
           }
 
+          // Calculate hasAnswered status for each player for the current question
+          const currentQuestionIndex = quizSession.currentQuestionIndex;
+          const playersWithStatus = (quizRoom.players || []).map((player: any) => {
+            const hasAnswered = quizSession.playerAnswers?.[player.id]?.[`q${currentQuestionIndex}`] ? true : false;
+            return {
+              ...player,
+              hasAnswered
+            };
+          });
+
           const updateData = {
             type: 'session_update',
             data: {
               success: true,
               status: quizSession.status,
-              players: quizRoom.players || [],
+              players: playersWithStatus,
               playerCount: quizRoom.players?.length || 0,
               currentQuestion,
               currentQuestionIndex: quizSession.currentQuestionIndex,

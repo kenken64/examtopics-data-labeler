@@ -1,5 +1,6 @@
 const { ObjectId } = require('mongodb');
 const { InlineKeyboard } = require('grammy');
+const { isMultipleAnswerQuestion } = require('../utils/answerUtils');
 
 class NotificationService {
   constructor(databaseService, bot) {
@@ -197,7 +198,7 @@ class NotificationService {
               
               // Check if this user already received this question
               const tracker = await db.collection('telegramQuestionTracker').findOne({
-                telegramUserId: player.id,
+                telegramUserId: player.telegramId || player.id,
                 quizCode: event.quizCode
               });
 
@@ -209,7 +210,7 @@ class NotificationService {
               // Track that we're sending this question to this user
               await db.collection('telegramQuestionTracker').updateOne(
                 { 
-                  telegramUserId: player.id, 
+                  telegramUserId: player.telegramId || player.id, 
                   quizCode: event.quizCode 
                 },
                 { 
@@ -441,7 +442,15 @@ class NotificationService {
 
   async sendQuestionToPlayer(player, questionData, quizCode) {
     try {
-      const telegramUserId = player.id;
+      // Use the stored telegramId (actual Telegram chat ID) instead of player.id (which is username)
+      const telegramUserId = player.telegramId || player.id;
+      
+      console.log(`🔧 DEBUG: Player data:`, { 
+        id: player.id, 
+        telegramId: player.telegramId, 
+        name: player.name,
+        usingTelegramId: telegramUserId 
+      });
       
       // Use existing sendQuizQuestion method
       await this.sendQuizQuestion(telegramUserId, questionData, quizCode);
@@ -458,6 +467,17 @@ class NotificationService {
       
       const questionNumber = (questionData.index || 0) + 1;
       const totalQuestions = questionData.totalQuestions || '?';
+      
+      // Check if this is a multiple choice question
+      const isMultiple = isMultipleAnswerQuestion(questionData.correctAnswer);
+      console.log(`🔧 DEBUG: Question is multiple choice: ${isMultiple} (correct answer: "${questionData.correctAnswer}")`);
+      console.log(`🔧 DEBUG: correctAnswer type: ${typeof questionData.correctAnswer}`);
+      console.log(`🔧 DEBUG: correctAnswer raw:`, questionData.correctAnswer);
+      
+      // Additional debugging for the specific question
+      if (questionData.correctAnswer && questionData.correctAnswer.includes(' ')) {
+        console.log(`🔧 DEBUG: correctAnswer contains space - should be multiple choice!`);
+      }
       
       console.log(`🔧 DEBUG: Question number: ${questionNumber}, Total: ${totalQuestions}`);
       
@@ -480,7 +500,15 @@ class NotificationService {
         console.log(`🔧 DEBUG: No options found in questionData`);
       }
 
-      formattedQuestion += `\n🎯 Tap an answer button below to submit:`;
+      if (isMultiple) {
+        formattedQuestion += `\n📝 Multiple answers required: Select all that apply\n`;
+        formattedQuestion += `✅ Selected: None\n\n`;
+        formattedQuestion += `🎯 Tap answer buttons to select/deselect:`;
+        console.log(`🔧 DEBUG: Using MULTIPLE CHOICE interface`);
+      } else {
+        formattedQuestion += `\n🎯 Tap an answer button below to submit:`;
+        console.log(`🔧 DEBUG: Using SINGLE CHOICE interface`);
+      }
 
       // Create inline keyboard with answer buttons
       const keyboard = new InlineKeyboard();
@@ -488,11 +516,29 @@ class NotificationService {
       if (questionData.options) {
         Object.entries(questionData.options).forEach(([key, value]) => {
           if (value) {
-            keyboard.text(`${key}. ${value.substring(0, 30)}${value.length > 30 ? '...' : ''}`, `quiz_answer_${key}_${quizCode}`);
+            if (isMultiple) {
+              // For multiple choice, use toggleable buttons
+              const callbackData = `quizblitz_toggle_${key}_${quizCode}`;
+              console.log(`🔧 DEBUG: Creating TOGGLE button ${key} with callback: ${callbackData}`);
+              keyboard.text(`${key}. ${value.substring(0, 30)}${value.length > 30 ? '...' : ''}`, callbackData);
+            } else {
+              // For single choice, use direct submit buttons
+              const callbackData = `quiz_answer_${key}_${quizCode}`;
+              console.log(`🔧 DEBUG: Creating SUBMIT button ${key} with callback: ${callbackData}`);
+              keyboard.text(`${key}. ${value.substring(0, 30)}${value.length > 30 ? '...' : ''}`, callbackData);
+            }
             keyboard.row(); // Each answer on a new row
           }
         });
-        console.log(`🔧 DEBUG: Created keyboard with ${Object.keys(questionData.options).length} buttons`);
+        
+        // Add confirm/clear buttons for multiple choice
+        if (isMultiple) {
+          keyboard.text('✅ Confirm Selection', `quizblitz_confirm_${quizCode}`).row();
+          keyboard.text('🔄 Clear All', `quizblitz_clear_${quizCode}`);
+          console.log(`🔧 DEBUG: Added CONFIRM/CLEAR buttons for multiple choice`);
+        }
+        
+        console.log(`🔧 DEBUG: Created keyboard with ${Object.keys(questionData.options).length} buttons (multiple: ${isMultiple})`);
       }
 
       console.log(`🔧 DEBUG: Sending message to ${telegramUserId}:`);

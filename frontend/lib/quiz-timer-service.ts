@@ -558,11 +558,21 @@ class QuizTimerService {
       const pointsEarned = correctAnswers * 10; // 10 points per correct answer
       const endTime = new Date();
       
-      // Try to find user by player ID (for Telegram users) or name
-      // This may need adjustment based on how players are linked to users
+      // Try to find user by player data (enhanced for Telegram users)
       let userQuery;
       if (player.source === 'telegram') {
-        userQuery = { username: player.id.toString() };
+        // For Telegram users, try multiple matching strategies
+        const possibleUsernames = [
+          player.id,           // Now contains username
+          player.username,     // Explicit username field 
+          player.name,         // Display name
+          player.telegramId?.toString() // Fallback to Telegram ID
+        ].filter(Boolean);
+        
+        userQuery = { 
+          $or: possibleUsernames.map(u => ({ username: u }))
+        };
+        console.log(`🔍 Searching for Telegram user with possible usernames:`, possibleUsernames);
       } else {
         // For web players, try to find by display name or skip if not linked
         userQuery = { 
@@ -577,9 +587,12 @@ class QuizTimerService {
       const currentUser = await db.collection('users').findOne(userQuery);
       
       if (!currentUser) {
-        console.log(`User not found for player ${player.name} (${player.id}), skipping score update`);
+        console.log(`❌ User not found for player ${player.name} (ID: ${player.id}, source: ${player.source}), skipping score update`);
+        console.log(`🔍 Search query was:`, JSON.stringify(userQuery, null, 2));
         return;
       }
+      
+      console.log(`✅ Found user match: ${currentUser.username} for player ${player.name}`);
       
       // Calculate new average score
       const currentQuizCount = currentUser.quizzesTaken || 0;
