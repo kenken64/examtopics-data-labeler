@@ -5,47 +5,32 @@ class NotificationService {
   constructor(databaseService, bot) {
     this.databaseService = databaseService;
     this.bot = bot;
-    this.pollingInterval = null;
     this.changeStream = null;
   }
 
   startNotificationPolling() {
-    console.log('📡 [NOTIFICATION SERVICE] Starting QuizBlitz notification system...');
-    console.log('🔄 [NOTIFICATION SERVICE] USING: MongoDB Change Streams for real-time monitoring');
+    console.log('📡 Starting QuizBlitz notification system...');
+    console.log('🔄 USING: MongoDB Change Streams for real-time monitoring');
     
     // Initialize sessions on startup
-    console.log('🔧 [NOTIFICATION SERVICE] Initializing sessions...');
     this.initializeSessions();
     
     // Start real-time change stream monitoring
-    console.log('🔧 [NOTIFICATION SERVICE] Starting change stream monitoring...');
     this.startChangeStreamMonitoring();
     
-    // Keep legacy polling as backup every 10 seconds
-    this.pollingInterval = setInterval(async () => {
-      try {
-        await this.checkForQuizNotifications();
-      } catch (error) {
-        console.error('Error in backup notification polling:', error);
-      }
-    }, 10000);
+    console.log('🔧 [NOTIFICATION SERVICE] Using Change Streams only - no polling fallback');
   }
 
   async startChangeStreamMonitoring() {
-    console.log('🔄 [NOTIFICATION SERVICE] Attempting to start Change Stream monitoring...');
-    
     try {
-      console.log('🔗 [NOTIFICATION SERVICE] Connecting to database...');
       const db = await this.databaseService.connectToDatabase();
-      console.log('✅ [NOTIFICATION SERVICE] Database connection established');
       
-      console.log('👀 [NOTIFICATION SERVICE] Setting up Change Stream for quizEvents collection...');
+      console.log('👀 Setting up Change Stream for quizEvents collection...');
       
-      // Watch for all quiz events from the frontend - we'll filter in the handler
+      // Watch for quiz events from the frontend - simplified pipeline to catch all events
       const pipeline = [
         {
           $match: {
-            // Match all operations on the quizEvents collection
             $or: [
               { 'fullDocument.type': { $exists: true } }, // For insert/replace operations
               { 'updateDescription.updatedFields.type': { $exists: true } } // For update operations
@@ -54,72 +39,58 @@ class NotificationService {
         }
       ];
 
-      console.log('📡 [NOTIFICATION SERVICE] Creating change stream with pipeline:', JSON.stringify(pipeline, null, 2));
-      
       this.changeStream = db.collection('quizEvents').watch(pipeline, {
         fullDocument: 'updateLookup'
       });
 
-      console.log('⚡ [NOTIFICATION SERVICE] Change Stream ACTIVE - monitoring quizEvents in real-time');
-      console.log('🎯 [NOTIFICATION SERVICE] Watching for: quiz_started, question_started, question_ended, timer_update, quiz_ended');
+      console.log('⚡ Change Stream ACTIVE - monitoring quizEvents in real-time');
+      console.log('🎯 Watching for: quiz_started, question_started, question_ended, timer_update, quiz_ended');
 
-      this.changeStream.on('change', async (change) => {
-        console.log(`🔍 [NOTIFICATION SERVICE] Change detected:`, {
-          operationType: change.operationType,
-          hasFullDocument: !!change.fullDocument,
-          documentType: change.fullDocument?.type,
-          quizCode: change.fullDocument?.quizCode
-        });
-        
-        if ((change.operationType === 'insert' || change.operationType === 'update' || change.operationType === 'replace') && change.fullDocument) {
-          console.log(`📝 [NOTIFICATION SERVICE] Processing ${change.operationType.toUpperCase()} operation for ${change.fullDocument.type} event`);
-          // Process change event asynchronously to avoid blocking the stream
-          setImmediate(async () => {
-            try {
-              await this.handleQuizEventChange(change.fullDocument);
-            } catch (error) {
-              console.error('❌ [NOTIFICATION SERVICE] Error handling change event:', error);
-            }
-          });
-        } else {
-          console.log(`⏭️ [NOTIFICATION SERVICE] Ignoring ${change.operationType} operation (no fullDocument or not relevant)`);
+      this.changeStream.on('change', (change) => {
+        if ((change.operationType === 'insert' || change.operationType === 'update') && change.fullDocument) {
+          console.log(`📝 Change detected: ${change.operationType.toUpperCase()} operation`);
+          this.handleQuizEventChange(change.fullDocument);
         }
       });
 
       this.changeStream.on('error', (error) => {
         console.error('❌ Change Stream error:', error);
-        // Handle reconnection asynchronously to avoid blocking
-        setImmediate(() => this.reconnectChangeStream());
+        this.reconnectChangeStream();
       });
 
       this.changeStream.on('close', () => {
         console.log('⚠️ Change Stream closed - attempting reconnect...');
-        // Handle reconnection asynchronously to avoid blocking
-        setImmediate(() => this.reconnectChangeStream());
+        this.reconnectChangeStream();
       });
 
     } catch (error) {
-      console.error('❌ [NOTIFICATION SERVICE] Failed to start Change Stream monitoring:', error);
-      console.error('❌ [NOTIFICATION SERVICE] Error details:', error.message);
-      console.error('❌ [NOTIFICATION SERVICE] Error stack:', error.stack);
-      console.log('📡 [NOTIFICATION SERVICE] Falling back to polling-only mode');
+      console.error('❌ Failed to start Change Stream monitoring:', error);
+      console.log('📡 Change Streams disabled - no fallback configured');
     }
+  }
+
+  startFallbackPolling() {
+    if (this.fallbackInterval) {
+      return; // Already running
+    }
+    
+    console.log('🔄 Starting fallback polling every 5 seconds...');
+    this.fallbackInterval = setInterval(async () => {
+      try {
+        await this.checkForQuizNotifications();
+      } catch (error) {
+        console.error('Error in fallback polling:', error);
+      }
+    }, 5000);
   }
 
   async handleQuizEventChange(event) {
     const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-    console.log(`⚡ [NOTIFICATION SERVICE] REAL-TIME CHANGE DETECTED - ${timestamp}`);
+    console.log(`⚡ REAL-TIME CHANGE DETECTED - ${timestamp}`);
     console.log(`   🎮 Quiz Code: ${event.quizCode}`);
     console.log(`   📋 Event Type: ${event.type}`);
     console.log(`   📊 Question: ${(event.data?.currentQuestionIndex || 0) + 1}`);
     console.log(`   ⏰ Time: ${event.data?.timeRemaining || 0}s`);
-
-    // Filter for relevant event types
-    const relevantTypes = ['quiz_started', 'question_started', 'question_ended', 'timer_update', 'quiz_ended'];
-    if (!relevantTypes.includes(event.type)) {
-      console.log(`⏭️ [NOTIFICATION SERVICE] Ignoring event type: ${event.type} (not in relevant types)`);
-      return;
-    }
 
     try {
       // Only process question_started events to avoid duplicates
@@ -256,9 +227,7 @@ class NotificationService {
                 ...event.data.question,
                 index: currentQuestionIndex,
                 totalQuestions: event.data?.totalQuestions || '?',
-                timeLimit: event.data?.timeLimit || 30,
-                correctAnswer: event.data.question?.correctAnswer, // Add correct answer for multiple choice detection
-                points: 1000 // Add points field
+                timeLimit: event.data?.timeLimit || 30
               };
 
               console.log(`🔧 DEBUG: Prepared question data for ${player.name}:`, JSON.stringify(questionData, null, 2));
@@ -276,6 +245,21 @@ class NotificationService {
     }
   }
 
+  startFallbackPolling() {
+    if (this.fallbackInterval) {
+      return; // Already running
+    }
+    
+    console.log('🔄 Starting fallback polling every 5 seconds...');
+    this.fallbackInterval = setInterval(async () => {
+      try {
+        await this.checkForQuizNotifications();
+      } catch (error) {
+        console.error('Error in fallback polling:', error);
+      }
+    }, 5000);
+  }
+
   async reconnectChangeStream() {
     console.log('🔄 Attempting to reconnect Change Stream...');
     
@@ -284,12 +268,14 @@ class NotificationService {
         await this.changeStream.close();
       }
       
-      // Wait 3 seconds before reconnecting (non-blocking)
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      await this.startChangeStreamMonitoring();
+      // Wait 3 seconds before reconnecting
+      setTimeout(() => {
+        this.startChangeStreamMonitoring();
+      }, 3000);
       
     } catch (error) {
       console.error('❌ Error during Change Stream reconnection:', error);
+      console.log('📡 Change Stream reconnection failed - no fallback configured');
     }
   }
 
@@ -332,10 +318,17 @@ class NotificationService {
   }
 
   stopNotificationPolling() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = null;
-      console.log('📡 Notification polling stopped');
+    // Legacy polling was disabled - only handle Change Streams cleanup
+    // if (this.pollingInterval) {
+    //   clearInterval(this.pollingInterval);
+    //   this.pollingInterval = null;
+    //   console.log('📡 Notification polling stopped');
+    // }
+    
+    if (this.fallbackInterval) {
+      clearInterval(this.fallbackInterval);
+      this.fallbackInterval = null;
+      console.log('🔄 Fallback polling stopped');
     }
     
     if (this.changeStream) {
