@@ -4,10 +4,10 @@
   "description": "AWS Certification Practice Bot for Telegram",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "node bot.js",
+    "start": "node src\\bot.js",
+    "dev": "node src\\bot.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "validate": "node -c bot.js"
+    "validate": "node -c src\\bot.js"
   },
   "keywords": [
     "telegram",

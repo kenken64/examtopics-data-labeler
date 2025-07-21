@@ -77,26 +77,43 @@ export async function GET(request: NextRequest) {
         }
       },
       {
-        $unwind: {
-          path: "$playerAnswers",
-          preserveNullAndEmptyArrays: false
+        $addFields: {
+          playerAnswersArray: { $objectToArray: "$playerAnswers" }
         }
       },
       {
         $unwind: {
-          path: "$playerAnswers",
+          path: "$playerAnswersArray",
           preserveNullAndEmptyArrays: false
+        }
+      },
+      {
+        $addFields: {
+          playerId: "$playerAnswersArray.k",
+          playerData: "$playerAnswersArray.v",
+          questionAnswersArray: { $objectToArray: "$playerAnswersArray.v" }
+        }
+      },
+      {
+        $unwind: {
+          path: "$questionAnswersArray",
+          preserveNullAndEmptyArrays: false
+        }
+      },
+      {
+        $match: {
+          "questionAnswersArray.v.score": { $exists: true }
         }
       },
       {
         $group: {
-          _id: "$playerAnswers.playerId",
-          playerName: { $first: "$playerAnswers.playerName" },
-          totalScore: { $sum: "$playerAnswers.score" },
+          _id: "$playerId",
+          playerName: { $first: { $ifNull: ["$questionAnswersArray.v.playerName", "$playerId"] } },
+          totalScore: { $sum: "$questionAnswersArray.v.score" },
           totalAnswers: { $sum: 1 },
-          correctAnswers: { $sum: { $cond: ["$playerAnswers.isCorrect", 1, 0] } },
+          correctAnswers: { $sum: { $cond: ["$questionAnswersArray.v.isCorrect", 1, 0] } },
           gamesPlayed: { $addToSet: "$quizCode" },
-          lastPlayed: { $max: "$playerAnswers.timestamp" }
+          lastPlayed: { $max: "$questionAnswersArray.v.timestamp" }
         }
       },
       {

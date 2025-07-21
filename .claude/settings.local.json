@@ -9,7 +9,8 @@
       "Bash(sed:*)",
       "Bash(mv:*)",
       "Bash(git add:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }
