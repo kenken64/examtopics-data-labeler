@@ -10,13 +10,13 @@
 function normalizeAnswer(answer) {
   // Handle non-string inputs
   if (!answer && answer !== 0) return '';
-  
+
   // Convert to string if it's a number
   const answerStr = String(answer);
-  
+
   // Remove spaces, commas, and convert to uppercase
   const normalized = answerStr.replace(/[\s,]+/g, '').toUpperCase();
-  
+
   // Sort letters alphabetically for consistent comparison
   return normalized.split('').sort().join('');
 }
@@ -28,7 +28,7 @@ function normalizeAnswer(answer) {
  */
 function isMultipleAnswerQuestion(correctAnswer) {
   if (!correctAnswer && correctAnswer !== 0) return false;
-  
+
   const normalized = normalizeAnswer(correctAnswer);
   return normalized.length > 1;
 }
@@ -42,16 +42,16 @@ function isMultipleAnswerQuestion(correctAnswer) {
 function validateMultipleAnswers(selectedAnswers, correctAnswer) {
   if (!correctAnswer && correctAnswer !== 0) return false;
   if (!selectedAnswers) return false;
-  
+
   // Convert selectedAnswers to string if it's an array
-  const selectedString = Array.isArray(selectedAnswers) 
-    ? selectedAnswers.join('') 
-    : String(selectedAnswers);
-  
+  const selectedString = Array.isArray(selectedAnswers)
+  ? selectedAnswers.join('')
+  : String(selectedAnswers);
+
   // Normalize both for comparison
   const normalizedSelected = normalizeAnswer(selectedString);
   const normalizedCorrect = normalizeAnswer(correctAnswer);
-  
+
   return normalizedSelected === normalizedCorrect;
 }
 
@@ -62,7 +62,7 @@ function validateMultipleAnswers(selectedAnswers, correctAnswer) {
  */
 function formatAnswerForDisplay(answer) {
   if (!answer && answer !== 0) return '';
-  
+
   const normalized = normalizeAnswer(answer);
   return normalized.split('').join(', ');
 }
