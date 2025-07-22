@@ -45,8 +45,8 @@ function validateMultipleAnswers(selectedAnswers, correctAnswer) {
 
   // Convert selectedAnswers to string if it's an array
   const selectedString = Array.isArray(selectedAnswers)
-  ? selectedAnswers.join('')
-  : String(selectedAnswers);
+    ? selectedAnswers.join('')
+    : String(selectedAnswers);
 
   // Normalize both for comparison
   const normalizedSelected = normalizeAnswer(selectedString);

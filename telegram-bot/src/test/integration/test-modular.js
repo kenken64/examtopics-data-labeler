@@ -39,13 +39,13 @@ try {
 // Test services
 console.log('2. Testing services...');
 try {
-  const DatabaseService = require('./src/services/databaseService');
+  require('./src/services/databaseService');
   console.log('   ✅ DatabaseService loaded successfully');
 
-  const QuizService = require('./src/services/quizService');
+  require('./src/services/quizService');
   console.log('   ✅ QuizService loaded successfully');
 
-  const NotificationService = require('./src/services/notificationService');
+  require('./src/services/notificationService');
   console.log('   ✅ NotificationService loaded successfully\n');
 } catch (error) {
   console.error('   ❌ Services failed:', error.message);
@@ -54,10 +54,10 @@ try {
 // Test handlers
 console.log('3. Testing handlers...');
 try {
-  const MessageHandlers = require('./src/handlers/messageHandlers');
+  require('./src/handlers/messageHandlers');
   console.log('   ✅ MessageHandlers loaded successfully');
 
-  const CallbackHandlers = require('./src/handlers/callbackHandlers');
+  require('./src/handlers/callbackHandlers');
   console.log('   ✅ CallbackHandlers loaded successfully\n');
 } catch (error) {
   console.error('   ❌ Handlers failed:', error.message);
@@ -78,11 +78,11 @@ try {
   console.log('   ✅ QuizService instantiated successfully');
 
   const MessageHandlers = require('./src/handlers/messageHandlers');
-  const messageHandlers = new MessageHandlers(databaseService, quizService);
+  new MessageHandlers(databaseService, quizService);
   console.log('   ✅ MessageHandlers instantiated successfully');
 
   const CallbackHandlers = require('./src/handlers/callbackHandlers');
-  const callbackHandlers = new CallbackHandlers(databaseService, quizService, messageHandlers);
+  new CallbackHandlers(databaseService, quizService, new MessageHandlers(databaseService, quizService));
   console.log('   ✅ CallbackHandlers instantiated successfully\n');
 } catch (error) {
   console.error('   ❌ Service instantiation failed:', error.message);

@@ -1,3 +1,6 @@
+// Import CertificationBot class
+const CertificationBot = require('./bot-legacy-full');
+
 // Create and start the bot
 const startBot = async () => {
   console.log('🔧 DEBUG: Starting bot...');
@@ -23,23 +26,23 @@ const gracefulShutdown = async (signal) => {
     if (bot) {
       console.log('Stopping bot...');
       await bot.stop();
-      
+
       console.log('Stopping notification service...');
       if (bot.notificationService) {
         bot.notificationService.stopNotificationPolling();
       }
-      
+
       console.log('Closing database connection...');
       if (bot.mongoClient) {
         await bot.mongoClient.close();
       }
-      
+
       console.log('Closing health server...');
       if (bot.healthServer) {
         bot.healthServer.close();
       }
     }
-    
+
     console.log('Graceful shutdown complete');
     process.exit(0);
   } catch (error) {
@@ -65,4 +68,5 @@ startBot().then(bot => {
   process.exit(1);
 });
 
-module.exports = CertificationBot;
+// Export for potential use as module
+module.exports = { startBot };

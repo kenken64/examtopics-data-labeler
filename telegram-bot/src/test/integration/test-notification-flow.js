@@ -73,14 +73,6 @@ class NotificationTester {
             console.log(`✅ SHOULD SEND: Question ${currentQuestionIndex + 1} to ${telegramPlayers.length} Telegram players`);
 
             // Show what question data would be sent
-            const questionData = {
-              index: currentQuestionIndex,
-              question: currentQuestion.question,
-              options: currentQuestion.options,
-              timeLimit: session.timerDuration || 30,
-              points: 1000
-            };
-
             console.log('📤 Question data to send:', {
               questionNumber: currentQuestionIndex + 1,
               questionText: currentQuestion.question.substring(0, 100) + '...',

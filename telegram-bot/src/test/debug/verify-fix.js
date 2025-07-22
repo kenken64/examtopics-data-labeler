@@ -13,7 +13,6 @@ async function verifyFix() {
   const activeSessions = await db.collection('quizSessions').find({ status: 'active' }).toArray();
   console.log(`\n📊 Active Sessions: ${activeSessions.length}`);
 
-  let fixedCount = 0;
   let readyCount = 0;
 
   for (const session of activeSessions) {

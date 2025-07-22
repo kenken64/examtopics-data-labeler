@@ -37,7 +37,7 @@ class QuizBlitzManualSender {
         -H "Content-Type: application/json" \\
         -d '${JSON.stringify(payload).replace(/'/g, '\\\'')}'`;
 
-      exec(curlCommand, (error, stdout, stderr) => {
+      exec(curlCommand, (error, stdout, _stderr) => {
         if (error) {
           reject(error);
         } else {

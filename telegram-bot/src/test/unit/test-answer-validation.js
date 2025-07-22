@@ -14,8 +14,8 @@ async function testAnswerValidation() {
 
     // 1. Find an active quiz session
     console.log('1. Finding active quiz session...');
-    const activeSession = await db.collection('quizSessions').findOne({ 
-      status: 'active' 
+    const activeSession = await db.collection('quizSessions').findOne({
+      status: 'active'
     });
 
     if (!activeSession) {
@@ -38,8 +38,8 @@ async function testAnswerValidation() {
     console.log(`   - Question Number (1-based): ${questionNumber}`);
 
     // Step 1: Get quiz session with embedded questions
-    const quizSession = await db.collection('quizSessions').findOne({ 
-      quizCode: quizCode.toUpperCase() 
+    const quizSession = await db.collection('quizSessions').findOne({
+      quizCode: quizCode.toUpperCase()
     });
 
     if (!quizSession) {
@@ -57,7 +57,7 @@ async function testAnswerValidation() {
 
     const question = quizSession.questions[questionIndex];
 
-    console.log(`   ✅ Question found:`);
+    console.log('   ✅ Question found:');
     console.log(`      - Question: ${question.question.substring(0, 100)}...`);
     console.log(`      - Correct Answer: ${question.correctAnswer}`);
     console.log(`      - Options available: ${question.options ? 'Yes' : 'No'}`);
@@ -65,7 +65,7 @@ async function testAnswerValidation() {
     // 3. Test different answer validations
     console.log('\n3. Testing answer validation...');
     const testAnswers = ['A', 'B', 'C', 'D'];
-    
+
     for (const testAnswer of testAnswers) {
       const isCorrect = testAnswer === question.correctAnswer;
       console.log(`   - Answer ${testAnswer}: ${isCorrect ? '✅ CORRECT' : '❌ WRONG'}`);
@@ -73,15 +73,15 @@ async function testAnswerValidation() {
 
     // 4. Check if there are telegram players in this quiz
     console.log('\n4. Checking for Telegram players...');
-    const quizRoom = await db.collection('quizRooms').findOne({ 
-      quizCode: quizCode 
+    const quizRoom = await db.collection('quizRooms').findOne({
+      quizCode: quizCode
     });
 
     if (quizRoom && quizRoom.players) {
-      const telegramPlayers = quizRoom.players.filter(p => 
+      const telegramPlayers = quizRoom.players.filter(p =>
         p.id && (String(p.id).length >= 7 || p.source === 'telegram')
       );
-      
+
       console.log(`   ✅ Found ${telegramPlayers.length} Telegram players:`);
       telegramPlayers.forEach(player => {
         console.log(`      - ${player.name} (ID: ${player.id})`);
@@ -95,7 +95,7 @@ async function testAnswerValidation() {
       console.log('   ⚠️ No Telegram players found in this quiz');
     }
 
-    console.log(`\n🎯 Test Summary:`);
+    console.log('\n🎯 Test Summary:');
     console.log(`   - Quiz Code: ${quizCode}`);
     console.log(`   - Questions Available: ${quizSession.questions.length}`);
     console.log(`   - Question Index: ${questionIndex} (0-based)`);
