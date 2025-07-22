@@ -12,6 +12,7 @@ interface ActiveQuiz {
   timerDuration: number;
   totalQuestions: number;
   timerId?: NodeJS.Timeout;
+  questionStartedAt?: number; // Synchronized timestamp for precise timing
 }
 
 class QuizTimerService {
@@ -112,7 +113,7 @@ class QuizTimerService {
       // Update session with current question - use atomic update to prevent race conditions
       const updateData = {
         currentQuestionIndex: currentQuestionIndex,
-        questionStartedAt: new Date(),
+        questionStartedAt: Date.now(), // Use timestamp number, not Date object
         timeRemaining: timerDuration,
         lastNotifiedQuestionIndex: currentQuestionIndex - 1, // Reset Telegram notification tracking
         version: (quizSession.version || 0) + 1
@@ -142,12 +143,17 @@ class QuizTimerService {
       // Publish question started event
       console.log('🔧 DEBUG: [TIMER] Publishing question started event');
       const pubsub = await getQuizPubSub();
+      // Calculate synchronized start time for perfect frontend-backend sync
+      const questionStartedAt = Date.now() + 1000; // Add 1 second buffer for message propagation
+      
       const questionData = {
         questionIndex: currentQuestionIndex,
         question: currentQuestion.question,
         options: currentQuestion.options,
+        correctAnswer: currentQuestion.correctAnswer, // CRITICAL: Include correctAnswer for multiple choice detection
         timeLimit: timerDuration,
-        timeRemaining: timerDuration
+        timeRemaining: timerDuration,
+        questionStartedAt: questionStartedAt // Synchronized timestamp for all systems
       };
 
       console.log('🔧 DEBUG: [TIMER] Question data for PubSub:', {
@@ -160,13 +166,19 @@ class QuizTimerService {
       await pubsub.publishQuestionStarted(quizCode, questionData);
       console.log('🔧 DEBUG: [TIMER] Question started event published successfully');
 
-      // Reset timer
-      activeQuiz.timeRemaining = timerDuration;
-      console.log('🔧 DEBUG: [TIMER] Timer reset to:', timerDuration);
+      // Reduced synchronization delay for better coordination with frontend fallback timer
+      const TIMER_SYNC_DELAY = 500; // 500ms delay for frontend/telegram sync
+      console.log(`⏳ [TIMER] Adding ${TIMER_SYNC_DELAY}ms synchronization delay before starting countdown...`);
+      await new Promise(resolve => setTimeout(resolve, TIMER_SYNC_DELAY));
+
+      // Store synchronized start time for accurate countdown
+      activeQuiz.questionStartedAt = questionStartedAt;
+      activeQuiz.timerDuration = timerDuration;
+      console.log('🔧 DEBUG: [TIMER] Question will start at:', new Date(questionStartedAt).toISOString());
       
-      // Start countdown timer
-      console.log('🔧 DEBUG: [TIMER] Starting countdown timer');
-      this.startCountdown(activeQuiz);
+      // Start synchronized countdown timer
+      console.log('🔧 DEBUG: [TIMER] Starting synchronized countdown timer');
+      this.startSynchronizedCountdown(activeQuiz);
 
       console.log(`📝 Started question ${currentQuestionIndex + 1}/${totalQuestions} for quiz ${quizCode}`);
     } catch (error) {
@@ -196,8 +208,8 @@ class QuizTimerService {
         // Publish timer update every second
         await pubsub.publishTimerUpdate(activeQuiz.quizCode, activeQuiz.timeRemaining);
 
-        // Update database every 5 seconds or when time is almost up
-        if (activeQuiz.timeRemaining % 5 === 0 || activeQuiz.timeRemaining <= 5) {
+        // Update database every 2 seconds or when time is almost up (better SSE synchronization)
+        if (activeQuiz.timeRemaining % 2 === 0 || activeQuiz.timeRemaining <= 5) {
           console.log('🔧 DEBUG: [TIMER] Updating database with time remaining:', activeQuiz.timeRemaining);
           const db = await connectToDatabase();
           await db.collection('quizSessions').updateOne(
@@ -214,6 +226,64 @@ class QuizTimerService {
         }
       } catch (error) {
         console.error(`❌ Timer update failed for quiz ${activeQuiz.quizCode}:`, error);
+      }
+    }, 1000);
+  }
+
+  private startSynchronizedCountdown(activeQuiz: ActiveQuiz): void {
+    // Clear existing timer if any
+    if (activeQuiz.timerId) {
+      clearInterval(activeQuiz.timerId);
+    }
+
+    console.log('🔧 DEBUG: [TIMER] Starting SYNCHRONIZED countdown for quiz:', activeQuiz.quizCode);
+    console.log('🔧 DEBUG: [TIMER] Question starts at:', new Date(activeQuiz.questionStartedAt!).toISOString());
+    console.log('🔧 DEBUG: [TIMER] Timer duration:', activeQuiz.timerDuration, 'seconds');
+
+    activeQuiz.timerId = setInterval(async () => {
+      // Calculate remaining time based on synchronized start time (MUCH MORE ACCURATE)
+      const now = Date.now();
+      const elapsed = Math.max(0, (now - activeQuiz.questionStartedAt!) / 1000);
+      const calculatedTimeRemaining = Math.max(0, activeQuiz.timerDuration - elapsed);
+      
+      // Update with calculated value instead of unreliable decrementing
+      activeQuiz.timeRemaining = Math.ceil(calculatedTimeRemaining);
+
+      // Log timer updates at key intervals
+      if (activeQuiz.timeRemaining % 10 === 0 || activeQuiz.timeRemaining <= 5) {
+        console.log('🔧 DEBUG: [TIMER] ✨ SYNCHRONIZED time remaining for quiz', activeQuiz.quizCode, ':', activeQuiz.timeRemaining);
+        console.log('🔧 DEBUG: [TIMER] ✨ Calculated from elapsed:', elapsed.toFixed(2), 'seconds since', new Date(activeQuiz.questionStartedAt!).toISOString());
+      }
+
+      try {
+        const pubsub = await getQuizPubSub();
+        
+        // Publish timer update every second
+        await pubsub.publishTimerUpdate(activeQuiz.quizCode, activeQuiz.timeRemaining);
+
+        // Update database every 2 seconds or when time is almost up (more frequent for better SSE sync)
+        if (activeQuiz.timeRemaining % 2 === 0 || activeQuiz.timeRemaining <= 5) {
+          console.log('🔧 DEBUG: [TIMER] ✨ Updating database with SYNCHRONIZED time remaining:', activeQuiz.timeRemaining);
+          const db = await connectToDatabase();
+          await db.collection('quizSessions').updateOne(
+            { quizCode: activeQuiz.quizCode },
+            { 
+              $set: { 
+                timeRemaining: activeQuiz.timeRemaining,
+                questionStartedAt: activeQuiz.questionStartedAt // Store sync timestamp
+              } 
+            }
+          );
+        }
+
+        // Time's up!
+        if (activeQuiz.timeRemaining <= 0) {
+          console.log('🔧 DEBUG: [TIMER] ✨ SYNCHRONIZED timer expired for quiz:', activeQuiz.quizCode);
+          clearInterval(activeQuiz.timerId!);
+          await this.endQuestion(activeQuiz);
+        }
+      } catch (error) {
+        console.error(`❌ Synchronized timer update failed for quiz ${activeQuiz.quizCode}:`, error);
       }
     }, 1000);
   }
@@ -352,6 +422,13 @@ class QuizTimerService {
         }
       );
 
+      // Calculate final player scores and update user global scores
+      if (quizSession.players && quizSession.players.length > 0) {
+        for (const player of quizSession.players) {
+          await this.updatePlayerGlobalScore(quizSession, player);
+        }
+      }
+
       // Calculate player scores (if players are tracked)
       const finalResults = {
         totalQuestions: quizSession.questions.length,
@@ -458,6 +535,120 @@ class QuizTimerService {
     
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
+    }
+  }
+
+  // Update player's global scoring fields after quiz completion
+  private async updatePlayerGlobalScore(quizSession: any, player: any): Promise<void> {
+    try {
+      const db = await connectToDatabase();
+      
+      // Calculate player's score from answers
+      let correctAnswers = 0;
+      const totalQuestions = quizSession.questions.length;
+      
+      // Count correct answers for this player
+      for (let qIndex = 0; qIndex < totalQuestions; qIndex++) {
+        const playerAnswer = quizSession.playerAnswers?.[qIndex]?.[player.id];
+        if (playerAnswer?.isCorrect) {
+          correctAnswers++;
+        }
+      }
+      
+      const percentage = Math.round((correctAnswers / totalQuestions) * 100);
+      const pointsEarned = correctAnswers * 10; // 10 points per correct answer
+      const endTime = new Date();
+      
+      // Try to find user by player data (enhanced for Telegram users)
+      let userQuery;
+      if (player.source === 'telegram') {
+        // For Telegram users, try multiple matching strategies
+        const possibleUsernames = [
+          player.id,           // Now contains username
+          player.username,     // Explicit username field 
+          player.name,         // Display name
+          player.telegramId?.toString() // Fallback to Telegram ID
+        ].filter(Boolean);
+        
+        userQuery = { 
+          $or: possibleUsernames.map(u => ({ username: u }))
+        };
+        console.log(`🔍 Searching for Telegram user with possible usernames:`, possibleUsernames);
+      } else {
+        // For web players, try to find by display name or skip if not linked
+        userQuery = { 
+          $or: [
+            { username: player.name },
+            { firstName: player.name },
+            { lastName: player.name }
+          ]
+        };
+      }
+      
+      const currentUser = await db.collection('users').findOne(userQuery);
+      
+      if (!currentUser) {
+        console.log(`❌ User not found for player ${player.name} (ID: ${player.id}, source: ${player.source}), skipping score update`);
+        console.log(`🔍 Search query was:`, JSON.stringify(userQuery, null, 2));
+        return;
+      }
+      
+      console.log(`✅ Found user match: ${currentUser.username} for player ${player.name}`);
+      
+      // Calculate new average score
+      const currentQuizCount = currentUser.quizzesTaken || 0;
+      const currentAverage = currentUser.averageScore || 0;
+      const newAverageScore = currentQuizCount === 0 ? 
+        percentage : 
+        Math.round(((currentAverage * currentQuizCount) + percentage) / (currentQuizCount + 1));
+      
+      // Check for streak logic
+      const lastQuizDate = currentUser.lastQuizDate;
+      const daysSinceLastQuiz = lastQuizDate ? 
+        Math.floor((endTime.getTime() - new Date(lastQuizDate).getTime()) / (1000 * 60 * 60 * 24)) : null;
+      
+      let streakUpdate = {};
+      if (percentage >= 70) { // Quiz passed
+        if (daysSinceLastQuiz === null || daysSinceLastQuiz <= 1) {
+          // Continue or start streak
+          const newStreak = (currentUser.currentStreak || 0) + 1;
+          streakUpdate = {
+            currentStreak: newStreak,
+            bestStreak: Math.max(newStreak, currentUser.bestStreak || 0)
+          };
+        } else {
+          // Reset streak
+          streakUpdate = { currentStreak: 1 };
+        }
+      } else {
+        // Failed quiz, reset streak
+        streakUpdate = { currentStreak: 0 };
+      }
+
+      // Update user's global scoring fields
+      await db.collection('users').updateOne(
+        userQuery,
+        {
+          $inc: {
+            totalPoints: pointsEarned,
+            quizzesTaken: 1,
+            correctAnswers: correctAnswers,
+            totalQuestions: totalQuestions
+          },
+          $max: {
+            bestScore: percentage
+          },
+          $set: {
+            lastQuizDate: endTime,
+            averageScore: newAverageScore,
+            ...streakUpdate
+          }
+        }
+      );
+      
+      console.log(`✅ Updated global scores for player ${player.name}: ${correctAnswers}/${totalQuestions} (${percentage}%)`);
+    } catch (error) {
+      console.error(`❌ Error updating global scores for player ${player.name}:`, error);
     }
   }
 }

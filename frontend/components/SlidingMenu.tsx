@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   Sheet,
@@ -25,13 +25,56 @@ import {
   Settings,
   CreditCard,
   KeySquare,
-  Zap
+  Zap,
+  Trophy,
+  Building
 } from "lucide-react";
 
 const SlidingMenu = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<{
+    firstName: string;
+    lastName: string;
+    role: string;
+    profilePhotoUrl?: string;
+  } | null>(null);
   const router = useRouter();
   const pathname = usePathname();
+
+  // Load user profile data when component mounts
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      try {
+        console.log('🔄 SlidingMenu: Loading user profile...');
+        const response = await fetch('/api/profile', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ SlidingMenu: Profile loaded:', data);
+          
+          setUserProfile({
+            firstName: data.firstName || 'User',
+            lastName: data.lastName || '',
+            role: data.role || 'user',
+            profilePhotoUrl: data.profilePhotoUrl
+          });
+        } else {
+          console.error('❌ SlidingMenu: Failed to load profile:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ SlidingMenu: Error loading profile:', error);
+      }
+    };
+
+    loadUserProfile();
+  }, []);
 
   const closeMenu = () => {
     setIsOpen(false);
@@ -73,8 +116,18 @@ const SlidingMenu = () => {
         <SheetHeader className="p-6 pb-4 flex-shrink-0">
           <div className="flex items-center space-x-3">
             <Avatar className="h-12 w-12 ring-2 ring-primary/10">
+              {userProfile?.profilePhotoUrl ? (
+                <AvatarImage 
+                  src={userProfile.profilePhotoUrl} 
+                  alt="Profile photo"
+                  className="object-cover"
+                />
+              ) : null}
               <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
-                <User className="h-6 w-6" />
+                {userProfile 
+                  ? `${userProfile.firstName.charAt(0)}${userProfile.lastName.charAt(0) || ''}`.toUpperCase()
+                  : <User className="h-6 w-6" />
+                }
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 text-left">
@@ -82,10 +135,13 @@ const SlidingMenu = () => {
                 Welcome back!
               </SheetTitle>
               <SheetDescription className="text-sm text-muted-foreground">
-                AWS Certification Helper
+                {userProfile 
+                  ? `${userProfile.firstName}${userProfile.lastName ? ` ${userProfile.lastName}` : ''}`
+                  : 'Loading...'
+                }
               </SheetDescription>
               <Badge variant="outline" className="mt-1 text-xs">
-                Admin User
+                {userProfile ? (userProfile.role === 'admin' ? 'Admin User' : 'User') : 'Loading...'}
               </Badge>
             </div>
           </div>
@@ -111,6 +167,15 @@ const SlidingMenu = () => {
             >
               <Library className="mr-3 h-5 w-5" />
               Exam Q Labeler
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start h-12 px-4 text-left font-normal hover:bg-accent hover:text-accent-foreground"
+              onClick={() => handleNavigation('/companies')}
+            >
+              <Building className="mr-3 h-5 w-5" />
+              Companies
             </Button>
             
             <Button 
@@ -147,6 +212,15 @@ const SlidingMenu = () => {
             >
               <Zap className="mr-3 h-5 w-5" />
               QuizBlitz
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start h-12 px-4 text-left font-normal hover:bg-accent hover:text-accent-foreground"
+              onClick={() => handleNavigation('/leaderboard')}
+            >
+              <Trophy className="mr-3 h-5 w-5" />
+              Leaderboard
             </Button>
 
             <Button 
@@ -189,7 +263,7 @@ const SlidingMenu = () => {
             <Button 
               variant="ghost"
               className="w-full justify-start h-12 px-4 text-left font-normal hover:bg-accent hover:text-accent-foreground"
-              onClick={() => handleNavigation('#')}
+              onClick={() => handleNavigation('/profile')}
             >
               <User className="mr-3 h-5 w-5" />
               Profile Settings

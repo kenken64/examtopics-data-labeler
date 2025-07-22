@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(curl:*)",
+      "Bash(powershell:*)",
+      "Bash(rm:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)",
+      "Bash(mv:*)",
+      "Bash(git add:*)",
+      "Bash(timeout:*)",
+      "Bash(ls:*)"
+    ],
+    "deny": []
+  }
+}

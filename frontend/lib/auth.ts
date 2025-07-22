@@ -21,6 +21,7 @@ export interface AuthenticatedRequest extends NextRequest {
   user?: {
     userId: string;
     username: string;
+    role?: string; // Optional for backward compatibility during transition
   };
 }
 
@@ -59,13 +60,26 @@ export function withAuth<T extends any[]>(
   handler: (req: AuthenticatedRequest, ...args: T) => Promise<NextResponse>
 ) {
   return async (req: NextRequest, ...args: T) => {
+    console.log('🔐 withAuth: Starting authentication check...');
+    console.log('🔐 withAuth: Request URL:', req.url);
+    console.log('🔐 withAuth: Request method:', req.method);
+    
     // Extract JWT token from HTTP-only cookie
     // This cookie is set during login and should be automatically sent by the browser
     const token = req.cookies.get('token')?.value;
+    
+    console.log('🍪 withAuth: Cookie present:', !!token);
+    if (token) {
+      console.log('🍪 withAuth: Token length:', token.length);
+      console.log('🍪 withAuth: Token preview:', token.substring(0, 20) + '...');
+    } else {
+      console.log('🍪 withAuth: Available cookies:', Object.keys(req.cookies.getAll()));
+    }
 
     // Return 401 Unauthorized if no token is present
     // This forces the user to authenticate before accessing protected resources
     if (!token) {
+      console.log('❌ withAuth: No token found, returning 401');
       return NextResponse.json(
         { error: 'Authentication required. Please log in.' }, 
         { status: 401 }
@@ -73,14 +87,25 @@ export function withAuth<T extends any[]>(
     }
 
     try {
+      console.log('🔍 withAuth: Verifying JWT token...');
       // Verify the JWT token using the application's secret key
       // This ensures the token is valid, not expired, and not tampered with
       const decoded = jwt.verify(token, JWT_SECRET) as {
         userId: string;     // MongoDB ObjectId as string
         username: string;   // User's username for display purposes
+        role?: string;      // User's role for authorization (optional for backward compatibility)
         iat: number;       // Token issued at timestamp
         exp: number;       // Token expiration timestamp
       };
+
+      console.log('✅ withAuth: JWT token verified successfully');
+      console.log('👤 withAuth: Decoded user info:', {
+        userId: decoded.userId,
+        username: decoded.username,
+        role: decoded.role,
+        tokenIssuedAt: new Date(decoded.iat * 1000).toISOString(),
+        tokenExpiresAt: new Date(decoded.exp * 1000).toISOString()
+      });
 
       // Create an enhanced request object with user information
       // This allows route handlers to access authenticated user data directly
@@ -88,28 +113,35 @@ export function withAuth<T extends any[]>(
       authenticatedReq.user = {
         userId: decoded.userId,
         username: decoded.username,
+        role: decoded.role || 'user', // Default to 'user' if role not present in token
       };
 
+      console.log('🚀 withAuth: Calling protected route handler...');
       // Call the original route handler with the authenticated request
       // At this point, the request is guaranteed to have valid user information
       return handler(authenticatedReq, ...args);
       
     } catch (error) {
       // Handle specific JWT verification errors with appropriate responses
+      console.log('❌ withAuth: JWT verification failed');
+      console.error('❌ withAuth: Error details:', error);
       
       if (error instanceof jwt.TokenExpiredError) {
+        console.log('⏰ withAuth: Token expired');
         // Token has passed its expiration time - user needs to log in again
         return NextResponse.json(
           { error: 'Token expired. Please log in again.' }, 
           { status: 401 }
         );
       } else if (error instanceof jwt.JsonWebTokenError) {
+        console.log('🚫 withAuth: Invalid JWT token');
         // Token is malformed, has invalid signature, or other JWT-specific issues
         return NextResponse.json(
           { error: 'Invalid token. Please log in again.' }, 
           { status: 401 }
         );
       } else {
+        console.log('💥 withAuth: Unexpected error during verification');
         // Unexpected error during verification - log for debugging but don't expose details
         console.error('JWT verification error:', error);
         return NextResponse.json(

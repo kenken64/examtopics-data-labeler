@@ -56,12 +56,18 @@ export async function GET(
 
           // If quiz is still waiting, return waiting state
           if (quizRoom.status === 'waiting') {
+            // For waiting state, no one has answered yet
+            const playersWithStatus = (quizRoom.players || []).map((player: any) => ({
+              ...player,
+              hasAnswered: false
+            }));
+
             const updateData = {
               type: 'session_update',
               data: {
                 success: true,
                 status: 'waiting',
-                players: quizRoom.players || [],
+                players: playersWithStatus,
                 playerCount: quizRoom.players?.length || 0,
                 currentQuestion: null,
                 currentQuestionIndex: -1,
@@ -81,12 +87,17 @@ export async function GET(
 
           if (!quizSession) {
             // Quiz room exists but session hasn't started yet
+            const playersWithStatus = (quizRoom.players || []).map((player: any) => ({
+              ...player,
+              hasAnswered: false
+            }));
+
             const updateData = {
               type: 'session_update',
               data: {
                 success: true,
                 status: quizRoom.status,
-                players: quizRoom.players || [],
+                players: playersWithStatus,
                 playerCount: quizRoom.players?.length || 0,
                 currentQuestion: null,
                 currentQuestionIndex: -1,
@@ -101,22 +112,49 @@ export async function GET(
 
           // Get current question from active session
           const currentQuestion = quizSession.questions?.[quizSession.currentQuestionIndex] || null;
+          
+          // Use database timeRemaining as authoritative source for RxJS observable synchronization
+          // The backend timer service is the single source of truth
+          const calculatedTimeRemaining = quizSession.timeRemaining;
+
+          // Ensure questionStartedAt is a valid timestamp
+          let questionStartedAt = quizSession.questionStartedAt;
+          if (questionStartedAt && typeof questionStartedAt === 'object') {
+            // Convert Date object to timestamp if needed
+            questionStartedAt = new Date(questionStartedAt).getTime();
+          } else if (questionStartedAt && typeof questionStartedAt === 'string') {
+            // Convert string to timestamp if needed
+            questionStartedAt = new Date(questionStartedAt).getTime();
+          }
+
+          // Calculate hasAnswered status for each player for the current question
+          const currentQuestionIndex = quizSession.currentQuestionIndex;
+          const playersWithStatus = (quizRoom.players || []).map((player: any) => {
+            const hasAnswered = quizSession.playerAnswers?.[player.id]?.[`q${currentQuestionIndex}`] ? true : false;
+            return {
+              ...player,
+              hasAnswered
+            };
+          });
 
           const updateData = {
             type: 'session_update',
             data: {
               success: true,
               status: quizSession.status,
-              players: quizRoom.players || [],
+              players: playersWithStatus,
               playerCount: quizRoom.players?.length || 0,
               currentQuestion,
               currentQuestionIndex: quizSession.currentQuestionIndex,
               totalQuestions: quizSession.questions?.length || 0,
               timerDuration: quizSession.timerDuration,
+              timeRemaining: calculatedTimeRemaining, // Use synchronized time
+              questionStartedAt: questionStartedAt, // Ensure it's a valid timestamp
               isQuizCompleted: quizSession.status === 'completed',
-              startedAt: quizSession.startedAt,            timestamp: new Date().toISOString()
-          }
-        };
+              startedAt: quizSession.startedAt,
+              timestamp: new Date().toISOString()
+            }
+          };
 
         if (!isControllerClosed) {
           controller.enqueue(`data: ${JSON.stringify(updateData)}\n\n`);
@@ -134,10 +172,8 @@ export async function GET(
       }
     };
 
-    // Send updates every 3 seconds (same as original polling)
-    intervalId = setInterval(sendUpdate, 3000);
-
-    // Send initial update
+        // Send updates every 2 seconds for better timer sync (matches backend update frequency)
+        intervalId = setInterval(sendUpdate, 2000);    // Send initial update
     sendUpdate();
 
     // Cleanup function

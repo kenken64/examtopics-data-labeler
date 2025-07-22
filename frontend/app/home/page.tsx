@@ -19,7 +19,9 @@ import {
   BookmarkCheck,
   AlertTriangle,
   CreditCard,
-  RefreshCw
+  RefreshCw,
+  User,
+  Settings
 } from "lucide-react";
 
 // Chart components
@@ -190,6 +192,10 @@ export default function Dashboard() {
               <Clock className="mr-1 h-3 w-3" />
               Updated {new Date(data.lastUpdated).toLocaleTimeString()}
             </Badge>
+            <Button size="sm" variant="outline" onClick={() => router.push('/profile')}>
+              <User className="mr-2 h-4 w-4" />
+              Profile
+            </Button>
             <Button size="sm" variant="outline" onClick={refreshData}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh

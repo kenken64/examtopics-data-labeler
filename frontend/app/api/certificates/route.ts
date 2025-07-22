@@ -67,6 +67,11 @@ const certificateSchema = new mongoose.Schema({
     trim: true,        // Remove leading/trailing whitespace
     unique: true,      // Prevent duplicate certificate codes
   },
+  companyId: {
+    type: String,
+    trim: true,        // Company ID reference
+    default: '',       // Default to empty string if not provided
+  },
   logoUrl: {
     type: String,
     trim: true,        // Remove leading/trailing whitespace
@@ -81,6 +86,11 @@ const certificateSchema = new mongoose.Schema({
     type: String,
     trim: true,        // Remove leading/trailing whitespace
     default: '',       // Default to empty string if not provided
+  },
+  userId: {
+    type: String,
+    required: true,    // Track who created this certificate
+    index: true,       // Index for efficient ownership queries
   },
 }, {
   timestamps: true,    // Automatically add createdAt and updatedAt fields
@@ -115,17 +125,47 @@ const Certificate = mongoose.models.Certificate || mongoose.model('Certificate',
  * @param request - Authenticated HTTP request
  * @returns JSON response with certificates array or error message
  */
-export const GET = withAuth(async (_request: AuthenticatedRequest) => {
+export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
     // Establish database connection
-    await connectDB();
+    const db = await connectDB();
     
-    // Fetch all certificates, sorted by creation date (newest first)
-    // This ordering ensures recently added certificates appear at the top
-    const certificates = await Certificate.find({}).sort({ createdAt: -1 });
+    // Implement role-based data filtering
+    let query = {};
+    if (request.user?.role === 'admin') {
+      // Admins can see all certificates
+      query = {};
+    } else {
+      // Regular users only see their own certificates
+      query = { userId: request.user?.userId };
+    }
     
-    // Return the certificates array as JSON response
-    return NextResponse.json(certificates);
+    // Fetch certificates based on user role, sorted by creation date (newest first)
+    const certificates = await Certificate.find(query).sort({ createdAt: -1 });
+    
+    // Populate company names for certificates that have companyId
+    const certificatesWithCompany = await Promise.all(
+      certificates.map(async (cert) => {
+        const certObj = cert.toObject();
+        if (certObj.companyId) {
+          try {
+            const company = await db.collection('companies').findOne({ 
+              _id: new mongoose.Types.ObjectId(certObj.companyId) 
+            });
+            certObj.companyName = company?.name || '';
+          } catch (error) {
+            console.warn(`Failed to fetch company for certificate ${certObj._id}:`, error);
+            certObj.companyName = '';
+          }
+        } else {
+          certObj.companyName = '';
+        }
+        return certObj;
+      })
+    );
+    
+    // Return the certificates array with company names
+    return NextResponse.json(certificatesWithCompany);
   } catch (error) {
     // Log error for debugging and monitoring purposes
     console.error('Error fetching certificates:', error);
@@ -172,7 +212,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     
     // Parse JSON request body containing certificate data
     const body = await request.json();
-    const { name, code, logoUrl, pdfFileUrl, pdfFileName } = body;
+    const { name, code, companyId, logoUrl, pdfFileUrl, pdfFileName } = body;
 
     // Validate required fields
     // Both name and code are essential for certificate identification
@@ -197,9 +237,11 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     const certificate = new Certificate({
       name: name.trim(),                    // Remove whitespace from name
       code: code.trim().toUpperCase(),      // Normalize code to uppercase
+      companyId: companyId?.trim() || '',   // Optional company ID reference
       logoUrl: logoUrl?.trim() || '',       // Optional field with fallback
       pdfFileUrl: pdfFileUrl?.trim() || '', // Optional field with fallback
       pdfFileName: pdfFileName?.trim() || '',// Optional field with fallback
+      userId: request.user?.userId,         // Associate certificate with creator
     });
 
     // Save certificate to database

@@ -8,6 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast, Toaster } from "sonner";
 import { 
   Trash2, 
   Edit, 
@@ -21,15 +29,24 @@ interface Certificate {
   _id: string;
   name: string;
   code: string;
+  companyId?: string;
+  companyName?: string;
   logoUrl?: string;
   pdfFileUrl?: string;
   pdfFileName?: string;
   createdAt: string;
 }
 
+interface Company {
+  _id: string;
+  name: string;
+  code: string;
+}
+
 export default function Certificates() {
   const router = useRouter();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -39,6 +56,7 @@ export default function Certificates() {
   const [newCertificate, setNewCertificate] = useState({
     name: '',
     code: '',
+    companyId: '',
     logoUrl: '',
     pdfFileUrl: '',
     pdfFileName: ''
@@ -46,6 +64,7 @@ export default function Certificates() {
   const [editCertificate, setEditCertificate] = useState({
     name: '',
     code: '',
+    companyId: '',
     logoUrl: '',
     pdfFileUrl: '',
     pdfFileName: ''
@@ -53,6 +72,7 @@ export default function Certificates() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [editLogoPreview, setEditLogoPreview] = useState<string | null>(null);
+  const [selectedCompanyFilter, setSelectedCompanyFilter] = useState<string>('all');
 
   useEffect(() => {
     const verifyAuth = async () => {
@@ -63,7 +83,28 @@ export default function Certificates() {
     };
     verifyAuth();
     fetchCertificates();
+    fetchCompanies();
   }, [router]);
+
+  const fetchCompanies = async () => {
+    try {
+      const response = await fetch('/api/companies');
+      if (response.ok) {
+        const data = await response.json();
+        setCompanies(data.companies || []);
+      } else {
+        console.error('Failed to fetch companies');
+      }
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+    }
+  };
+
+  // Filter certificates based on selected company
+  const filteredCertificates = certificates.filter(certificate => {
+    if (selectedCompanyFilter === 'all') return true;
+    return certificate.companyId === selectedCompanyFilter;
+  });
 
   const fetchCertificates = async () => {
     setLoading(true);
@@ -115,16 +156,19 @@ export default function Certificates() {
       });
 
       if (response.ok) {
-        setNewCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
+        setNewCertificate({ name: '', code: '', companyId: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
         setIsAddingNew(false);
         fetchCertificates();
         setError(null);
+        toast.success('Certificate created successfully!');
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to create certificate');
+        toast.error('Failed to create certificate');
       }
     } catch (err) {
       setError('Error creating certificate');
+      toast.error('Error creating certificate');
     }
   };
 
@@ -145,15 +189,18 @@ export default function Certificates() {
 
       if (response.ok) {
         setEditingId(null);
-        setEditCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
+        setEditCertificate({ name: '', code: '', companyId: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
         fetchCertificates();
         setError(null);
+        toast.success('Certificate updated successfully!');
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to update certificate');
+        toast.error('Failed to update certificate');
       }
     } catch (err) {
       setError('Error updating certificate');
+      toast.error('Error updating certificate');
     }
   };
 
@@ -170,12 +217,15 @@ export default function Certificates() {
       if (response.ok) {
         fetchCertificates();
         setError(null);
+        toast.success('Certificate deleted successfully!');
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to delete certificate');
+        toast.error('Failed to delete certificate');
       }
     } catch (err) {
       setError('Error deleting certificate');
+      toast.error('Error deleting certificate');
     }
   };
 
@@ -184,6 +234,7 @@ export default function Certificates() {
     setEditCertificate({
       name: certificate.name,
       code: certificate.code,
+      companyId: certificate.companyId || '',
       logoUrl: certificate.logoUrl || '',
       pdfFileUrl: certificate.pdfFileUrl || '',
       pdfFileName: certificate.pdfFileName || ''
@@ -192,12 +243,12 @@ export default function Certificates() {
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
+    setEditCertificate({ name: '', code: '', companyId: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
   };
 
   const cancelAdd = () => {
     setIsAddingNew(false);
-    setNewCertificate({ name: '', code: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
+    setNewCertificate({ name: '', code: '', companyId: '', logoUrl: '', pdfFileUrl: '', pdfFileName: '' });
   };
 
   // File upload function
@@ -221,7 +272,7 @@ export default function Certificates() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/upload/google-drive', {
+      const response = await fetch('/api/upload/files', {
         method: 'POST',
         body: formData,
       });
@@ -240,6 +291,9 @@ export default function Certificates() {
           setNewCertificate(prev => ({ ...prev, ...updateData }));
         }
 
+        // Show success toast notification
+        toast.success(`PDF "${file.name}" uploaded successfully!`);
+
         // Show a message if this was a mock upload
         if (result.mock) {
           console.log('File uploaded in mock mode - configure Google Drive credentials for real uploads');
@@ -248,10 +302,12 @@ export default function Certificates() {
         return result;
       } else {
         setError(result.error || 'Failed to upload file');
+        toast.error('Failed to upload PDF file');
         return null;
       }
     } catch (err) {
       setError('Error uploading file');
+      toast.error('Error uploading PDF file');
       return null;
     } finally {
       setUploadingFile(false);
@@ -282,11 +338,41 @@ export default function Certificates() {
           </div>
         )}
 
+        {/* Company Filter */}
+        <div className="bg-white border rounded-lg p-4 mb-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <Label htmlFor="company-filter" className="text-sm font-medium whitespace-nowrap">
+              Filter by Company:
+            </Label>
+            <Select
+              value={selectedCompanyFilter}
+              onValueChange={(value) => setSelectedCompanyFilter(value)}
+            >
+              <SelectTrigger className="w-full sm:w-64">
+                <SelectValue placeholder="Select company filter" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Companies</SelectItem>
+                {companies.map((company) => (
+                  <SelectItem key={company._id} value={company._id}>
+                    {company.name} ({company.code})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedCompanyFilter !== 'all' && (
+              <div className="text-sm text-muted-foreground">
+                Showing {filteredCertificates.length} of {certificates.length} certificates
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Add New Certificate Form */}
         {isAddingNew && (
           <div className="bg-white border rounded-lg p-6 mb-6 shadow-sm">
             <h3 className="text-lg font-semibold mb-4">Add New Certificate</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <Label htmlFor="new-name">Certificate Name</Label>
                 <Input
@@ -306,6 +392,24 @@ export default function Certificates() {
                   value={newCertificate.code}
                   onChange={(e) => setNewCertificate(prev => ({ ...prev, code: e.target.value }))}
                 />
+              </div>
+              <div>
+                <Label htmlFor="new-company">Company</Label>
+                <Select
+                  value={newCertificate.companyId || ""}
+                  onValueChange={(value) => setNewCertificate(prev => ({ ...prev, companyId: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((company) => (
+                      <SelectItem key={company._id} value={company._id}>
+                        {company.name} ({company.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="mb-4">
@@ -340,9 +444,13 @@ export default function Certificates() {
               )}
             </div>
             <div className="flex space-x-2">
-              <Button onClick={handleCreate} className="flex items-center space-x-2">
+              <Button 
+                onClick={handleCreate} 
+                disabled={uploadingFile}
+                className="flex items-center space-x-2"
+              >
                 <Save className="h-4 w-4" />
-                <span>Save</span>
+                <span>{uploadingFile ? 'Uploading...' : 'Save'}</span>
               </Button>
               <Button variant="outline" onClick={cancelAdd} className="flex items-center space-x-2">
                 <X className="h-4 w-4" />
@@ -355,27 +463,36 @@ export default function Certificates() {
         {/* Certificates List */}
         <div className="bg-white border rounded-lg shadow-sm">
           <div className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Certificates ({certificates.length})</h2>
+            <h2 className="text-xl font-semibold mb-4">Certificates ({filteredCertificates.length})</h2>
             <Separator className="mb-4" />
             
             {loading ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">Loading certificates...</p>
               </div>
-            ) : certificates.length === 0 ? (
+            ) : filteredCertificates.length === 0 ? (
               <div className="text-center py-8">
                 <Award className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No certificates found</p>
-                <p className="text-sm text-muted-foreground mt-2">Add your first certificate to get started</p>
+                {selectedCompanyFilter === 'all' ? (
+                  <>
+                    <p className="text-muted-foreground">No certificates found</p>
+                    <p className="text-sm text-muted-foreground mt-2">Add your first certificate to get started</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-muted-foreground">No certificates found for selected company</p>
+                    <p className="text-sm text-muted-foreground mt-2">Try selecting a different company or clear the filter</p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
-                {certificates.map((certificate) => (
+                {filteredCertificates.map((certificate) => (
                   <div key={certificate._id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
                     {editingId === certificate._id ? (
                       // Edit mode
                       <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
                             <Label htmlFor={`edit-name-${certificate._id}`}>Certificate Name</Label>
                             <Input
@@ -393,6 +510,24 @@ export default function Certificates() {
                               value={editCertificate.code}
                               onChange={(e) => setEditCertificate(prev => ({ ...prev, code: e.target.value }))}
                             />
+                          </div>
+                          <div>
+                            <Label htmlFor={`edit-company-${certificate._id}`}>Company</Label>
+                            <Select
+                              value={editCertificate.companyId || ""}
+                              onValueChange={(value) => setEditCertificate(prev => ({ ...prev, companyId: value }))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select company" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {companies.map((company) => (
+                                  <SelectItem key={company._id} value={company._id}>
+                                    {company.name} ({company.code})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
                         <div>
@@ -469,7 +604,14 @@ export default function Certificates() {
                             )}
                             <div className="text-center sm:text-left">
                               <h3 className="text-lg font-medium mb-2">{certificate.name}</h3>
-                              <Badge variant="outline">{certificate.code}</Badge>
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
+                                <Badge variant="outline">{certificate.code}</Badge>
+                                {certificate.companyName && (
+                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                                    {certificate.companyName}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div className="space-y-1">
@@ -482,6 +624,7 @@ export default function Certificates() {
                                   href={certificate.pdfFileUrl} 
                                   target="_blank" 
                                   rel="noopener noreferrer"
+                                  download={certificate.pdfFileName}
                                   className="text-blue-600 hover:underline"
                                 >
                                   {certificate.pdfFileName}
@@ -499,10 +642,11 @@ export default function Certificates() {
                           <Button 
                             size="sm" 
                             onClick={() => handleUpdate(certificate._id)}
+                            disabled={uploadingFile}
                             className="flex items-center space-x-1"
                           >
                             <Save className="h-4 w-4" />
-                            <span>Save</span>
+                            <span>{uploadingFile ? 'Uploading...' : 'Save'}</span>
                           </Button>
                           <Button 
                             size="sm" 
@@ -544,6 +688,7 @@ export default function Certificates() {
           </div>
         </div>
       </div>
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

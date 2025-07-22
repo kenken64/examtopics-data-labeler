@@ -143,6 +143,94 @@ const userSchema = new mongoose.Schema({
     unique: true,     // Username must be unique across the system
   },
   passkeys: [passkeySchema],  // Array of registered passkey credentials
+  role: {
+    type: String,
+    default: 'user',  // Default role for all users
+    enum: ['user', 'admin'], // Allowed role values
+  },
+  // Profile fields
+  firstName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  lastName: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  contactNumber: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  dateOfBirth: {
+    type: Date,
+  },
+  location: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  // Profile photo fields
+  profilePhotoId: {
+    type: String, // Google Drive file ID
+    default: null,
+  },
+  profilePhotoUrl: {
+    type: String, // Direct Google Drive URL for display
+    default: null,
+  },
+  // Global scoring fields
+  totalPoints: {
+    type: Number,
+    default: 0,
+  },
+  quizzesTaken: {
+    type: Number,
+    default: 0,
+  },
+  correctAnswers: {
+    type: Number,
+    default: 0,
+  },
+  totalQuestions: {
+    type: Number,
+    default: 0,
+  },
+  averageScore: {
+    type: Number,
+    default: 0,
+  },
+  bestScore: {
+    type: Number,
+    default: 0,
+  },
+  currentStreak: {
+    type: Number,
+    default: 0,
+  },
+  bestStreak: {
+    type: Number,
+    default: 0,
+  },
+  lastQuizDate: {
+    type: Date,
+    default: null,
+  },
+  achievements: [{
+    name: String,
+    description: String,
+    unlockedAt: Date,
+    icon: String,
+  }],
+  rank: {
+    type: String,
+    default: 'Beginner',
+    enum: ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Expert', 'Master'],
+  },
+}, {
+  timestamps: true // Add createdAt and updatedAt timestamps
 });
 
 /**

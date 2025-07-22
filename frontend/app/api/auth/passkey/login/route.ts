@@ -55,8 +55,12 @@ export async function POST(req: NextRequest) {
     passkey.counter += 1;
     await user.save();
 
-    // Generate JWT
-    const token = jwt.sign({ userId: user._id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+    // Generate JWT with role field for authorization
+    const token = jwt.sign({ 
+      userId: user._id, 
+      username: user.username,
+      role: user.role || 'user' // Include role in JWT, default to 'user' for backward compatibility
+    }, JWT_SECRET, { expiresIn: '1h' });
 
     console.log('🔑 JWT generated successfully');
     console.log('🔑 JWT_SECRET being used:', JWT_SECRET === 'your_super_secret_jwt_key' ? 'Default fallback' : 'Environment variable');

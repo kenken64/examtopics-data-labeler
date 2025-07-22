@@ -23,24 +23,33 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       let pollingInterval: NodeJS.Timeout | null = null;
       let isControllerClosed = false;
       
-      const cleanup = () => {
+      const cleanup = async () => {
         isRunning = false;
-        if (changeStream) {
+        
+        // Close change stream first
+        if (changeStream && !changeStream.closed) {
           try {
-            changeStream.close();
-          } catch (error) {
-            console.log('Change stream already closed');
+            await changeStream.close();
+            changeStream = null;
+          } catch (error: any) {
+            console.log('Change stream already closed or closing:', error.message);
+            changeStream = null;
           }
         }
+        
+        // Clear polling interval
         if (pollingInterval) {
           clearInterval(pollingInterval);
+          pollingInterval = null;
         }
-        if (!isClientClosed) {
+        
+        // Close MongoDB client
+        if (!isClientClosed && client) {
           try {
-            client.close();
+            await client.close();
             isClientClosed = true;
           } catch (error) {
-            console.log('Client already closed');
+            console.log('Client already closed or closing:', error.message);
           }
         }
       };
@@ -74,9 +83,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           }
         });
 
-        changeStream.on('error', (error: any) => {
+        changeStream.on('error', async (error: any) => {
           console.error('Change stream error:', error);
-          cleanup();
+          await cleanup();
           closeController();
         });
 
@@ -121,18 +130,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         pollEvents();
       }
 
-      // Return cleanup function
-      return cleanup;
+      // Return cleanup function for when the stream is aborted
+      return async () => {
+        await cleanup();
+      };
     },
 
-    cancel() {
+    async cancel() {
       // This is called when the stream is cancelled
-      if (!isClientClosed) {
+      console.log('🔌 Stream cancelled by client');
+      if (!isClientClosed && client) {
         try {
-          client.close();
+          await client.close();
           isClientClosed = true;
         } catch (error) {
-          console.log('Client already closed in cancel');
+          console.log('Client already closed in cancel:', error.message);
         }
       }
     }

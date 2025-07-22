@@ -6,10 +6,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
+import { z } from 'zod';
+
+// Email validation schema
+const emailSchema = z.object({
+  email: z.string().email('Please enter a valid email address')
+});
 
 export default function LoginForm() {
   const [username, setUsername] = useState('');
   const [message, setMessage] = useState('');
+  const [emailError, setEmailError] = useState('');
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -19,6 +26,14 @@ export default function LoginForm() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage('');
+    setEmailError('');
+
+    // Validate email with Zod
+    const validation = emailSchema.safeParse({ email: username });
+    if (!validation.success) {
+      setEmailError(validation.error.errors[0].message);
+      return;
+    }
 
     try {
       setMessage('Starting authentication...');
@@ -103,20 +118,27 @@ export default function LoginForm() {
           </div>
 
           {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-6" noValidate>
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
                 Email
               </label>
               <Input
                 id="username"
-                type="text"
+                type="email"
                 placeholder="capy@scrapybara.com"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setEmailError(''); // Clear error on change
+                }}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent ${
+                  emailError ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                }`}
               />
+              {emailError && (
+                <p className="mt-1 text-sm text-red-500">{emailError}</p>
+              )}
             </div>
 
             <Button

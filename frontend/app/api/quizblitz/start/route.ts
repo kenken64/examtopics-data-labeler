@@ -186,6 +186,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
         questionIndex: 0,
         question: questions[0].question,
         options: questions[0].options,
+        correctAnswer: questions[0].correctAnswer, // CRITICAL: Include correctAnswer for multiple choice detection
         timeLimit: timerDuration
       };
       
