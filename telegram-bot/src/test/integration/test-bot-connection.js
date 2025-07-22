@@ -24,7 +24,6 @@ async function testBotConnection() {
 
       // Test quiz room query (without actual data)
       console.log('3. Testing quiz room query format...');
-      const testQuery = { code: 'TEST123' };
       console.log('✅ Query format test passed');
 
     } else {

@@ -1,6 +1,6 @@
 // Comparison: Polling vs Change Streams for Quiz State Monitoring
 
-const { MongoClient } = require('mongodb');
+// const { MongoClient } = require('mongodb'); // Not used in this comparison example
 require('dotenv').config();
 
 console.log('📊 TELEGRAM BOT QUIZ MONITORING COMPARISON\n');

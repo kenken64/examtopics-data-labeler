@@ -1,4 +1,5 @@
-const { Bot } = require('grammy');
+// const { Bot } = require('grammy'); // Not used in this test
+// const { MongoClient } = require('mongodb'); // Not used in this test
 require('dotenv').config();
 
 // Import the modular services

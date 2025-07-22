@@ -48,7 +48,7 @@ class TelegramQuizBotPolling {
     if (!this.isConnected) return;
 
     console.log(`🔧 DEBUG: [TELEGRAM] Polling check - Active quizzes: ${this.activeQuizzes.size}`);
-    
+
     try {
       // Check all active quizzes for updates
       for (const [quizCode, quiz] of this.activeQuizzes.entries()) {
@@ -63,14 +63,14 @@ class TelegramQuizBotPolling {
   async checkQuizSession(quizCode, quiz) {
     try {
       console.log(`🔧 DEBUG: [TELEGRAM] Checking quiz session for ${quizCode}`);
-      
+
       // Get current quiz session state
       const quizSession = await this.db.collection('quizSessions').findOne({
         quizCode: quizCode.toUpperCase(),
         status: 'active'
       });
 
-      console.log(`🔧 DEBUG: [TELEGRAM] Quiz session query result:`, {
+      console.log('🔧 DEBUG: [TELEGRAM] Quiz session query result:', {
         found: !!quizSession,
         status: quizSession?.status,
         currentQuestionIndex: quizSession?.currentQuestionIndex,
@@ -104,8 +104,8 @@ class TelegramQuizBotPolling {
         // TEMPORARY: Disable strict validation to test question reception
         // Allow any question index change for debugging
         const isValidTransition = true; // Always allow transitions for testing
-        
-        console.log(`🔧 DEBUG: [TELEGRAM] Validation disabled - allowing all transitions for testing`);
+
+        console.log('🔧 DEBUG: [TELEGRAM] Validation disabled - allowing all transitions for testing');
 
         if (isValidTransition) {
           console.log(`✅ Quiz ${quizCode} - Question transition allowed (${quiz.lastQuestionIndex} -> ${currentQuestionIndex})`);
@@ -146,7 +146,7 @@ class TelegramQuizBotPolling {
 
   async handleQuestionStarted(quizCode, questionData) {
     console.log(`🤖 [TELEGRAM] Question ${questionData.questionIndex + 1} started for quiz ${quizCode}`);
-    console.log(`🔧 DEBUG: [TELEGRAM] Question data received:`, {
+    console.log('🔧 DEBUG: [TELEGRAM] Question data received:', {
       questionIndex: questionData.questionIndex,
       hasQuestion: !!questionData.question,
       hasOptions: !!questionData.options,
@@ -171,7 +171,7 @@ class TelegramQuizBotPolling {
       console.log(`🔧 DEBUG: [TELEGRAM] Sending question to user ${chatId}`);
       await this.sendQuestionToUser(chatId, questionData, quizCode);
     }
-    
+
     console.log(`✅ [TELEGRAM] Question sent to all participants in quiz ${quizCode}`);
   }
 
@@ -183,19 +183,19 @@ class TelegramQuizBotPolling {
     // Send timer updates at specific intervals to all participants
     for (const chatId of quiz.chatIds) {
       const hasAnswered = quiz.playersAnswered && quiz.playersAnswered.has(chatId);
-      
+
       if (hasAnswered) {
         // Different message for users who have already answered
-        await this.bot.sendMessage(chatId, 
+        await this.bot.sendMessage(chatId,
           `⏰ ${timeRemaining} seconds remaining...\n` +
-          `✅ <b>You have answered!</b> Waiting for others...`,
+          '✅ <b>You have answered!</b> Waiting for others...',
           { parse_mode: 'HTML' }
         );
       } else {
         // Urgent message for users who haven't answered yet
-        await this.bot.sendMessage(chatId, 
+        await this.bot.sendMessage(chatId,
           `🚨 <b>${timeRemaining} seconds remaining!</b>\n` +
-          `⚡ Please submit your answer now!`,
+          '⚡ Please submit your answer now!',
           { parse_mode: 'HTML' }
         );
       }
@@ -237,36 +237,36 @@ class TelegramQuizBotPolling {
     if (!questionText || !options) {
       console.log(`🔧 DEBUG: [TELEGRAM] Missing question data, sending test question to ${chatId}`);
       try {
-        await this.bot.sendMessage(chatId, 
+        await this.bot.sendMessage(chatId,
           `🧪 TEST QUESTION ${questionIndex + 1}\n\n` +
-          `This is a test question to verify Telegram bot connectivity.\n\n` +
-          `Raw data received:\n` +
+          'This is a test question to verify Telegram bot connectivity.\n\n' +
+          'Raw data received:\n' +
           `- Question: ${questionText || 'MISSING'}\n` +
           `- Options: ${JSON.stringify(options) || 'MISSING'}\n` +
           `- Time limit: ${timeLimit || 'MISSING'}`
         );
         console.log(`✅ [TELEGRAM] Test question sent to user ${chatId}`);
       } catch (error) {
-        console.error(`❌ [TELEGRAM] Failed to send test question:`, error);
+        console.error('❌ [TELEGRAM] Failed to send test question:', error);
       }
       return;
     }
 
     // TEMPORARY: Disable enhanced validation for testing
-    console.log(`🔧 DEBUG: [TELEGRAM] Validation disabled, proceeding with question send`);
-    
+    console.log('🔧 DEBUG: [TELEGRAM] Validation disabled, proceeding with question send');
+
     // Force create options if missing for testing
     let finalOptions = options;
     if (!options || Object.keys(options).length === 0) {
-      console.log(`🔧 DEBUG: [TELEGRAM] Creating test options for missing data`);
+      console.log('🔧 DEBUG: [TELEGRAM] Creating test options for missing data');
       finalOptions = {
         'A': 'Test Option A',
-        'B': 'Test Option B', 
+        'B': 'Test Option B',
         'C': 'Test Option C',
         'D': 'Test Option D'
       };
     }
-    
+
     let finalQuestionText = questionText;
     if (!questionText) {
       finalQuestionText = `Test Question ${questionIndex + 1} - Data verification`;
@@ -283,7 +283,7 @@ class TelegramQuizBotPolling {
     const questionMessage = `📝 Question ${questionIndex + 1}\n\n` +
                            `${finalQuestionText}\n\n` +
                            `⏱️ Time Limit: ${timeLimit || 30} seconds\n\n` +
-                           `🎯 Select your answer:`;
+                           '🎯 Select your answer:';
 
     try {
       await this.bot.sendMessage(chatId, questionMessage, {
@@ -293,17 +293,17 @@ class TelegramQuizBotPolling {
         parse_mode: 'HTML'
       });
       console.log(`✅ Question ${questionIndex + 1} sent to user ${chatId} with ${optionButtons.length} options`);
-      console.log(`🔧 DEBUG: Question options sent:`, Object.keys(options).map(k => `${k}: ${options[k]}`));
+      console.log('🔧 DEBUG: Question options sent:', Object.keys(options).map(k => `${k}: ${options[k]}`));
     } catch (error) {
       console.error(`❌ Failed to send question to user ${chatId}:`, error);
       // Send fallback message without buttons
       try {
         const fallbackMessage = `📝 Question ${questionIndex + 1}\n\n${questionText}\n\n` +
           Object.entries(options).map(([letter, text]) => `${letter}. ${text}`).join('\n') +
-          `\n\n⚠️ Please type your answer (A, B, C, D, or E)`;
+          '\n\n⚠️ Please type your answer (A, B, C, D, or E)';
         await this.bot.sendMessage(chatId, fallbackMessage);
       } catch (fallbackError) {
-        console.error(`❌ Fallback message also failed:`, fallbackError);
+        console.error('❌ Fallback message also failed:', fallbackError);
       }
     }
   }
@@ -365,7 +365,7 @@ class TelegramQuizBotPolling {
         await this.bot.sendMessage(chatId, `✅ Successfully joined quiz ${quizCode}!\nWaiting for questions...`);
 
         // If there's a current question, send it
-        console.log(`🔧 DEBUG: User joined - Quiz state:`, {
+        console.log('🔧 DEBUG: User joined - Quiz state:', {
           currentQuestionIndex: quizSession.currentQuestionIndex,
           questionsLength: quizSession.questions?.length,
           timeRemaining: quizSession.timeRemaining,
@@ -381,7 +381,7 @@ class TelegramQuizBotPolling {
             timeLimit: quizSession.timerDuration
           };
 
-          console.log(`🔧 DEBUG: Sending current question to new user:`, {
+          console.log('🔧 DEBUG: Sending current question to new user:', {
             questionIndex: questionData.questionIndex,
             hasQuestion: !!currentQuestion.question,
             hasOptions: !!currentQuestion.options,
@@ -390,11 +390,11 @@ class TelegramQuizBotPolling {
 
           await this.sendQuestionToUser(chatId, questionData, quizCode);
         } else {
-          console.log(`🔧 DEBUG: No current question to send to new user - waiting for quiz to start or next question`);
+          console.log('🔧 DEBUG: No current question to send to new user - waiting for quiz to start or next question');
         }
 
         console.log(`🤖 [TELEGRAM] User ${playerName} joined quiz ${quizCode}`);
-        console.log(`🔧 DEBUG: [TELEGRAM] Active quizzes after join:`, Array.from(this.activeQuizzes.keys()));
+        console.log('🔧 DEBUG: [TELEGRAM] Active quizzes after join:', Array.from(this.activeQuizzes.keys()));
         console.log(`🔧 DEBUG: [TELEGRAM] Quiz ${quizCode} now has ${quiz.chatIds.size} participants`);
       } catch (error) {
         console.error('❌ Error joining quiz:', error);
@@ -492,9 +492,9 @@ class TelegramQuizBotPolling {
             });
 
             // Send waiting message to user
-            await this.bot.sendMessage(chatId, 
-              `⏳ Please wait for other players to answer...\n` +
-              `📊 The results will be shown when the timer expires or all players have answered.`,
+            await this.bot.sendMessage(chatId,
+              '⏳ Please wait for other players to answer...\n' +
+              '📊 The results will be shown when the timer expires or all players have answered.',
               { parse_mode: 'HTML' }
             );
 

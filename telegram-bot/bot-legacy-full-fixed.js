@@ -1,4 +1,4 @@
-const { Bot, InlineKeyboard } = require('grammy');
+const { Bot } = require('grammy');
 const { MongoClient, ObjectId } = require('mongodb');
 const http = require('http');
 const NotificationService = require('./src/services/notificationService');
@@ -14,100 +14,14 @@ console.log('🔧 DEBUG: - MONGODB_URI:', process.env.MONGODB_URI ? 'SET' : 'NOT
 console.log('🔧 DEBUG: - MONGODB_DB_NAME:', process.env.MONGODB_DB_NAME || 'NOT SET');
 console.log('🔧 DEBUG: ====================================================');
 
-/**
- * Utility functions for handling multiple-choice questions with multiple correct answers
- */
+// Utility functions for handling multiple-choice questions with multiple correct answers
+// Note: These functions are defined but not used in this legacy implementation
 
-/**
- * Normalizes answer format to consistent format without spaces
- * @param {string|number|null|undefined} answer - Answer in various formats like "B C", "BC", "A B C"
- * @returns {string} Normalized answer like "BC", "ABC"
- */
-function normalizeAnswer(answer) {
-  // Handle non-string inputs
-  if (!answer && answer !== 0) return '';
-
-  // Convert to string if it's a number
-  const answerStr = String(answer);
-
-  // Remove spaces and convert to uppercase
-  const normalized = answerStr.replace(/\s+/g, '').toUpperCase();
-
-  // Sort letters alphabetically for consistent comparison
-  return normalized.split('').sort().join('');
-}
-
-/**
- * Checks if a question has multiple correct answers
- * @param {string|number|null|undefined} correctAnswer - The correct answer string
- * @returns {boolean} True if multiple answers are required
- */
-function isMultipleAnswerQuestion(correctAnswer) {
-  if (!correctAnswer && correctAnswer !== 0) return false;
-
-  const normalized = normalizeAnswer(correctAnswer);
-  return normalized.length > 1;
-}
-
-/**
- * Validates if selected answers match the correct answer(s)
- * @param {string[]|string|null|undefined} selectedAnswers - Array of selected answer letters or string of answers
- * @param {string|number|null|undefined} correctAnswer - The correct answer string
- * @returns {boolean} True if the selection is correct
- */
-function validateMultipleAnswers(selectedAnswers, correctAnswer) {
-  if (!correctAnswer && correctAnswer !== 0) return false;
-  if (!selectedAnswers) return false;
-
-  // Convert selectedAnswers to string if it's an array
-  const selectedString = Array.isArray(selectedAnswers)
-    ? selectedAnswers.join('')
-    : String(selectedAnswers);
-
-  // Normalize both for comparison
-  const normalizedSelected = normalizeAnswer(selectedString);
-  const normalizedCorrect = normalizeAnswer(correctAnswer);
-
-  return normalizedSelected === normalizedCorrect;
-}
-
-/**
- * Formats answer for display (adds spaces between letters)
- * @param {string|number|null|undefined} answer - Answer string like "BC"
- * @returns {string} Formatted string like "B, C"
- */
-function formatAnswerForDisplay(answer) {
-  if (!answer && answer !== 0) return '';
-
-  const normalized = normalizeAnswer(answer);
-  return normalized.split('').join(', ');
-}
-
-/**
- * Wraps text to specified width for better Telegram display
- * @param {string} text - Text to wrap
- * @param {number} width - Maximum characters per line
- * @returns {string} Wrapped text
- */
-function wrapText(text, width = 50) {
-  if (!text || text.length <= width) return text;
-
-  const words = text.split(' ');
-  let lines = [];
-  let currentLine = '';
-
-  for (const word of words) {
-    if (currentLine.length + word.length + 1 <= width) {
-      currentLine += (currentLine ? ' ' : '') + word;
-    } else {
-      if (currentLine) lines.push(currentLine);
-      currentLine = word;
-    }
-  }
-
-  if (currentLine) lines.push(currentLine);
-  return lines.join('\n   '); // Indent continuation lines
-}
+// function normalizeAnswer(answer) { /* implementation commented out */ }
+// function isMultipleAnswerQuestion(correctAnswer) { /* implementation commented out */ }
+// function validateMultipleAnswers(selectedAnswers, correctAnswer) { /* implementation commented out */ }
+// function formatAnswerForDisplay(answer) { /* implementation commented out */ }
+// function wrapText(text, width = 50) { /* implementation commented out */ }
 
 class CertificationBot {
   constructor() {
@@ -630,23 +544,23 @@ class CertificationBot {
     await ctx.reply('🔧 Certificate selection feature coming soon...');
   }
 
-  async handleCertificateSelection(ctx, certificateId) {
+  async handleCertificateSelection(ctx, _certificateId) {
     await ctx.reply('🔧 Certificate selection feature coming soon...');
   }
 
-  async handleAccessCodeSubmission(ctx, accessCode) {
+  async handleAccessCodeSubmission(ctx, _accessCode) {
     await ctx.reply('🔧 Access code validation feature coming soon...');
   }
 
-  async handleQuizCodeSubmission(ctx, quizCode) {
+  async handleQuizCodeSubmission(ctx, _quizCode) {
     await ctx.reply('🔧 Quiz code handling feature coming soon...');
   }
 
-  async handlePlayerNameSubmission(ctx, playerName) {
+  async handlePlayerNameSubmission(ctx, _playerName) {
     await ctx.reply('🔧 Player name handling feature coming soon...');
   }
 
-  async handleQuizAnswer(ctx, selectedAnswer) {
+  async handleQuizAnswer(ctx, _selectedAnswer) {
     await ctx.reply('🔧 Quiz answer handling feature coming soon...');
   }
 
@@ -666,7 +580,7 @@ class CertificationBot {
     await ctx.reply('🔧 Command menu feature coming soon...');
   }
 
-  async handleMenuAction(ctx, action) {
+  async handleMenuAction(ctx, _action) {
     await ctx.reply('🔧 Menu action feature coming soon...');
   }
 
@@ -690,7 +604,7 @@ class CertificationBot {
     await ctx.reply('🔧 QuizBlitz feature coming soon...');
   }
 
-  async handleQuizBlitzAnswer(ctx, selectedAnswer, quizCode) {
+  async handleQuizBlitzAnswer(ctx, _selectedAnswer, _quizCode) {
     await ctx.reply('🔧 QuizBlitz answer feature coming soon...');
   }
 
@@ -790,23 +704,23 @@ const gracefulShutdown = async (signal) => {
     if (bot) {
       console.log('Stopping bot...');
       await bot.stop();
-      
+
       console.log('Stopping notification service...');
       if (bot.notificationService) {
         bot.notificationService.stopNotificationPolling();
       }
-      
+
       console.log('Closing database connection...');
       if (bot.mongoClient) {
         await bot.mongoClient.close();
       }
-      
+
       console.log('Closing health server...');
       if (bot.healthServer) {
         bot.healthServer.close();
       }
     }
-    
+
     console.log('Graceful shutdown complete');
     process.exit(0);
   } catch (error) {
