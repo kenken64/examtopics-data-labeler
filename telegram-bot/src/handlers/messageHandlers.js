@@ -20,7 +20,7 @@ class MessageHandlers {
     '• /start - Start a new quiz\n' +
     '• /help - Show detailed help guide\n' +
     '• /menu - Show interactive command menu\n' +
-    '• /bookmark <number> - Save a question for later\n' +
+    '• /bookmark [number] - Save a question for later\n' +
     '• /bookmarks - View your saved bookmarks\n' +
     '• /revision - Review questions you answered incorrectly for current access code\n\n' +
     '💡 Type /menu for an interactive command menu or /help for detailed instructions!\n\n' +
@@ -291,7 +291,7 @@ class MessageHandlers {
     }
   }
 
-  async showCurrentQuestion(ctx, userSessions, userSelections = new Map()) {
+  async showCurrentQuestion(ctx, userSessions, userSelections = {}) {
     const userId = ctx.from.id;
     const session = userSessions.get(userId);
 
@@ -315,13 +315,13 @@ class MessageHandlers {
     }
 
     // Clear any previous selections for this question
-    if (!userSelections.has(userId)) {
-      userSelections.set(userId, []);
+    if (!userSelections[userId]) {
+      userSelections[userId] = [];
     } else {
-      userSelections.set(userId, []);
+      userSelections[userId] = [];
     }
 
-    const currentUserSelections = userSelections.get(userId) || [];
+    const currentUserSelections = userSelections[userId] || [];
     const questionText = this.quizService.formatQuestionText(
       currentQuestion,
       questionNumber,
@@ -399,7 +399,7 @@ class MessageHandlers {
 
       if (currentBookmarks.length === 0) {
         await ctx.reply(
-          '📑 No bookmarks found for current access code. Use /bookmark <number> to save questions.'
+          '📑 No bookmarks found for current access code. Use /bookmark [number] to save questions.'
         );
         return;
       }
@@ -410,12 +410,56 @@ class MessageHandlers {
         message += `🔖 Question ${bookmark.questionNumber}\n`;
       });
 
-      message += '\n💡 Use /bookmark <number> to add more bookmarks!';
+      message += '\n💡 Use /bookmark [number] to add more bookmarks!';
 
       await ctx.reply(message, { parse_mode: 'HTML' });
     } catch (error) {
       console.error('Error fetching bookmarks:', error);
       await ctx.reply('❌ Error fetching bookmarks. Please try again.');
+    }
+  }
+
+  async handleRevision(ctx, userSessions) {
+    try {
+      const userId = ctx.from.id;
+      const session = userSessions.get(userId);
+
+      if (!session) {
+        await ctx.reply(
+          '📖 No active quiz session found.\n\n' +
+          'Please start a quiz first using /start to review wrong answers.'
+        );
+        return;
+      }
+
+      if (!session.wrongAnswers || session.wrongAnswers.length === 0) {
+        await ctx.reply(
+          '🎉 Great job! No wrong answers to review.\n\n' +
+          'You haven\'t answered any questions incorrectly in your current quiz session. Keep up the excellent work!'
+        );
+        return;
+      }
+
+      let message = `📖 <b>Revision: Wrong Answers (${session.wrongAnswers.length})</b>\n\n`;
+      message += 'Here are the questions you answered incorrectly:\n\n';
+
+      session.wrongAnswers.forEach((wrongAnswer, _index) => {
+        message += `❌ <b>Question ${wrongAnswer.questionNumber}</b>\n`;
+        message += `   Your answer: <code>${wrongAnswer.userAnswer}</code>\n`;
+        message += `   Correct answer: <code>${wrongAnswer.correctAnswer}</code>\n\n`;
+      });
+
+      message += '💡 <b>Tips for improvement:</b>\n';
+      message += '• Review the explanation for each wrong answer\n';
+      message += '• Take your time reading questions carefully\n';
+      message += '• Consider the context of each question\n';
+      message += '• Practice more questions in similar topics\n\n';
+      message += '📚 Continue your quiz to practice more questions!';
+
+      await ctx.reply(message, { parse_mode: 'HTML' });
+    } catch (error) {
+      console.error('Error handling revision:', error);
+      await ctx.reply('❌ Error loading revision data. Please try again.');
     }
   }
 
