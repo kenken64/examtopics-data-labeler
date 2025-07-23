@@ -157,6 +157,11 @@ class CertificationBot {
       await this.messageHandlers.handleBookmarks(ctx, this.userSessions);
     });
 
+    // Revision command - review wrong answers
+    this.bot.command('revision', async (ctx) => {
+      await this.messageHandlers.handleRevision(ctx, this.userSessions);
+    });
+
     // Handle company selection
     this.bot.callbackQuery(/^company_(.+)$/, async (ctx) => {
       const companyId = ctx.match[1];
