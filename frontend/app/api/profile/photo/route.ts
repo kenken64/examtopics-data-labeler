@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { User } from '@/lib/db';
 import { connectToDatabase } from '@/lib/mongodb';
-const CloudinaryService = require('@/lib/cloudinary-service');
+import CloudinaryService from '@/lib/cloudinary-service';
 
 /**
  * POST /api/profile/photo - Upload Profile Photo

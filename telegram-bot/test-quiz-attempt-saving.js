@@ -56,9 +56,9 @@ async function testQuizAttemptSaving() {
       },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
           attempts: { $sum: 1 },
-          averageScore: { $avg: "$score" }
+          averageScore: { $avg: '$score' }
         }
       },
       { $sort: { _id: 1 } }
@@ -78,7 +78,6 @@ async function testQuizAttemptSaving() {
     console.log('   ✅ Test data cleaned up');
 
     await client.close();
-    
     console.log('\n🎉 Quiz Attempt Saving Test SUCCESSFUL!');
     console.log('\n📋 Summary:');
     console.log('   ✅ MongoDB connection working');

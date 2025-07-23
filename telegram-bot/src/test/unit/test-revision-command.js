@@ -64,7 +64,7 @@ async function testRevisionCommand() {
         correctAnswer: 'A'
       },
       {
-        questionId: 'question_2_id', 
+        questionId: 'question_2_id',
         questionNumber: 4,
         userAnswer: 'C,D',
         correctAnswer: 'A,B'

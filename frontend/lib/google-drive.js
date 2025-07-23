@@ -5,9 +5,9 @@
  * on Google Drive with proper authentication and unique file naming.
  */
 
-const { google } = require('googleapis');
-const fs = require('fs').promises;
-const path = require('path');
+import { google } from 'googleapis';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 class GoogleDriveService {
   constructor() {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
-const CloudinaryService = require('@/lib/cloudinary-service');
+import CloudinaryService from '@/lib/cloudinary-service';
 
 export const POST = withAuth(async (request: AuthenticatedRequest) => {
   try {

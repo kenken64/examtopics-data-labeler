@@ -5,7 +5,7 @@
  * as an alternative to Google Drive that doesn't have service account limitations.
  */
 
-const { v2: cloudinary } = require('cloudinary');
+import { v2 as cloudinary } from 'cloudinary';
 
 class CloudinaryService {
   constructor() {
@@ -260,7 +260,7 @@ class CloudinaryService {
   /**
    * Generate download URL for PDF files with attachment header
    */
-  generatePDFDownloadUrl(publicId, filename = null) {
+  async generatePDFDownloadUrl(publicId, filename = null) {
     if (!this.initialized) {
       this.initialize();
     }
@@ -302,8 +302,8 @@ class CloudinaryService {
       console.log('🔐 Signature string:', signatureString);
       
       // Generate SHA-1 hash signature
-      const crypto = require('crypto');
-      const signature = crypto.createHash('sha1').update(signatureString).digest('hex');
+      const { createHash } = await import('crypto');
+      const signature = createHash('sha1').update(signatureString).digest('hex');
       
       console.log('🔑 Generated signature:', signature);
 
