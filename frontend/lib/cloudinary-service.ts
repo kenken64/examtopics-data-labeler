@@ -8,6 +8,8 @@
 import { v2 as cloudinary } from 'cloudinary';
 
 class CloudinaryService {
+  private initialized: boolean;
+
   constructor() {
     this.initialized = false;
   }
@@ -42,7 +44,7 @@ class CloudinaryService {
   /**
    * Upload PDF file to Cloudinary
    */
-  async uploadPDF(fileBuffer, filename, userId = 'anonymous') {
+  async uploadPDF(fileBuffer: Buffer, filename: string, userId = 'anonymous') {
     if (!this.initialized) {
       this.initialize();
     }
@@ -71,7 +73,7 @@ class CloudinaryService {
           type: 'upload', // Specify upload type
           tags: ['certificate', 'pdf', `user_${userId}`]
         });
-      } catch (uploadError) {
+      } catch (uploadError: any) {
         console.log('⚠️ Signed upload failed, trying unsigned upload...', uploadError.message);
         
         // Fallback to unsigned upload if account is marked as untrusted
@@ -113,7 +115,7 @@ class CloudinaryService {
   /**
    * Upload profile photo to Cloudinary
    */
-  async uploadProfilePhoto(fileBuffer, filename, userId, mimeType) {
+  async uploadProfilePhoto(fileBuffer: Buffer, filename: string, userId: string, mimeType: string) {
     if (!this.initialized) {
       this.initialize();
     }
@@ -146,7 +148,7 @@ class CloudinaryService {
             { quality: 'auto', fetch_format: 'auto' } // Optimize quality and format
           ]
         });
-      } catch (uploadError) {
+      } catch (uploadError: any) {
         console.log('⚠️ Signed upload failed for profile photo, trying unsigned upload...', uploadError.message);
         
         // Fallback to unsigned upload if account is marked as untrusted
@@ -188,7 +190,7 @@ class CloudinaryService {
   /**
    * Delete existing profile photo for a user
    */
-  async deleteExistingProfilePhoto(userId) {
+  async deleteExistingProfilePhoto(userId: string) {
     try {
       const publicId = `profile-photos/profile_${userId}`;
       
@@ -204,7 +206,7 @@ class CloudinaryService {
   /**
    * Delete a file by public ID
    */
-  async deleteFile(publicId, resourceType = 'image') {
+  async deleteFile(publicId: string, resourceType: 'image' | 'raw' = 'image') {
     if (!this.initialized) {
       this.initialize();
     }
@@ -222,7 +224,7 @@ class CloudinaryService {
   /**
    * Get profile photo URL for a user
    */
-  getProfilePhotoUrl(userId, options = {}) {
+  getProfilePhotoUrl(userId: string, options: any = {}) {
     if (!this.initialized) {
       this.initialize();
     }
@@ -244,7 +246,7 @@ class CloudinaryService {
   /**
    * Generate secure URL for PDF access
    */
-  generateSecurePDFUrl(publicId, options = {}) {
+  generateSecurePDFUrl(publicId: string, options: any = {}) {
     if (!this.initialized) {
       this.initialize();
     }
@@ -260,7 +262,7 @@ class CloudinaryService {
   /**
    * Generate download URL for PDF files with attachment header
    */
-  async generatePDFDownloadUrl(publicId, filename = null) {
+  async generatePDFDownloadUrl(publicId: string, filename: string | null = null) {
     if (!this.initialized) {
       this.initialize();
     }
@@ -278,7 +280,7 @@ class CloudinaryService {
       const timestamp = Math.floor(Date.now() / 1000);
       
       // Create parameters for signature (excluding api_key and signature itself)
-      const signatureParams = {
+      const signatureParams: Record<string, string> = {
         attachment: 'true',
         public_id: publicId,
         timestamp: timestamp.toString(),
@@ -309,7 +311,7 @@ class CloudinaryService {
 
       // Create final URL parameters
       const urlParams = new URLSearchParams({
-        api_key: apiKey,
+        api_key: apiKey!,
         attachment: 'true',
         public_id: publicId,
         timestamp: timestamp.toString(),
@@ -345,4 +347,4 @@ class CloudinaryService {
   }
 }
 
-module.exports = CloudinaryService;
+export default CloudinaryService;

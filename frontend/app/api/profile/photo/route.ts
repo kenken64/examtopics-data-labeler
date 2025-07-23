@@ -138,7 +138,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
 /**
  * DELETE /api/profile/photo - Delete Profile Photo
  * 
- * Removes the user's profile photo from Google Drive and updates the database.
+ * Removes the user's profile photo from Cloudinary and updates the database.
  * 
  * @param request - Authenticated HTTP request
  * @returns JSON response confirming deletion or error message

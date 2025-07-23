@@ -140,7 +140,7 @@ MONGODB_URI=mongodb://...
 - **Security Note**: Current challenge storage is development-only, needs production session management
 
 ### PDF Data Labeler
-- **Upload**: PDF files via Google Drive integration
+- **Upload**: PDF files via Cloudinary integration
 - **View**: Page-by-page PDF rendering with pdfjs
 - **Convert**: PDF to Markdown using OpenAI Vision API
 - **Label**: Mark questions, answers, explanations for quiz creation
