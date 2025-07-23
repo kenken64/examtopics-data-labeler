@@ -446,7 +446,7 @@ export default function ProfilePage() {
                   {photoPreview || profile.profilePhotoUrl ? (
                     <div className="w-20 h-20 rounded-full border-2 border-gray-300 overflow-hidden">
                       <Image
-                        src={photoPreview || profile.profilePhotoUrl}
+                        src={photoPreview || profile.profilePhotoUrl!}
                         alt="Profile"
                         width={80}
                         height={80}
