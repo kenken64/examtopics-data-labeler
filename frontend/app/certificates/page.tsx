@@ -296,7 +296,7 @@ export default function Certificates() {
 
         // Show a message if this was a mock upload
         if (result.mock) {
-          console.log('File uploaded in mock mode - configure Google Drive credentials for real uploads');
+          console.log('File uploaded in mock mode - configure Cloudinary credentials for real uploads');
         }
 
         return result;

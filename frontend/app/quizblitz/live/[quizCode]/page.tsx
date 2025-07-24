@@ -774,7 +774,7 @@ function LiveQuizPageContent() {
                   {timeRemaining === 0 && !hasAnswered ? (
                     <div className="inline-flex items-center gap-2 px-8 py-4 bg-yellow-100 text-yellow-800 rounded-lg text-lg">
                       <Timer className="h-6 w-6" />
-                      Time's up! Waiting for next question...
+                      Time&apos;s up! Waiting for next question...
                     </div>
                   ) : !hasAnswered ? (
                     <div className="inline-flex items-center gap-2 px-8 py-4 bg-blue-100 text-blue-800 rounded-lg text-lg">

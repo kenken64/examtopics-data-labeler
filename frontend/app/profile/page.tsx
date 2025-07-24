@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { z } from 'zod';
@@ -444,9 +445,11 @@ export default function ProfilePage() {
                 <div className="relative">
                   {photoPreview || profile.profilePhotoUrl ? (
                     <div className="w-20 h-20 rounded-full border-2 border-gray-300 overflow-hidden">
-                      <img
-                        src={photoPreview || profile.profilePhotoUrl}
+                      <Image
+                        src={photoPreview || profile.profilePhotoUrl!}
                         alt="Profile"
+                        width={80}
+                        height={80}
                         className="w-full h-full object-cover"
                       />
                     </div>
@@ -745,7 +748,7 @@ export default function ProfilePage() {
                     className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg p-4"
                   >
                     <div className="text-sm text-gray-500 text-center">
-                      No cities found for "{locationSearch}"
+                      No cities found for &quot;{locationSearch}&quot;
                     </div>
                   </div>
                 )}

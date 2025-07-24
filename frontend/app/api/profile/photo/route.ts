@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { User } from '@/lib/db';
 import { connectToDatabase } from '@/lib/mongodb';
-const CloudinaryService = require('@/lib/cloudinary-service');
+import CloudinaryService from '@/lib/cloudinary-service';
 
 /**
  * POST /api/profile/photo - Upload Profile Photo
@@ -138,7 +138,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
 /**
  * DELETE /api/profile/photo - Delete Profile Photo
  * 
- * Removes the user's profile photo from Google Drive and updates the database.
+ * Removes the user's profile photo from Cloudinary and updates the database.
  * 
  * @param request - Authenticated HTTP request
  * @returns JSON response confirming deletion or error message

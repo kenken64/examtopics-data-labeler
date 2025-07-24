@@ -174,11 +174,11 @@ const userSchema = new mongoose.Schema({
   },
   // Profile photo fields
   profilePhotoId: {
-    type: String, // Google Drive file ID
+    type: String, // Cloudinary file ID
     default: null,
   },
   profilePhotoUrl: {
-    type: String, // Direct Google Drive URL for display
+    type: String, // Direct Cloudinary URL for display
     default: null,
   },
   // Global scoring fields

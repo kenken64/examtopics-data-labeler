@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             await client.close();
             isClientClosed = true;
           } catch (error) {
-            console.log('Client already closed or closing:', error.message);
+            console.log('Client already closed or closing:', (error as Error).message);
           }
         }
       };
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           await client.close();
           isClientClosed = true;
         } catch (error) {
-          console.log('Client already closed in cancel:', error.message);
+          console.log('Client already closed in cancel:', (error as Error).message);
         }
       }
     }
