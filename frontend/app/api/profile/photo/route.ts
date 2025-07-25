@@ -70,10 +70,16 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
     
     if (CloudinaryService.hasCredentials()) {
       const cloudinaryService = new CloudinaryService();
+      if (!request.user?.userId) {
+        return NextResponse.json(
+          { error: 'User ID is required' },
+          { status: 400 }
+        );
+      }
       const uploadResult = await cloudinaryService.uploadProfilePhoto(
         fileBuffer,
         photoFile.name,
-        request.user?.userId,
+        request.user.userId,
         photoFile.type
       );
 
@@ -169,7 +175,13 @@ export const DELETE = withAuth(async (request: AuthenticatedRequest) => {
       console.log('☁️ DELETE /api/profile/photo: Deleting from Cloudinary...');
       try {
         const cloudinaryService = new CloudinaryService();
-        await cloudinaryService.deleteExistingProfilePhoto(request.user?.userId);
+        if (!request.user?.userId) {
+          return NextResponse.json(
+            { error: 'User ID is required' },
+            { status: 400 }
+          );
+        }
+        await cloudinaryService.deleteExistingProfilePhoto(request.user.userId);
         console.log('✅ DELETE /api/profile/photo: Photo deleted from Cloudinary');
       } catch (error) {
         console.error('⚠️ DELETE /api/profile/photo: Failed to delete from Cloudinary:', error);
