@@ -2,6 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 // JSON Web Token library for secure authentication token handling
 import jwt from 'jsonwebtoken';
+// MongoDB connection for fetching user details
+import { connectToDatabase } from './mongodb';
+import { ObjectId } from 'mongodb';
 
 // JWT secret key for signing and verifying tokens
 // Falls back to default if environment variable is not set (development only)
@@ -13,15 +16,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
  * 
  * @interface AuthenticatedRequest
  * @extends NextRequest
- * @property {Object} user - Optional user object containing authentication details
+ * @property {Object} user - User object containing authentication details
  * @property {string} user.userId - MongoDB ObjectId of the authenticated user
  * @property {string} user.username - Username of the authenticated user
+ * @property {string} user.email - Email of the authenticated user
+ * @property {'user' | 'admin'} user.role - Role of the authenticated user
  */
 export interface AuthenticatedRequest extends NextRequest {
-  user?: {
+  user: {
     userId: string;
     username: string;
-    role?: string; // Optional for backward compatibility during transition
+    email: string;
+    role: 'user' | 'admin';
   };
 }
 
@@ -93,7 +99,6 @@ export function withAuth<T extends any[]>(
       const decoded = jwt.verify(token, JWT_SECRET) as {
         userId: string;     // MongoDB ObjectId as string
         username: string;   // User's username for display purposes
-        role?: string;      // User's role for authorization (optional for backward compatibility)
         iat: number;       // Token issued at timestamp
         exp: number;       // Token expiration timestamp
       };
@@ -102,9 +107,30 @@ export function withAuth<T extends any[]>(
       console.log('👤 withAuth: Decoded user info:', {
         userId: decoded.userId,
         username: decoded.username,
-        role: decoded.role,
         tokenIssuedAt: new Date(decoded.iat * 1000).toISOString(),
         tokenExpiresAt: new Date(decoded.exp * 1000).toISOString()
+      });
+
+      // Fetch user details including role from database
+      console.log('🔍 withAuth: Fetching user details from database...');
+      const db = await connectToDatabase();
+      const user = await db.collection('users').findOne({ 
+        _id: new ObjectId(decoded.userId) 
+      });
+
+      if (!user) {
+        console.log('❌ withAuth: User not found in database');
+        return NextResponse.json(
+          { error: 'User not found. Please log in again.' }, 
+          { status: 401 }
+        );
+      }
+
+      console.log('✅ withAuth: User found in database:', {
+        userId: user._id.toString(),
+        username: user.username,
+        email: user.username, // In this system, username is the email
+        role: user.role || 'user'
       });
 
       // Create an enhanced request object with user information
@@ -113,7 +139,8 @@ export function withAuth<T extends any[]>(
       authenticatedReq.user = {
         userId: decoded.userId,
         username: decoded.username,
-        role: decoded.role || 'user', // Default to 'user' if role not present in token
+        email: user.username, // In this system, username is the email
+        role: (user.role as 'user' | 'admin') || 'user', // Default to 'user' if role not present
       };
 
       console.log('🚀 withAuth: Calling protected route handler...');
@@ -190,11 +217,21 @@ export function withOptionalAuth(handler: (req: AuthenticatedRequest) => Promise
           exp: number;
         };
 
-        // Set user information on successful verification
-        authenticatedReq.user = {
-          userId: decoded.userId,
-          username: decoded.username,
-        };
+        // Fetch user details including role from database
+        const db = await connectToDatabase();
+        const user = await db.collection('users').findOne({ 
+          _id: new ObjectId(decoded.userId) 
+        });
+
+        if (user) {
+          // Set user information on successful verification
+          authenticatedReq.user = {
+            userId: decoded.userId,
+            username: decoded.username,
+            email: user.username, // In this system, username is the email
+            role: (user.role as 'user' | 'admin') || 'user',
+          };
+        }
       } catch (error) {
         // Token is invalid, but we don't require auth, so continue without user
         // Log warning for monitoring purposes but don't fail the request

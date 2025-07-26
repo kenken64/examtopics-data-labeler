@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { MongoClient, ObjectId } from 'mongodb';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/mongodb';
+import { buildUserFilter } from '@/lib/role-filter';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -11,7 +12,7 @@ async function _connectToDatabaseOld() {
   return client.db('awscert');
 }
 
-// GET /api/payees - Get all payees with pagination and filtering
+// GET /api/payees - Get payees with role-based filtering
 export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
     const { searchParams } = new URL(request.url);
@@ -22,11 +23,19 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
     
-    // Build filter object
-    const filter: any = {};
+    // Build filter object with role-based user filtering
+    const filter = buildUserFilter(request);
+    
     if (status) {
       filter.status = status;
     }
+    
+    console.log('🔍 Payees API - User info:', {
+      userId: request.user.userId,
+      role: request.user.role,
+      email: request.user.email
+    });
+    console.log('🔍 Payees API - MongoDB filter:', filter);
     
     // Get total count for pagination
     const totalCount = await db.collection('payees').countDocuments(filter);
@@ -41,6 +50,8 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
     
     const totalPages = Math.ceil(totalCount / limit);
     
+    console.log(`✅ Payees API - Found ${payees.length} payees for ${request.user.role} user`);
+    
     return NextResponse.json({
       payees,
       pagination: {
@@ -50,7 +61,8 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
         limit,
         hasNextPage: page < totalPages,
         hasPreviousPage: page > 1,
-      }
+      },
+      userRole: request.user.role // Include role info for frontend
     });
   } catch (error) {
     console.error('Error fetching payees:', error);
@@ -99,10 +111,17 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
       accessCode,
       amountPaid,
       status,
+      userId: request.user.userId, // Always set to current user
       ...(email && { email }), // Only include email if provided
       createdAt: new Date(),
       updatedAt: new Date(),
     };
+
+    console.log('🆕 Creating new payee for user:', {
+      userId: request.user.userId,
+      role: request.user.role,
+      payeeName
+    });
 
     const result = await db.collection('payees').insertOne(newPayee);
     

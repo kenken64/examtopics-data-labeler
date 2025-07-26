@@ -3,6 +3,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import { transformQuestionsForFrontend } from '../../utils/questionTransform';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/mongodb';
+import { buildUserFilter, canAccessUserData } from '@/lib/role-filter';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -28,11 +29,17 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
 
-    // Build match conditions
-    const matchConditions: any = { generatedAccessCode };
+    // Build match conditions with role-based filtering
+    const userFilter = buildUserFilter(request);
+    const matchConditions: any = { 
+      generatedAccessCode,
+      ...userFilter // Add role-based filtering
+    };
     if (!includeDisabled) {
       matchConditions.isEnabled = true;
     }
+
+    console.log('🔒 Access code questions filter:', JSON.stringify(matchConditions));
 
     // Get assigned questions with question details
     const pipeline = [
@@ -165,15 +172,17 @@ export const PUT = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
 
-    // Verify the generated access code exists
+    // Verify the generated access code exists with role-based filtering
+    const userFilter = buildUserFilter(request);
     const existingRecord = await db.collection('access-code-questions').findOne({
-      generatedAccessCode
+      generatedAccessCode,
+      ...userFilter // Apply role-based filtering
     });
 
     if (!existingRecord) {
       return NextResponse.json({
         success: false,
-        message: 'Generated access code not found'
+        message: 'Generated access code not found or access denied'
       }, { status: 404 });
     }
 
@@ -243,22 +252,24 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
 
-    // Get payee and certificate info for this generated access code
+    // Get payee and certificate info for this generated access code with role-based filtering
+    const userFilter = buildUserFilter(request);
     const payee = await db.collection('payees').findOne({
       generatedAccessCode,
-      status: 'paid'
+      status: 'paid',
+      ...userFilter // Apply role-based filtering
     });
 
     if (!payee) {
       return NextResponse.json({
         success: false,
-        message: 'Generated access code not found or not authorized'
+        message: 'Generated access code not found, not authorized, or access denied'
       }, { status: 404 });
     }
 
-    // Get current max sort order for this access code
+    // Get current max sort order for this access code (with role-based filtering)
     const maxSortResult = await db.collection('access-code-questions').aggregate([
-      { $match: { generatedAccessCode } },
+      { $match: { generatedAccessCode, ...userFilter } },
       { $group: { _id: null, maxSort: { $max: '$sortOrder' } } }
     ]).toArray();
 
@@ -307,7 +318,8 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
         isEnabled: true,
         assignedAt: new Date(),
         updatedAt: new Date(),
-        sortOrder: maxSort + i + 1
+        sortOrder: maxSort + i + 1,
+        userId: request.user.userId // Add userId for role-based filtering
       });
     }
 
@@ -351,9 +363,12 @@ export const DELETE = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
 
+    // Apply role-based filtering to delete operation
+    const userFilter = buildUserFilter(request);
     const result = await db.collection('access-code-questions').deleteMany({
       _id: { $in: assignmentIds.map(id => new ObjectId(id)) },
-      generatedAccessCode
+      generatedAccessCode,
+      ...userFilter // Apply role-based filtering
     });
 
     return NextResponse.json({
