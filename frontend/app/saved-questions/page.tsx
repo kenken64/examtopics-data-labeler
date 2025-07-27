@@ -32,10 +32,18 @@ interface Question {
   [key: string]: unknown; // Allow additional properties for Record compatibility
 }
 
+interface UserInfo {
+  email: string;
+  role: string;
+  isAdmin: boolean;
+}
+
 const SavedQuestionsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [accessCodes, setAccessCodes] = useState<AccessCodeInfo[]>([]);
   const [searchResults, setSearchResults] = useState<Question[]>([]);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [filterApplied, setFilterApplied] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [loadingAccessCodes, setLoadingAccessCodes] = useState(true);
   const [searchMode, setSearchMode] = useState<'browse' | 'search'>('browse');
@@ -58,6 +66,12 @@ const SavedQuestionsPage = () => {
       
       const data = await response.json();
       setAccessCodes(data.accessCodes || []);
+      
+      // Handle enhanced response with user info
+      if (data.userInfo) {
+        setUserInfo(data.userInfo);
+        setFilterApplied(data.filterApplied || '');
+      }
     } catch (error) {
       console.error('Error loading access codes:', error);
       toast({
@@ -184,8 +198,29 @@ const SavedQuestionsPage = () => {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Saved Questions</h1>
-          <p className="text-gray-600 text-sm sm:text-base">Search and browse your saved exam questions</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Saved Questions</h1>
+              <p className="text-gray-600 text-sm sm:text-base">Search and browse your saved exam questions</p>
+            </div>
+            
+            {/* Role and Data Scope Indicators */}
+            {userInfo && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge 
+                  variant={userInfo.isAdmin ? "default" : "secondary"}
+                  className="text-xs"
+                >
+                  {userInfo.isAdmin ? "Admin" : "User"}: {userInfo.email}
+                </Badge>
+                {filterApplied && (
+                  <Badge variant="outline" className="text-xs">
+                    {filterApplied}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Search Section */}

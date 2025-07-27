@@ -93,7 +93,7 @@ export default function AccessCodesPage() {
 
         if (certificatesResponse.ok) {
           const certificatesData = await certificatesResponse.json();
-          setCertificates(certificatesData);
+          setCertificates(certificatesData.certificates || []);
         }
       } catch (error) {
         console.error('Error fetching data:', error);

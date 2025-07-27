@@ -35,9 +35,24 @@ interface Pagination {
   limit: number;
 }
 
+interface UserInfo {
+  email: string;
+  role: string;
+  isAdmin: boolean;
+}
+
+interface CompaniesResponse {
+  companies: Company[];
+  pagination: Pagination;
+  userInfo?: UserInfo;
+  filterApplied?: string;
+}
+
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [filterApplied, setFilterApplied] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -64,9 +79,11 @@ export default function CompaniesPage() {
       const response = await fetch(`/api/companies?${params}`);
       if (!response.ok) throw new Error('Failed to fetch companies');
       
-      const data = await response.json();
+      const data: CompaniesResponse = await response.json();
       setCompanies(data.companies);
       setPagination(data.pagination);
+      setUserInfo(data.userInfo || null);
+      setFilterApplied(data.filterApplied || '');
     } catch (error) {
       console.error('Error fetching companies:', error);
       setError('Failed to load companies');
@@ -192,6 +209,25 @@ export default function CompaniesPage() {
           <div className="flex items-center mb-6 relative">
             <div className="flex-1 text-center">
               <h1 className="text-3xl font-bold">Companies Management</h1>
+              {userInfo && (
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200 max-w-md mx-auto">
+                  <div className="flex items-center justify-center gap-4 text-sm">
+                    <span className="text-blue-700">
+                      <strong>User:</strong> {userInfo.email}
+                    </span>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      userInfo.isAdmin 
+                        ? 'bg-red-100 text-red-700' 
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {userInfo.role.toUpperCase()}
+                    </span>
+                    <span className="text-blue-600">
+                      <strong>View:</strong> {filterApplied}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             <Button onClick={openCreateModal} className="flex items-center gap-2 absolute right-0">
               <Plus size={16} />

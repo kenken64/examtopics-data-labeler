@@ -299,6 +299,7 @@ export const POST = withAuth(async (req: AuthenticatedRequest) => {
     const quizWithMetadata = {
       ...quizData, // Spread the original quiz data (question, answers, etc.)
       question_no: nextQuestionNo, // Add sequential question number
+      userId: req.user.userId, // Add user ID for RBAC filtering
       createdAt: new Date(), // Add creation timestamp for auditing
     };
 

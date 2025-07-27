@@ -4,6 +4,7 @@ import { transformQuestionsForFrontend } from '../../utils/questionTransform';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/mongodb';
 import { buildUserFilter, canAccessUserData } from '@/lib/role-filter';
+import { canModifyAccessCodeQuestions, getQuestionManagementPermissions } from '@/lib/access-code-rbac';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -29,19 +30,27 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
 
-    // Build match conditions with role-based filtering
-    const userFilter = buildUserFilter(request);
-    const matchConditions: any = { 
-      generatedAccessCode,
-      ...userFilter // Add role-based filtering
-    };
+    // Check collaborative permissions for this access code
+    const permissions = await getQuestionManagementPermissions(request, generatedAccessCode);
+    
+    if (!permissions.canView) {
+      return NextResponse.json({
+        success: false,
+        message: 'Access denied: You cannot view questions for this access code'
+      }, { status: 403 });
+    }
+
+    // Build match conditions - no user filter needed since we checked permissions above
+    const matchConditions: any = { generatedAccessCode };
     if (!includeDisabled) {
       matchConditions.isEnabled = true;
     }
 
-    console.log('🔒 Access code questions filter:', JSON.stringify(matchConditions));
+    console.log('🔒 Access code questions - User:', request.user.email);
+    console.log('🔒 Permissions:', JSON.stringify(permissions));
+    console.log('🔒 Match conditions:', JSON.stringify(matchConditions));
 
-    // Get assigned questions with question details
+    // Enhanced pipeline with collaborative information
     const pipeline = [
       { $match: matchConditions },
       // Lookup question details
@@ -76,9 +85,29 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
         }
       },
       { $unwind: '$certificateDetails' },
+      // Lookup payee owner information
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'payeeDetails.userId',
+          foreignField: '_id',
+          as: 'payeeOwner'
+        }
+      },
+      { $unwind: { path: '$payeeOwner', preserveNullAndEmptyArrays: true } },
+      // Lookup question linker information
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'questionLinker'
+        }
+      },
+      { $unwind: { path: '$questionLinker', preserveNullAndEmptyArrays: true } },
       // Sort by assigned question number/sort order
       { $sort: { sortOrder: 1, assignedQuestionNo: 1 } },
-      // Project final structure
+      // Project final structure with collaborative info
       {
         $project: {
           _id: 1,
@@ -106,6 +135,24 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
             _id: '$certificateDetails._id',
             name: '$certificateDetails.name',
             code: '$certificateDetails.code'
+          },
+          // Collaborative ownership information
+          ownership: {
+            payeeOwner: {
+              userId: '$payeeOwner._id',
+              username: '$payeeOwner.username',
+              email: '$payeeOwner.email',
+              role: '$payeeOwner.role'
+            },
+            questionLinker: {
+              userId: '$questionLinker._id',
+              username: '$questionLinker.username',
+              email: '$questionLinker.email',
+              role: '$questionLinker.role'
+            },
+            isCollaborative: {
+              $ne: ['$payeeDetails.userId', '$userId']
+            }
           }
         }
       }
@@ -120,20 +167,38 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
       }, { status: 404 });
     }
 
-    // Get summary stats
+    // Get enhanced summary stats with collaborative information
     const statsResult = await db.collection('access-code-questions').aggregate([
       { $match: { generatedAccessCode } },
+      // Lookup question linkers
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'linker'
+        }
+      },
+      { $unwind: { path: '$linker', preserveNullAndEmptyArrays: true } },
       {
         $group: {
           _id: null,
           totalQuestions: { $sum: 1 },
           enabledQuestions: { $sum: { $cond: ['$isEnabled', 1, 0] } },
-          disabledQuestions: { $sum: { $cond: ['$isEnabled', 0, 1] } }
+          disabledQuestions: { $sum: { $cond: ['$isEnabled', 0, 1] } },
+          uniqueLinkers: { $addToSet: '$userId' },
+          linkerDetails: { $addToSet: '$linker' }
         }
       }
     ]).toArray();
 
-    const stats = statsResult[0] || { totalQuestions: 0, enabledQuestions: 0, disabledQuestions: 0 };
+    const stats = statsResult[0] || { 
+      totalQuestions: 0, 
+      enabledQuestions: 0, 
+      disabledQuestions: 0,
+      uniqueLinkers: [],
+      linkerDetails: []
+    };
 
     return NextResponse.json({
       success: true,
@@ -142,10 +207,23 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
       stats: {
         totalQuestions: stats.totalQuestions,
         enabledQuestions: stats.enabledQuestions,
-        disabledQuestions: stats.disabledQuestions
+        disabledQuestions: stats.disabledQuestions,
+        collaborationStats: {
+          totalLinkers: stats.uniqueLinkers.length,
+          linkers: stats.linkerDetails.filter((l: any) => l).map((linker: any) => ({
+            userId: linker._id,
+            username: linker.username,
+            role: linker.role
+          }))
+        }
       },
       payee: assignedQuestions[0]?.payee,
-      certificate: assignedQuestions[0]?.certificate
+      certificate: assignedQuestions[0]?.certificate,
+      permissions,
+      collaborativeInfo: {
+        payeeOwner: assignedQuestions[0]?.ownership?.payeeOwner,
+        hasCollaborativeQuestions: assignedQuestions.some(q => q.ownership?.isCollaborative)
+      }
     });
 
   } catch (error) {
@@ -172,19 +250,18 @@ export const PUT = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
 
-    // Verify the generated access code exists with role-based filtering
-    const userFilter = buildUserFilter(request);
-    const existingRecord = await db.collection('access-code-questions').findOne({
-      generatedAccessCode,
-      ...userFilter // Apply role-based filtering
-    });
-
-    if (!existingRecord) {
+    // Check collaborative permissions for modification
+    const permissions = await getQuestionManagementPermissions(request, generatedAccessCode);
+    
+    if (!permissions.canModify) {
       return NextResponse.json({
         success: false,
-        message: 'Generated access code not found or access denied'
-      }, { status: 404 });
+        message: 'Access denied: You cannot modify questions for this access code'
+      }, { status: 403 });
     }
+
+    console.log('🔒 PUT access-code-questions - User:', request.user.email);
+    console.log('🔒 Permissions:', JSON.stringify(permissions));
 
     // Perform bulk updates
     const bulkOps = updates.map(update => {
@@ -252,24 +329,35 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
 
-    // Get payee and certificate info for this generated access code with role-based filtering
-    const userFilter = buildUserFilter(request);
+    // Check collaborative permissions for adding questions
+    const permissions = await getQuestionManagementPermissions(request, generatedAccessCode);
+    
+    if (!permissions.canModify) {
+      return NextResponse.json({
+        success: false,
+        message: 'Access denied: You cannot add questions to this access code'
+      }, { status: 403 });
+    }
+
+    console.log('🔒 POST access-code-questions - User:', request.user.email);
+    console.log('🔒 Permissions:', JSON.stringify(permissions));
+
+    // Get payee info for this generated access code (no user filter needed since we checked permissions)
     const payee = await db.collection('payees').findOne({
       generatedAccessCode,
-      status: 'paid',
-      ...userFilter // Apply role-based filtering
+      status: 'paid'
     });
 
     if (!payee) {
       return NextResponse.json({
         success: false,
-        message: 'Generated access code not found, not authorized, or access denied'
+        message: 'Generated access code not found or is not in paid status'
       }, { status: 404 });
     }
 
-    // Get current max sort order for this access code (with role-based filtering)
+    // Get current max sort order for this access code
     const maxSortResult = await db.collection('access-code-questions').aggregate([
-      { $match: { generatedAccessCode, ...userFilter } },
+      { $match: { generatedAccessCode } },
       { $group: { _id: null, maxSort: { $max: '$sortOrder' } } }
     ]).toArray();
 
@@ -363,18 +451,30 @@ export const DELETE = withAuth(async (request: AuthenticatedRequest) => {
 
     const db = await connectToDatabase();
 
-    // Apply role-based filtering to delete operation
-    const userFilter = buildUserFilter(request);
+    // Check collaborative permissions for deleting questions
+    const permissions = await getQuestionManagementPermissions(request, generatedAccessCode);
+    
+    if (!permissions.canModify) {
+      return NextResponse.json({
+        success: false,
+        message: 'Access denied: You cannot remove questions from this access code'
+      }, { status: 403 });
+    }
+
+    console.log('🔒 DELETE access-code-questions - User:', request.user.email);
+    console.log('🔒 Permissions:', JSON.stringify(permissions));
+
+    // Delete without additional user filter since we checked permissions
     const result = await db.collection('access-code-questions').deleteMany({
       _id: { $in: assignmentIds.map(id => new ObjectId(id)) },
-      generatedAccessCode,
-      ...userFilter // Apply role-based filtering
+      generatedAccessCode
     });
 
     return NextResponse.json({
       success: true,
       message: `Removed ${result.deletedCount} question assignments`,
-      deletedCount: result.deletedCount
+      deletedCount: result.deletedCount,
+      permissions
     });
 
   } catch (error) {

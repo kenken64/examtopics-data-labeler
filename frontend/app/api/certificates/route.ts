@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 // Authentication middleware for protecting API endpoints
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
+// Role-based access control utilities
+import { buildUserFilter, isAdmin } from '@/lib/role-filter';
 // Standard MongoDB connection utility
 import { connectToDatabase } from '@/lib/mongodb';
 
@@ -88,7 +90,7 @@ const certificateSchema = new mongoose.Schema({
     default: '',       // Default to empty string if not provided
   },
   userId: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,  // Use ObjectId for consistency
     required: true,    // Track who created this certificate
     index: true,       // Index for efficient ownership queries
   },
@@ -127,21 +129,20 @@ const Certificate = mongoose.models.Certificate || mongoose.model('Certificate',
  */
 export const GET = withAuth(async (request: AuthenticatedRequest) => {
   try {
+    console.log(`📜 Certificates GET: User ${request.user?.email} (${request.user?.role}) fetching certificates`);
+    
     // Establish database connection
     const db = await connectDB();
     
-    // Implement role-based data filtering
-    let query = {};
-    if (request.user?.role === 'admin') {
-      // Admins can see all certificates
-      query = {};
-    } else {
-      // Regular users only see their own certificates
-      query = { userId: request.user?.userId };
-    }
+    // Build role-based filter using standardized utility
+    const userFilter = buildUserFilter(request);
+    console.log('🔒 Applied filter:', JSON.stringify(userFilter));
+    
+    // Convert filter for mongoose (handle ObjectId conversion)
+    const mongooseFilter = userFilter.userId ? { userId: new mongoose.Types.ObjectId(userFilter.userId) } : {};
     
     // Fetch certificates based on user role, sorted by creation date (newest first)
-    const certificates = await Certificate.find(query).sort({ createdAt: -1 });
+    const certificates = await Certificate.find(mongooseFilter).sort({ createdAt: -1 });
     
     // Populate company names for certificates that have companyId
     const certificatesWithCompany = await Promise.all(
@@ -164,8 +165,16 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
       })
     );
     
-    // Return the certificates array with company names
-    return NextResponse.json(certificatesWithCompany);
+    // Return the certificates array with company names and user info
+    return NextResponse.json({
+      certificates: certificatesWithCompany,
+      userInfo: {
+        email: request.user.email,
+        role: request.user.role,
+        isAdmin: isAdmin(request)
+      },
+      filterApplied: isAdmin(request) ? 'All certificates (admin)' : 'User certificates only'
+    });
   } catch (error) {
     // Log error for debugging and monitoring purposes
     console.error('Error fetching certificates:', error);
@@ -241,7 +250,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
       logoUrl: logoUrl?.trim() || '',       // Optional field with fallback
       pdfFileUrl: pdfFileUrl?.trim() || '', // Optional field with fallback
       pdfFileName: pdfFileName?.trim() || '',// Optional field with fallback
-      userId: request.user?.userId,         // Associate certificate with creator
+      userId: new mongoose.Types.ObjectId(request.user?.userId), // Associate certificate with creator using ObjectId
     });
 
     // Save certificate to database

@@ -25,6 +25,38 @@ interface Certificate {
   createdAt: string;
 }
 
+interface Quiz {
+  _id: string;
+  question: string;
+  listOfQuestions: string;
+  correctAnswer: string;
+  explanation: string;
+  certificateId: string;
+  question_no: number;
+  userId: string;
+  createdAt: string;
+}
+
+interface UserInfo {
+  userId: string;
+  isAdmin: boolean;
+  email: string;
+}
+
+interface QuizzesResponse {
+  quizzes: Quiz[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    totalCount: number;
+    limit: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+  userInfo: UserInfo;
+  filterApplied: string;
+}
+
 interface HighlightData {
   id: string;
   type: 'question' | 'list' | 'answer' | 'explanation';
@@ -54,7 +86,7 @@ export default function Labeler() {
         const response = await fetch('/api/certificates');
         if (response.ok) {
           const data = await response.json();
-          setCertificates(data);
+          setCertificates(data.certificates || []);
         }
       } catch (error) {
         console.error('Error fetching certificates:', error);
@@ -94,6 +126,14 @@ export default function Labeler() {
   const [selectedCertificate, setSelectedCertificate] = useState<string>("");
   const [nextQuestionNo, setNextQuestionNo] = useState<number>(1);
 
+  // Quiz list state for RBAC
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [filterApplied, setFilterApplied] = useState<string>('');
+  const [quizListLoading, setQuizListLoading] = useState<boolean>(false);
+  const [currentQuizPage, setCurrentQuizPage] = useState<number>(1);
+  const [showQuizList, setShowQuizList] = useState<boolean>(false);
+
   const markdownOutputDivRef = useRef<HTMLDivElement>(null);
 
   // Function to fetch next question number for a certificate
@@ -121,6 +161,38 @@ export default function Labeler() {
   const handleCertificateChange = (certificateId: string) => {
     setSelectedCertificate(certificateId);
     fetchNextQuestionNumber(certificateId);
+  };
+
+  // Function to fetch quizzes with RBAC filtering
+  const fetchQuizzes = async (page: number = 1, certificateFilter?: string) => {
+    setQuizListLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '10'
+      });
+      
+      if (certificateFilter) {
+        params.append('certificateId', certificateFilter);
+      }
+      
+      const response = await fetch(`/api/quizzes?${params.toString()}`);
+      if (response.ok) {
+        const data: QuizzesResponse = await response.json();
+        setQuizzes(data.quizzes);
+        setUserInfo(data.userInfo);
+        setFilterApplied(data.filterApplied);
+        setCurrentQuizPage(page);
+      } else {
+        console.error('Failed to fetch quizzes');
+        setQuizzes([]);
+      }
+    } catch (error) {
+      console.error('Error fetching quizzes:', error);
+      setQuizzes([]);
+    } finally {
+      setQuizListLoading(false);
+    }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -682,6 +754,21 @@ export default function Labeler() {
         >
           Clear All Highlights
         </Button>
+
+        {/* Quiz List Toggle Button */}
+        <Button
+          onClick={() => {
+            setShowQuizList(!showQuizList);
+            if (!showQuizList) {
+              fetchQuizzes(1, selectedCertificate || undefined);
+            }
+          }}
+          variant="outline"
+          size="sm"
+          className="bg-purple-50 hover:bg-purple-100 min-h-[44px]"
+        >
+          {showQuizList ? "Hide Quiz List" : "Show My Quizzes"}
+        </Button>
       </div>
 
       {/* Explanatory text below buttons */}
@@ -992,6 +1079,97 @@ export default function Labeler() {
           {saving ? "Saving..." : "Save Quiz"}
         </Button>
       </div>
+
+      {/* Quiz List Section with RBAC */}
+      {showQuizList && (
+        <div className="w-full max-w-6xl mt-8 p-4 border rounded-lg shadow-md bg-white">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-semibold">My Quiz Questions</h2>
+              {userInfo && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    userInfo.isAdmin ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {userInfo.isAdmin ? 'Admin' : 'User'}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{filterApplied}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => fetchQuizzes(1, selectedCertificate || undefined)}
+                disabled={quizListLoading}
+                variant="outline"
+                size="sm"
+              >
+                {quizListLoading ? "Loading..." : "Refresh"}
+              </Button>
+              <Button
+                onClick={() => fetchQuizzes(1)}
+                disabled={quizListLoading}
+                variant="outline"
+                size="sm"
+              >
+                Show All
+              </Button>
+            </div>
+          </div>
+
+          {quizListLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-4 text-muted-foreground">Loading quizzes...</p>
+            </div>
+          ) : quizzes.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No quiz questions found.</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Create your first quiz using the labeler above.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {quizzes.map((quiz) => (
+                <div key={quiz._id} className="border rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-primary">
+                          Question #{quiz.question_no}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {certificates.find(cert => cert._id === quiz.certificateId)?.name || 'Unknown Certificate'}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          ({certificates.find(cert => cert._id === quiz.certificateId)?.code || 'N/A'})
+                        </span>
+                      </div>
+                      <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
+                        {quiz.question}
+                      </h3>
+                      <p className="text-sm text-green-600 mb-1">
+                        <strong>Correct Answer:</strong> {quiz.correctAnswer}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Created: {new Date(quiz.createdAt).toLocaleDateString()} at {new Date(quiz.createdAt).toLocaleTimeString()}
+                      </p>
+                    </div>
+                    <div className="ml-4 text-right">
+                      {userInfo?.isAdmin && (
+                        <span className="text-xs text-muted-foreground block">
+                          By: {quiz.userId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
