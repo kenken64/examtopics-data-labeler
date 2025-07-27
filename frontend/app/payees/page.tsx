@@ -104,7 +104,7 @@ export default function PayeesPage() {
 
         if (certificatesResponse.ok) {
           const certificatesData = await certificatesResponse.json();
-          setCertificates(certificatesData);
+          setCertificates(certificatesData.certificates || []);
         }
       } catch (error) {
         console.error('Error fetching data:', error);

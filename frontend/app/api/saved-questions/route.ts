@@ -3,6 +3,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import { transformQuestionsForFrontend } from '../../utils/questionTransform';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/mongodb';
+import { buildUserFilter, isAdmin } from '@/lib/role-filter';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -24,9 +25,17 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
 
     // If requesting list of access codes with payee info
     if (listAccessCodes) {
+      // Build user-specific filter based on role permissions
+      const userFilter = buildUserFilter(request);
+      
       const pipeline = [
-        // Match only paid payees
-        { $match: { status: 'paid' } },
+        // Apply role-based filtering first
+        { 
+          $match: { 
+            status: 'paid',
+            ...userFilter // Add RBAC filtering - admins see all, users see only their own
+          } 
+        },
         // Lookup certificate information
         {
           $lookup: {
@@ -48,6 +57,7 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
             amountPaid: 1,
             status: 1,
             createdAt: 1,
+            userId: 1, // Include userId for debugging/verification
             certificateCode: '$certificate.code', // Map certificate code
             certificateTitle: '$certificate.name', // Map certificate title
             'certificate._id': 1
@@ -74,25 +84,39 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
       
       return NextResponse.json({
         success: true,
-        accessCodes: accessCodesWithLinkStatus
+        accessCodes: accessCodesWithLinkStatus,
+        userInfo: {
+          email: request.user.email,
+          role: request.user.role,
+          isAdmin: isAdmin(request)
+        },
+        filterApplied: isAdmin(request) ? 'All access codes (admin)' : 'User access codes only'
       });
     }
 
     // If searching by access code
     if (accessCode) {
-      // First find the payee with this access code
+      // Build user-specific filter based on role permissions
+      const userFilter = buildUserFilter(request);
+      
+      // First find the payee with this access code, applying RBAC filtering
       const payee = await db.collection('payees').findOne({
-        $or: [
-          { accessCode: accessCode },
-          { generatedAccessCode: accessCode }
-        ],
-        status: 'paid' // Only allow access for paid customers
+        $and: [
+          {
+            $or: [
+              { accessCode: accessCode },
+              { generatedAccessCode: accessCode }
+            ]
+          },
+          { status: 'paid' }, // Only allow access for paid customers
+          userFilter // Apply role-based filtering - users can only access their own access codes
+        ]
       });
 
       if (!payee) {
         return NextResponse.json({
           success: false,
-          message: 'Access code not found or not authorized'
+          message: 'Access code not found, not authorized, or access denied'
         }, { status: 404 });
       }
 

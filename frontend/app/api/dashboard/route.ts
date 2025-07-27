@@ -1,14 +1,24 @@
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
+import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
+import { buildUserFilter, isAdmin } from '@/lib/role-filter';
 
-export async function GET() {
+export const GET = withAuth(async (request: AuthenticatedRequest) => {
   const client = new MongoClient(process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert');
   
   try {
     await client.connect();
     const db = client.db('awscert');
     
-    // Get certificates with question counts
+    console.log('🏠 Dashboard API called by:', request.user.email, 'Role:', request.user.role);
+    
+    // Build user filter for role-based access
+    const userFilter = buildUserFilter(request);
+    const isUserAdmin = isAdmin(request);
+    
+    console.log('🔒 User filter applied:', JSON.stringify(userFilter));
+    
+    // Get certificates with question counts (no user filtering needed for certificates)
     const certificateStats = await db.collection('quizzes').aggregate([
       {
         $addFields: {
@@ -40,8 +50,12 @@ export async function GET() {
       }
     ]).toArray();
 
-    // Get access code statistics
+    // Get access code statistics (filtered by user role)
+    const accessCodeStatsFilter = { ...userFilter };
     const accessCodeStats = await db.collection('access-code-questions').aggregate([
+      {
+        $match: accessCodeStatsFilter // Apply role-based filtering
+      },
       {
         $group: {
           _id: '$generatedAccessCode',
@@ -66,8 +80,17 @@ export async function GET() {
       }
     ]).toArray();
 
-    // Get quiz attempt statistics (from Telegram bot)
+    // Get quiz attempt statistics (filtered by user role if not admin)
+    const quizAttemptFilter = isUserAdmin ? {} : { 
+      accessCode: { 
+        $in: await db.collection('payees').distinct('generatedAccessCode', userFilter) 
+      }
+    };
+    
     const quizAttemptStats = await db.collection('quiz-attempts').aggregate([
+      {
+        $match: quizAttemptFilter // Apply role-based filtering for quiz attempts
+      },
       {
         $group: {
           _id: null,
@@ -105,15 +128,18 @@ export async function GET() {
       }
     ]).toArray();
 
-    // Get recent quiz attempts (last 30 days)
+    // Get recent quiz attempts (last 30 days, filtered by user role)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
+    const recentAttemptsFilter = {
+      createdAt: { $gte: thirtyDaysAgo },
+      ...quizAttemptFilter // Apply same role-based filtering
+    };
+    
     const recentAttempts = await db.collection('quiz-attempts').aggregate([
       {
-        $match: {
-          createdAt: { $gte: thirtyDaysAgo }
-        }
+        $match: recentAttemptsFilter
       },
       {
         $group: {
@@ -134,8 +160,11 @@ export async function GET() {
       }
     ]).toArray();
 
-    // Get user engagement statistics
+    // Get user engagement statistics (filtered by user role)
     const userEngagement = await db.collection('quiz-attempts').aggregate([
+      {
+        $match: quizAttemptFilter // Apply role-based filtering
+      },
       {
         $group: {
           _id: '$accessCode',
@@ -166,8 +195,18 @@ export async function GET() {
       }
     ]).toArray();
 
-    // Get bookmark and wrong answer stats
+    // Get bookmark and wrong answer stats (filtered by user role)
+    // For non-admin users, only show stats for their own access codes
+    const userAccessCodes = isUserAdmin ? null : await db.collection('payees').distinct('generatedAccessCode', userFilter);
+    
+    const bookmarkFilter = isUserAdmin ? {} : { 
+      accessCode: { $in: userAccessCodes } 
+    };
+    
     const bookmarkStats = await db.collection('bookmarks').aggregate([
+      {
+        $match: bookmarkFilter
+      },
       {
         $group: {
           _id: null,
@@ -185,6 +224,9 @@ export async function GET() {
 
     const wrongAnswerStats = await db.collection('wrong-answers').aggregate([
       {
+        $match: bookmarkFilter // Apply same role-based filtering
+      },
+      {
         $group: {
           _id: null,
           totalWrongAnswers: { $sum: 1 },
@@ -199,8 +241,11 @@ export async function GET() {
       }
     ]).toArray();
 
-    // Get payee statistics
+    // Get payee statistics (filtered by user role)
     const payeeStats = await db.collection('payees').aggregate([
+      {
+        $match: userFilter // Apply role-based filtering to payees
+      },
       {
         $group: {
           _id: { 
@@ -270,9 +315,16 @@ export async function GET() {
       wrongAnswers: wrongAnswerStats[0] || { totalWrongAnswers: 0, uniqueUsers: 0 },
       payees: payeeStats,
       pdfAttachments: pdfStats,
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
+      userInfo: {
+        email: request.user.email,
+        role: request.user.role,
+        isAdmin: isUserAdmin
+      },
+      filterApplied: isUserAdmin ? 'All data (admin)' : 'User data only'
     };
 
+    console.log('📊 Dashboard response prepared for:', request.user.role);
     return NextResponse.json(response);
   } catch (error) {
     console.error('Dashboard API error:', error);
@@ -283,4 +335,4 @@ export async function GET() {
   } finally {
     await client.close();
   }
-}
+});

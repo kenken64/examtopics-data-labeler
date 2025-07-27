@@ -28,6 +28,16 @@ interface DashboardData {
       pdfFileName: string;
     }>;
   }>;
+  userInfo?: {
+    email: string;
+    role: string;
+    isAdmin: boolean;
+  };
+  filterApplied?: string;
+  certificates?: any[];
+  accessCodes?: any;
+  quizAttempts?: any;
+  payees?: any[];
 }
 
 export default function Dashboard() {
@@ -86,6 +96,25 @@ export default function Dashboard() {
             <div>
               <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
               <p className="text-gray-700">{message}</p>
+              {dashboardData?.userInfo && (
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-blue-700">
+                      <strong>User:</strong> {dashboardData.userInfo.email}
+                    </span>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      dashboardData.userInfo.isAdmin 
+                        ? 'bg-red-100 text-red-700' 
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {dashboardData.userInfo.role.toUpperCase()}
+                    </span>
+                    <span className="text-blue-600">
+                      <strong>Data View:</strong> {dashboardData.filterApplied}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             <Button onClick={handleLogout} variant="outline">
               Logout

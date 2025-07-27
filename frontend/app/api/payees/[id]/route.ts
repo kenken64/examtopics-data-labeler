@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { MongoClient, ObjectId } from 'mongodb';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/mongodb';
+import { canAccessUserData } from '@/lib/role-filter';
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 
@@ -11,7 +12,7 @@ async function _connectToDatabaseOld() {
   return client.db('awscert');
 }
 
-// GET /api/payees/[id] - Get a specific payee
+// GET /api/payees/[id] - Get a specific payee with access control
 export const GET = withAuth(async (request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) => {
   try {
     const { id } = await params;
@@ -27,6 +28,23 @@ export const GET = withAuth(async (request: AuthenticatedRequest, { params }: { 
       return NextResponse.json({ error: 'Payee not found' }, { status: 404 });
     }
 
+    // Check if user can access this payee's data
+    if (!canAccessUserData(request, payee.userId)) {
+      console.log('🚫 Access denied - User cannot access payee:', {
+        userId: request.user.userId,
+        role: request.user.role,
+        payeeUserId: payee.userId,
+        payeeId: id
+      });
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    console.log('✅ Access granted - User can access payee:', {
+      userId: request.user.userId,
+      role: request.user.role,
+      payeeId: id
+    });
+
     return NextResponse.json(payee);
   } catch (error) {
     console.error('Error fetching payee:', error);
@@ -34,13 +52,34 @@ export const GET = withAuth(async (request: AuthenticatedRequest, { params }: { 
   }
 });
 
-// PUT /api/payees/[id] - Update a specific payee
+// PUT /api/payees/[id] - Update a specific payee with access control
 export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) => {
   try {
     const { id } = await params;
 
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ error: 'Invalid payee ID' }, { status: 400 });
+    }
+
+    const db = await connectToDatabase();
+
+    // First check if payee exists and user has access
+    const existingPayee = await db.collection('payees').findOne({
+      _id: new ObjectId(id)
+    });
+
+    if (!existingPayee) {
+      return NextResponse.json({ error: 'Payee not found' }, { status: 404 });
+    }
+
+    if (!canAccessUserData(request, existingPayee.userId)) {
+      console.log('🚫 Update denied - User cannot access payee:', {
+        userId: request.user.userId,
+        role: request.user.role,
+        payeeUserId: existingPayee.userId,
+        payeeId: id
+      });
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -82,8 +121,6 @@ export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { 
       return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
     }
 
-    const db = await connectToDatabase();
-
     const updateData: any = {
       certificateId: new ObjectId(certificateId),
       payeeName,
@@ -93,6 +130,7 @@ export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { 
       amountPaid,
       status,
       updatedAt: new Date(),
+      // Don't allow changing userId
     };
 
     // Add email if provided (optional field)
@@ -116,6 +154,12 @@ export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { 
       updateOperations.$unset = { email: 1 };
     }
 
+    console.log('🔄 Updating payee:', {
+      userId: request.user.userId,
+      role: request.user.role,
+      payeeId: id
+    });
+
     const result = await db.collection('payees').updateOne(
       { _id: new ObjectId(id) },
       updateOperations
@@ -125,14 +169,23 @@ export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: { 
       return NextResponse.json({ error: 'Payee not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ message: 'Payee updated successfully' });
+    if (result.modifiedCount === 0) {
+      return NextResponse.json({ error: 'No changes made' }, { status: 400 });
+    }
+
+    console.log('✅ Payee updated successfully');
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'Payee updated successfully' 
+    });
   } catch (error) {
     console.error('Error updating payee:', error);
     return NextResponse.json({ error: 'Failed to update payee' }, { status: 500 });
   }
 });
 
-// DELETE /api/payees/[id] - Delete a specific payee
+// DELETE /api/payees/[id] - Delete a specific payee with access control
 export const DELETE = withAuth(async (request: AuthenticatedRequest, { params }: { params: Promise<{ id: string }> }) => {
   try {
     const { id } = await params;
@@ -142,13 +195,44 @@ export const DELETE = withAuth(async (request: AuthenticatedRequest, { params }:
     }
 
     const db = await connectToDatabase();
+
+    // First check if payee exists and user has access
+    const existingPayee = await db.collection('payees').findOne({
+      _id: new ObjectId(id)
+    });
+
+    if (!existingPayee) {
+      return NextResponse.json({ error: 'Payee not found' }, { status: 404 });
+    }
+
+    if (!canAccessUserData(request, existingPayee.userId)) {
+      console.log('🚫 Delete denied - User cannot access payee:', {
+        userId: request.user.userId,
+        role: request.user.role,
+        payeeUserId: existingPayee.userId,
+        payeeId: id
+      });
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    console.log('🗑️ Deleting payee:', {
+      userId: request.user.userId,
+      role: request.user.role,
+      payeeId: id
+    });
+
     const result = await db.collection('payees').deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: 'Payee not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ message: 'Payee deleted successfully' });
+    console.log('✅ Payee deleted successfully');
+
+    return NextResponse.json({ 
+      success: true,
+      message: 'Payee deleted successfully' 
+    });
   } catch (error) {
     console.error('Error deleting payee:', error);
     return NextResponse.json({ error: 'Failed to delete payee' }, { status: 500 });

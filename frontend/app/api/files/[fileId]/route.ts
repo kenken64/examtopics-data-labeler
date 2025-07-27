@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
-const CloudinaryService = require('@/lib/cloudinary-service');
+import CloudinaryService from '@/lib/cloudinary-service';
 
 /**
  * GET /api/files/[fileId] - Serve Files from Cloudinary
@@ -44,7 +44,7 @@ export async function GET(
       const filename = fileId.split('/').pop(); // Get just the filename part
       
       // Generate signed download URL
-      const downloadUrl = cloudinaryService.generatePDFDownloadUrl(fileId, filename);
+      const downloadUrl = await cloudinaryService.generatePDFDownloadUrl(fileId, filename);
       
       console.log('🔗 Redirecting to Cloudinary download URL:', downloadUrl);
       

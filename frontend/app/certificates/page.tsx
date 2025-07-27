@@ -43,10 +43,18 @@ interface Company {
   code: string;
 }
 
+interface UserInfo {
+  email: string;
+  role: string;
+  isAdmin: boolean;
+}
+
 export default function Certificates() {
   const router = useRouter();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [filterApplied, setFilterApplied] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -112,7 +120,20 @@ export default function Certificates() {
       const response = await fetch('/api/certificates');
       if (response.ok) {
         const data = await response.json();
-        setCertificates(data);
+        
+        // Handle both old format (direct array) and new format (enhanced response)
+        if (Array.isArray(data)) {
+          // Old format - direct array
+          setCertificates(data);
+          setUserInfo(null);
+          setFilterApplied('');
+        } else {
+          // New format - enhanced response with user info
+          setCertificates(data.certificates || []);
+          setUserInfo(data.userInfo || null);
+          setFilterApplied(data.filterApplied || '');
+        }
+        
         setError(null); // Clear any previous errors
       } else {
         // Get the actual error message from the API
@@ -296,7 +317,7 @@ export default function Certificates() {
 
         // Show a message if this was a mock upload
         if (result.mock) {
-          console.log('File uploaded in mock mode - configure Google Drive credentials for real uploads');
+          console.log('File uploaded in mock mode - configure Cloudinary credentials for real uploads');
         }
 
         return result;
@@ -318,9 +339,28 @@ export default function Certificates() {
     <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <Award className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Certificate Management</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <Award className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold">Certificate Management</h1>
+            </div>
+            
+            {/* Role and Data Scope Indicators */}
+            {userInfo && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge 
+                  variant={userInfo.isAdmin ? "default" : "secondary"}
+                  className="text-xs"
+                >
+                  {userInfo.isAdmin ? "Admin" : "User"}: {userInfo.email}
+                </Badge>
+                {filterApplied && (
+                  <Badge variant="outline" className="text-xs">
+                    {filterApplied}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
           <Button 
             onClick={() => setIsAddingNew(true)}
