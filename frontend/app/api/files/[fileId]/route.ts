@@ -3,6 +3,21 @@ import { withAuth, type AuthenticatedRequest } from '@/lib/auth';
 import CloudinaryService from '@/lib/cloudinary-service';
 
 /**
+ * OPTIONS /api/files/[fileId] - Handle CORS preflight requests
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
+
+/**
  * GET /api/files/[fileId] - Serve Files from Cloudinary
  * 
  * This endpoint acts as a proxy to serve files from Cloudinary,
@@ -95,7 +110,7 @@ export async function GET(
         contentType = 'image/webp';
       }
 
-      // Return file with proper headers
+      // Return file with comprehensive CORS headers for Railway
       return new NextResponse(fileBuffer, {
         status: 200,
         headers: {
@@ -103,6 +118,10 @@ export async function GET(
           'Content-Disposition': `inline; filename="${fileId}"`,
           'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
           'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+          'Access-Control-Expose-Headers': 'Content-Type, Content-Disposition, Content-Length',
+          'Vary': 'Origin',
         },
       });
     }
