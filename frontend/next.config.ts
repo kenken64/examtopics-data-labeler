@@ -36,8 +36,8 @@ const nextConfig: NextConfig = {
   
   // Configure domains for images (if using next/image)
   images: {
-    domains: ['localhost'],
-    unoptimized: process.env.NODE_ENV === 'development',
+    domains: ['localhost', 'd1.awsstatic.com'],
+    unoptimized: process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT === 'true',
   },
   
   // Headers configuration for Railway with comprehensive CORS
