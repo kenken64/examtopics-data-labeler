@@ -36,7 +36,7 @@ const nextConfig: NextConfig = {
   
   // Configure domains for images (if using next/image)
   images: {
-    domains: ['localhost'],
+    domains: ['localhost', 'd1.awsstatic.com'],
     unoptimized: process.env.NODE_ENV === 'development',
   },
   
