@@ -144,6 +144,20 @@ export async function middleware(request: NextRequest) {
   const method = request.method;
   const userAgent = request.headers.get('user-agent')?.substring(0, 50) || 'Unknown';
   
+  // Handle CORS preflight requests
+  if (method === 'OPTIONS') {
+    return new NextResponse(null, {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Max-Age': '86400', // 24 hours
+      },
+    });
+  }
+  
   console.log(`\n🔍 === MIDDLEWARE START ===`);
   console.log(`📍 Request: ${method} ${pathname}`);
   console.log(`🌐 User Agent: ${userAgent}...`);

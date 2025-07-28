@@ -642,7 +642,7 @@ export default function Certificates() {
                                 <Award className="text-white w-8 h-8 sm:w-12 sm:h-12 lg:w-16 lg:h-16" />
                               </div>
                             )}
-                            <div className="text-center sm:text-left">
+                            <div className="text-center sm:text-left sm:ml-4">
                               <h3 className="text-lg font-medium mb-2">{certificate.name}</h3>
                               <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
                                 <Badge variant="outline">{certificate.code}</Badge>
