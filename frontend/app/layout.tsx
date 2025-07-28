@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AWS Certification Web App",
-  description: "Comprehensive AWS certification preparation and management platform featuring PDF data labeling, question management, and AI-powered explanations.",
+  title: "IT Certification Web Admin App",
+  description: "Comprehensive IT certification preparation and management platform featuring PDF data labeling, question management, and AI-powered explanations.",
 };
 
 export const viewport: Viewport = {
