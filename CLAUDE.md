@@ -59,6 +59,7 @@ examtopics-data-labeler/
 - **Utilities**: `frontend/lib/` and `frontend/app/utils/`
 - **Charts**: `frontend/components/charts/` - Analytics components
 - **Specs**: `frontend/specs/` - Comprehensive technical documentation
+- **Scripts**: `frontend/scripts/` - All shell scripts (.sh), JavaScript scripts (.js), PowerShell scripts (.ps1), and batch files (.bat)
 
 ### Database Schema
 - **Collections**: certificates, payees, access-codes, questions, users, quiz-attempts, bookmarks

@@ -30,7 +30,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Add dummy environment variables for build
 ENV MONGODB_URI="mongodb://localhost:27017/awscert"
 ENV JWT_SECRET="dummy-jwt-secret-for-build"
-ENV NEXT_PUBLIC_PDF_CONVERSION_API_URL="http://localhost:5000"
+ENV NEXT_PUBLIC_PDF_CONVERSION_API_URL="https://backend-production-6048.up.railway.app"
 
 RUN npm run build
 
