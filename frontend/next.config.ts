@@ -30,6 +30,8 @@ const nextConfig: NextConfig = {
   // Railway-specific configuration
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
+    // Explicitly expose the PDF conversion API URL
+    NEXT_PUBLIC_PDF_CONVERSION_API_URL: process.env.NEXT_PUBLIC_PDF_CONVERSION_API_URL || 'https://backend-production-6048.up.railway.app',
   },
   
   
