@@ -5,15 +5,16 @@
  * including validation, edge cases, and user interaction scenarios.
  */
 
-import { describe, test, expect, jest } from '@jest/globals';
+// Mock function type for testing
+type MockFunction = () => void;
 
 // Mock functions for testing
 const createMockNavigationProps = (currentPage: number = 1, numPages: number = 10) => ({
   currentPage,
   numPages,
-  setCurrentPage: jest.fn(),
-  goToPreviousPage: jest.fn(),
-  goToNextPage: jest.fn()
+  setCurrentPage: (() => {}) as MockFunction,
+  goToPreviousPage: (() => {}) as MockFunction,
+  goToNextPage: (() => {}) as MockFunction
 });
 
 // Test validation logic
