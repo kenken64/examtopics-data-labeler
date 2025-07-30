@@ -123,7 +123,7 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow-md">
+          {/* <div className="bg-white p-6 rounded-lg shadow-md">
             <h2 className="text-xl font-semibold mb-4">PDF Attachments</h2>
             {loading ? (
               <div className="h-64 flex items-center justify-center">
@@ -132,7 +132,7 @@ export default function Dashboard() {
             ) : (
               <PdfAttachmentChart data={dashboardData?.pdfAttachmentStats || []} />
             )}
-          </div>
+          </div> */}
 
           <div className="bg-white p-6 rounded-lg shadow-md">
             <h2 className="text-xl font-semibold mb-4">Global Leaderboard</h2>
@@ -141,33 +141,7 @@ export default function Dashboard() {
                 <p className="text-gray-500">Loading...</p>
               </div>
             ) : (
-              <>
-                <div className="mb-2 text-sm text-gray-600">
-                  Debug: {leaderboardData.length} players loaded
-                </div>
-                <LeaderboardChart data={leaderboardData.length > 0 ? leaderboardData : [
-                  {
-                    _id: "test1",
-                    username: "testuser1",
-                    displayName: "Test User 1",
-                    totalPoints: 100,
-                    quizzesTaken: 5,
-                    accuracy: 85,
-                    source: "registered" as const,
-                    position: 1
-                  },
-                  {
-                    _id: "test2",
-                    username: "testuser2",
-                    displayName: "Test User 2",
-                    totalPoints: 80,
-                    quizzesTaken: 4,
-                    accuracy: 75,
-                    source: "quizblitz" as const,
-                    position: 2
-                  }
-                ]} />
-              </>
+              <LeaderboardChart data={leaderboardData} />
             )}
           </div>
         </div>

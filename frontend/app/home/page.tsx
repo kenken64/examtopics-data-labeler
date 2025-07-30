@@ -21,7 +21,8 @@ import {
   CreditCard,
   RefreshCw,
   User,
-  Settings
+  Settings,
+  Trophy
 } from "lucide-react";
 
 // Chart components
@@ -31,6 +32,18 @@ import AccessCodeStatusChart from "@/components/charts/AccessCodeStatusChart";
 import UserEngagementChart from "@/components/charts/UserEngagementChart";
 import PayeeStatusChart from "@/components/charts/PayeeStatusChart";
 import PdfAttachmentChart from "@/components/charts/PdfAttachmentChart";
+import LeaderboardChart from "@/components/charts/LeaderboardChart";
+
+interface LeaderboardPlayer {
+  _id: string;
+  username: string;
+  displayName: string;
+  totalPoints: number;
+  quizzesTaken: number;
+  accuracy: number;
+  source: 'registered' | 'quizblitz';
+  position: number;
+}
 
 interface DashboardData {
   certificates: Array<{
@@ -92,6 +105,7 @@ interface DashboardData {
 export default function Dashboard() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,12 +121,27 @@ export default function Dashboard() {
 
     const fetchDashboardData = async () => {
       try {
-        const response = await fetch('/api/dashboard');
-        if (!response.ok) {
+        // Fetch dashboard data and leaderboard data in parallel
+        const [dashboardResponse, leaderboardResponse] = await Promise.all([
+          fetch('/api/dashboard'),
+          fetch('/api/leaderboard?limit=10')
+        ]);
+
+        if (!dashboardResponse.ok) {
           throw new Error('Failed to fetch dashboard data');
         }
-        const dashboardData = await response.json();
+
+        const dashboardData = await dashboardResponse.json();
         setData(dashboardData);
+
+        // Handle leaderboard data (don't fail if it's not available)
+        if (leaderboardResponse.ok) {
+          const leaderboardResult = await leaderboardResponse.json();
+          setLeaderboardData(leaderboardResult.leaderboard || []);
+        } else {
+          console.warn('Failed to fetch leaderboard data:', leaderboardResponse.status);
+        }
+
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -130,12 +159,27 @@ export default function Dashboard() {
   const refreshData = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/dashboard');
-      if (!response.ok) {
+      // Fetch dashboard data and leaderboard data in parallel
+      const [dashboardResponse, leaderboardResponse] = await Promise.all([
+        fetch('/api/dashboard'),
+        fetch('/api/leaderboard?limit=10')
+      ]);
+
+      if (!dashboardResponse.ok) {
         throw new Error('Failed to refresh dashboard data');
       }
-      const dashboardData = await response.json();
+
+      const dashboardData = await dashboardResponse.json();
       setData(dashboardData);
+
+      // Handle leaderboard data (don't fail if it's not available)
+      if (leaderboardResponse.ok) {
+        const leaderboardResult = await leaderboardResponse.json();
+        setLeaderboardData(leaderboardResult.leaderboard || []);
+      } else {
+        console.warn('Failed to refresh leaderboard data:', leaderboardResponse.status);
+      }
+
       setError(null);
     } catch (err: any) {
       setError(err.message);
@@ -204,7 +248,7 @@ export default function Dashboard() {
         </div>
 
         {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Questions</CardTitle>
@@ -253,6 +297,22 @@ export default function Dashboard() {
               <div className="text-2xl font-bold">{data.accessCodes.totalAccessCodes}</div>
               <p className="text-xs text-muted-foreground">
                 {data.accessCodes.totalAssignments} total assignments
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Top Players</CardTitle>
+              <Trophy className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{leaderboardData.length}</div>
+              <p className="text-xs text-muted-foreground">
+                {leaderboardData.length > 0 
+                  ? `${leaderboardData[0]?.totalPoints || 0} top score`
+                  : 'No players yet'
+                }
               </p>
             </CardContent>
           </Card>
@@ -358,6 +418,32 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <PdfAttachmentChart data={data.pdfAttachments || []} />
+              </CardContent>
+            </Card>
+
+            {/* Global Leaderboard Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Trophy className="mr-2 h-5 w-5" />
+                  Global Leaderboard
+                </CardTitle>
+                <CardDescription>
+                  Top performing quiz players worldwide
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {leaderboardData.length > 0 ? (
+                  <LeaderboardChart data={leaderboardData} />
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <Trophy className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                      <p>No leaderboard data available</p>
+                      <p className="text-xs mt-1">Players will appear here after taking quizzes</p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

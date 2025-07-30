@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import SafeImage from '@/components/ui/SafeImage';
+import ImageErrorBoundary from '@/components/ui/ImageErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { z } from 'zod';
@@ -445,13 +446,53 @@ export default function ProfilePage() {
                 <div className="relative">
                   {photoPreview || profile.profilePhotoUrl ? (
                     <div className="w-20 h-20 rounded-full border-2 border-gray-300 overflow-hidden">
-                      <Image
-                        src={photoPreview || profile.profilePhotoUrl!}
-                        alt="Profile"
-                        width={80}
-                        height={80}
-                        className="w-full h-full object-cover"
-                      />
+                      <ImageErrorBoundary
+                        onError={(error) => console.log('🚨 Profile photo error caught:', error.message)}
+                        fallback={
+                          <div className="w-20 h-20 rounded-full border-2 border-gray-300 bg-gray-100 flex items-center justify-center">
+                            <svg
+                              className="w-8 h-8 text-gray-400"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                              />
+                            </svg>
+                          </div>
+                        }
+                      >
+                        <SafeImage
+                          src={photoPreview || profile.profilePhotoUrl!}
+                          alt="Profile"
+                          width={80}
+                          height={80}
+                          className="w-full h-full object-cover rounded-full"
+                          fallbackSrc="/default-avatar.svg"
+                          onError={() => console.log('Failed to load profile photo')}
+                          placeholder={
+                            <div className="w-20 h-20 rounded-full border-2 border-gray-300 bg-gray-100 flex items-center justify-center">
+                              <svg
+                                className="w-8 h-8 text-gray-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                />
+                              </svg>
+                            </div>
+                          }
+                        />
+                      </ImageErrorBoundary>
                     </div>
                   ) : (
                     <div className="w-20 h-20 rounded-full border-2 border-gray-300 bg-gray-100 flex items-center justify-center">

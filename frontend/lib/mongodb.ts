@@ -12,14 +12,30 @@ export async function connectToDatabase(): Promise<Db> {
     throw new Error('MONGODB_URI environment variable is not defined');
   }
 
-  // If we already have a cached connection, return it
+  // If we already have a cached connection, test it first
   if (cachedDb && client) {
-    return cachedDb;
+    try {
+      // Quick ping to test if connection is still alive
+      await client.db('admin').command({ ping: 1 });
+      return cachedDb;
+    } catch (error) {
+      console.log('🔄 Cached MongoDB connection lost, reconnecting...');
+      client = null;
+      cachedDb = null;
+    }
   }
 
   try {
-    // Create new client and connect
-    client = new MongoClient(uri);
+    // Create new client with better timeout settings
+    client = new MongoClient(uri, {
+      connectTimeoutMS: 5000,     // 5 seconds to connect
+      socketTimeoutMS: 5000,      // 5 seconds for socket operations
+      serverSelectionTimeoutMS: 5000, // 5 seconds to select a server
+      maxPoolSize: 10,            // Maximum number of connections
+      minPoolSize: 1,             // Minimum number of connections
+      maxIdleTimeMS: 30000,       // Close connections after 30 seconds of inactivity
+    });
+    
     await client.connect();
     
     // Get the database using the dynamic name

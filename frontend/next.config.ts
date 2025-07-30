@@ -38,8 +38,19 @@ const nextConfig: NextConfig = {
   
   // Configure domains for images (if using next/image)
   images: {
-    domains: ['localhost', 'd1.awsstatic.com'],
+    domains: [
+      'localhost', 
+      '127.0.0.1',
+      'd1.awsstatic.com', 
+      'res.cloudinary.com',
+      'cloudinary.com',
+      // Add additional Cloudinary subdomains that might be used
+      'dki0pkjto.cloudinary.com'
+    ],
     unoptimized: process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT === 'true',
+    // Add error handling for missing domains
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
   
   // Headers configuration for Railway with comprehensive CORS

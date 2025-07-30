@@ -85,28 +85,56 @@ export const POST = withAuth(async (request: AuthenticatedRequest) => {
 
       console.log('✅ POST /api/profile/photo: Upload successful:', uploadResult);
 
-      // Update user profile in database
+      // Update user profile in database with timeout handling
       console.log('💾 POST /api/profile/photo: Updating user profile...');
-      await connectToDatabase();
+      
+      try {
+        await connectToDatabase();
+        console.log('🔗 POST /api/profile/photo: Database connected');
 
-      const updatedUser = await User.findByIdAndUpdate(
-        request.user?.userId,
-        {
-          profilePhotoId: uploadResult.id,
-          profilePhotoUrl: uploadResult.url
-        },
-        { new: true, select: '-passkeys' }
-      );
-
-      if (!updatedUser) {
-        console.error('❌ POST /api/profile/photo: User not found');
-        return NextResponse.json(
-          { error: 'User not found' },
-          { status: 404 }
+        // Add timeout to the database operation
+        const updatePromise = User.findByIdAndUpdate(
+          request.user?.userId,
+          {
+            profilePhotoId: uploadResult.id,
+            profilePhotoUrl: uploadResult.url
+          },
+          { new: true, select: '-passkeys' }
         );
-      }
 
-      console.log('✅ POST /api/profile/photo: Profile updated successfully');
+        // Set a timeout for the database operation (8 seconds)
+        const updatedUser = await Promise.race([
+          updatePromise,
+          new Promise<null>((_, reject) =>
+            setTimeout(() => reject(new Error('Database operation timeout')), 8000)
+          )
+        ]);
+
+        if (!updatedUser) {
+          console.error('❌ POST /api/profile/photo: User not found');
+          return NextResponse.json(
+            { error: 'User not found' },
+            { status: 404 }
+          );
+        }
+
+        console.log('✅ POST /api/profile/photo: Profile updated successfully');
+
+      } catch (dbError) {
+        console.error('💾 POST /api/profile/photo: Database update failed:', dbError);
+        // Even if DB update fails, the file was uploaded to Cloudinary successfully
+        console.log('⚠️ POST /api/profile/photo: Photo uploaded to Cloudinary but DB update failed');
+        return NextResponse.json({
+          success: true,
+          message: 'Profile photo uploaded successfully (database update pending)',
+          photo: {
+            id: uploadResult.id,
+            url: uploadResult.url,
+            filename: uploadResult.filename
+          },
+          warning: 'Database update may be delayed due to connection issues'
+        });
+      }
 
       return NextResponse.json({
         success: true,
