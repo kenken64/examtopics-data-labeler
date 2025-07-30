@@ -100,6 +100,12 @@ interface DashboardData {
     }>;
   }>;
   lastUpdated: string;
+  userInfo?: {
+    email: string;
+    role: string;
+    isAdmin: boolean;
+  };
+  filterApplied?: string;
 }
 
 export default function Dashboard() {
@@ -228,8 +234,25 @@ export default function Dashboard() {
           <div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">
-              AWS Certification Management System Overview
+              IT Certification Management System Overview
             </p>
+            {/* User Role and Data Scope */}
+            {data.userInfo && (
+              <div className="flex items-center gap-3 mt-2">
+                <Badge 
+                  variant={data.userInfo.isAdmin ? "default" : "secondary"}
+                  className="text-xs"
+                >
+                  <User className="mr-1 h-3 w-3" />
+                  {data.userInfo.isAdmin ? "Admin" : "User"}: {data.userInfo.email}
+                </Badge>
+                {data.filterApplied && (
+                  <Badge variant="outline" className="text-xs">
+                    📊 {data.filterApplied}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-2">
             <Badge variant="outline" className="text-xs">
@@ -246,6 +269,41 @@ export default function Dashboard() {
             </Button>
           </div>
         </div>
+
+        {/* Data Scope Information */}
+        {data.userInfo && (
+          <Card className="border-l-4 border-l-blue-500">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  {data.userInfo.isAdmin ? (
+                    <Settings className="h-5 w-5 text-blue-600" />
+                  ) : (
+                    <User className="h-5 w-5 text-green-600" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-gray-900">
+                    {data.userInfo.isAdmin ? "Administrator View" : "User View"}
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {data.userInfo.isAdmin 
+                      ? "You can see all data across the system including all users' quiz attempts, bookmarks, and access codes."
+                      : "You can only see data related to your own access codes and quiz attempts. Other users' data is not visible to you."
+                    }
+                  </p>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                    <span>Logged in as: <strong>{data.userInfo.email}</strong></span>
+                    <span>•</span>
+                    <span>Role: <strong>{data.userInfo.role}</strong></span>
+                    <span>•</span>
+                    <span>Data scope: <strong>{data.filterApplied}</strong></span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">

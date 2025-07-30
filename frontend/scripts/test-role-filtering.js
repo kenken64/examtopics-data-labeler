@@ -1,8 +1,9 @@
 const { MongoClient } = require('mongodb');
-require('dotenv').config();
+require('dotenv').config({ path: '../.env.local' });
 
 async function testRoleBasedFiltering() {
-  const uri = process.env.MONGODB_URI || 'mongodb://admin:password123@localhost:27017/awscert?authSource=admin';
+  // Use environment variable for MongoDB URI
+  const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
   const client = new MongoClient(uri);
 
   try {
