@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, BookOpen, Users, ChevronRight, Loader2, Link, ExternalLink } from 'lucide-react';
+import { Search, BookOpen, Users, ChevronRight, Loader2, Link, ExternalLink, ChevronLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +32,15 @@ interface Question {
   [key: string]: unknown; // Allow additional properties for Record compatibility
 }
 
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalQuestions: number;
+  questionsPerPage: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
 interface UserInfo {
   email: string;
   role: string;
@@ -47,6 +56,11 @@ const SavedQuestionsPage = () => {
   const [loading, setLoading] = useState(false);
   const [loadingAccessCodes, setLoadingAccessCodes] = useState(true);
   const [searchMode, setSearchMode] = useState<'browse' | 'search'>('browse');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [questionRangeFrom, setQuestionRangeFrom] = useState('');
+  const [questionRangeTo, setQuestionRangeTo] = useState('');
+  const [useQuestionRange, setUseQuestionRange] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -84,7 +98,7 @@ const SavedQuestionsPage = () => {
     }
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async (page: number = 1) => {
     if (!searchTerm.trim()) {
       toast({
         title: "Error",
@@ -94,11 +108,57 @@ const SavedQuestionsPage = () => {
       return;
     }
 
+    // Validate question range if enabled
+    if (useQuestionRange) {
+      const fromNum = parseInt(questionRangeFrom);
+      const toNum = parseInt(questionRangeTo);
+      
+      if (questionRangeFrom && isNaN(fromNum)) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid 'from' question number.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (questionRangeTo && isNaN(toNum)) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid 'to' question number.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (questionRangeFrom && questionRangeTo && fromNum > toNum) {
+        toast({
+          title: "Error",
+          description: "The 'from' question number must be less than or equal to the 'to' question number.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       setSearchMode('search');
+      setCurrentPage(page);
       
-      const response = await fetch(`/api/saved-questions?accessCode=${encodeURIComponent(searchTerm.trim())}`);
+      let url = `/api/saved-questions?accessCode=${encodeURIComponent(searchTerm.trim())}&page=${page}&limit=50`;
+      
+      // Add question range parameters if enabled
+      if (useQuestionRange) {
+        if (questionRangeFrom) {
+          url += `&questionFrom=${questionRangeFrom}`;
+        }
+        if (questionRangeTo) {
+          url += `&questionTo=${questionRangeTo}`;
+        }
+      }
+      
+      const response = await fetch(url);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -107,16 +167,23 @@ const SavedQuestionsPage = () => {
       
       const data = await response.json();
       setSearchResults(data.questions || []);
+      setPagination(data.pagination || null);
       
       if (data.questions?.length === 0) {
+        const rangeText = useQuestionRange && (questionRangeFrom || questionRangeTo) 
+          ? ` in range ${questionRangeFrom || '1'} to ${questionRangeTo || 'end'}`
+          : '';
         toast({
           title: "No Results",
-          description: "No questions found for this access code.",
+          description: `No questions found for this access code${rangeText}.`,
         });
       } else {
+        const rangeText = useQuestionRange && (questionRangeFrom || questionRangeTo) 
+          ? ` (filtered by range ${questionRangeFrom || '1'}-${questionRangeTo || 'end'})`
+          : '';
         toast({
           title: "Success",
-          description: `Found ${data.questions?.length} questions.`,
+          description: `Found ${data.pagination?.totalQuestions || data.questions?.length} questions${rangeText}.`,
         });
       }
     } catch (error) {
@@ -127,6 +194,7 @@ const SavedQuestionsPage = () => {
         variant: "destructive",
       });
       setSearchResults([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
@@ -178,6 +246,23 @@ const SavedQuestionsPage = () => {
         description: error.message,
         variant: "destructive",
       });
+    }
+  };
+
+  // Reset to page 1 when search term changes
+  const resetSearch = () => {
+    setCurrentPage(1);
+    setPagination(null);
+    setSearchResults([]);
+    setSearchMode('browse');
+    setQuestionRangeFrom('');
+    setQuestionRangeTo('');
+    setUseQuestionRange(false);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && pagination && newPage <= pagination.totalPages) {
+      handleSearch(newPage);
     }
   };
 
@@ -235,23 +320,68 @@ const SavedQuestionsPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Input
-                placeholder="Enter original or generated access code..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="flex-1 min-h-[44px]"
-              />
-              <Button onClick={handleSearch} disabled={loading} className="min-h-[44px]">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Search
-              </Button>
-              {searchMode === 'search' && (
-                <Button variant="outline" onClick={handleBackToBrowse} className="min-h-[44px]">
-                  Back to Browse
+            <div className="space-y-4">
+              {/* Access Code Search */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  placeholder="Enter original or generated access code..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  className="flex-1 min-h-[44px]"
+                />
+                <Button onClick={() => handleSearch()} disabled={loading} className="min-h-[44px]">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  Search
                 </Button>
-              )}
+                {searchMode === 'search' && (
+                  <Button variant="outline" onClick={handleBackToBrowse} className="min-h-[44px]">
+                    Back to Browse
+                  </Button>
+                )}
+              </div>
+
+              {/* Question Range Filter */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="useQuestionRange"
+                    checked={useQuestionRange}
+                    onChange={(e) => setUseQuestionRange(e.target.checked)}
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                  />
+                  <label htmlFor="useQuestionRange" className="text-sm font-medium">
+                    Filter by question number range
+                  </label>
+                </div>
+                
+                {useQuestionRange && (
+                  <div className="flex items-center gap-2 pl-6">
+                    <span className="text-sm text-gray-600">From:</span>
+                    <Input
+                      type="number"
+                      placeholder="2"
+                      value={questionRangeFrom}
+                      onChange={(e) => setQuestionRangeFrom(e.target.value)}
+                      className="w-20"
+                      min="1"
+                    />
+                    <span className="text-sm text-gray-600">To:</span>
+                    <Input
+                      type="number"
+                      placeholder="10"
+                      value={questionRangeTo}
+                      onChange={(e) => setQuestionRangeTo(e.target.value)}
+                      className="w-20"
+                      min="1"
+                    />
+                    <span className="text-xs text-gray-500 ml-2">
+                      (e.g., questions 2 to 10)
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -354,7 +484,14 @@ const SavedQuestionsPage = () => {
             <div className="flex items-center gap-2 mb-6">
               <BookOpen className="h-5 w-5" />
               <h2 className="text-xl font-semibold">Search Results</h2>
-              <Badge variant="secondary">{searchResults.length} questions</Badge>
+              <Badge variant="secondary">
+                {pagination ? `${pagination.totalQuestions} total` : `${searchResults.length} questions`}
+              </Badge>
+              {pagination && (
+                <Badge variant="outline" className="text-xs">
+                  Page {pagination.currentPage} of {pagination.totalPages}
+                </Badge>
+              )}
             </div>
 
             {searchResults.length === 0 ? (
@@ -396,6 +533,68 @@ const SavedQuestionsPage = () => {
                     </CardContent>
                   </Card>
                 ))}
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {pagination && pagination.totalPages > 1 && (
+              <div className="mt-8 flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  Showing {((pagination.currentPage - 1) * pagination.questionsPerPage) + 1} to{' '}
+                  {Math.min(pagination.currentPage * pagination.questionsPerPage, pagination.totalQuestions)} of{' '}
+                  {pagination.totalQuestions} questions
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    disabled={!pagination.hasPrevPage || loading}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  
+                  <div className="flex items-center gap-1">
+                    {/* Show page numbers */}
+                    {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (pagination.totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (pagination.currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (pagination.currentPage >= pagination.totalPages - 2) {
+                        pageNum = pagination.totalPages - 4 + i;
+                      } else {
+                        pageNum = pagination.currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === pagination.currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePageChange(pageNum)}
+                          disabled={loading}
+                          className="w-10"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    disabled={!pagination.hasNextPage || loading}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             )}
           </div>

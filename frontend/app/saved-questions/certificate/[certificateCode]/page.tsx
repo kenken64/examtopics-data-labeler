@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, BookOpen, Loader2, ChevronRight } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,15 @@ interface CertificateInfo {
   totalQuestions: number;
 }
 
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalQuestions: number;
+  questionsPerPage: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
 const CertificateQuestionsPage = () => {
   const params = useParams();
   const router = useRouter();
@@ -33,6 +42,8 @@ const CertificateQuestionsPage = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [certificateInfo, setCertificateInfo] = useState<CertificateInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -41,11 +52,12 @@ const CertificateQuestionsPage = () => {
     }
   }, [certificateCode]);
 
-  const loadQuestions = async () => {
+  const loadQuestions = async (page: number = 1) => {
     try {
       setLoading(true);
+      setCurrentPage(page);
       
-      const response = await fetch(`/api/saved-questions?certificateCode=${encodeURIComponent(certificateCode)}`);
+      const response = await fetch(`/api/saved-questions?certificateCode=${encodeURIComponent(certificateCode)}&page=${page}&limit=50`);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -54,24 +66,25 @@ const CertificateQuestionsPage = () => {
       
       const data = await response.json();
       setQuestions(data.questions || []);
+      setPagination(data.pagination || null);
       
       // Set certificate info from API response
       if (data.certificate) {
         setCertificateInfo({
           certificateCode: data.certificate.code,
           certificateTitle: data.certificate.name,
-          totalQuestions: data.questions?.length || 0
+          totalQuestions: data.pagination?.totalQuestions || data.questions?.length || 0
         });
       } else if (data.questions && data.questions.length > 0) {
         // Fallback if certificate info not available
         setCertificateInfo({
           certificateCode: certificateCode,
           certificateTitle: `Certificate ${certificateCode}`,
-          totalQuestions: data.questions.length
+          totalQuestions: data.pagination?.totalQuestions || data.questions.length
         });
       }
       
-      if (data.questions?.length === 0) {
+      if (data.questions?.length === 0 && page === 1) {
         toast({
           title: "No Questions",
           description: "No questions found for this certificate.",
@@ -91,6 +104,12 @@ const CertificateQuestionsPage = () => {
 
   const handleQuestionClick = (questionNo: number) => {
     router.push(`/saved-questions/question/${questionNo}?from=certificate&certificateCode=${encodeURIComponent(certificateCode)}`);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && pagination && newPage <= pagination.totalPages) {
+      loadQuestions(newPage);
+    }
   };
 
   const handleBackClick = () => {
@@ -139,11 +158,16 @@ const CertificateQuestionsPage = () => {
           {certificateInfo && (
             <div className="flex items-center gap-4">
               <Badge variant="secondary" className="text-sm">
-                {certificateInfo.totalQuestions} questions
+                {certificateInfo.totalQuestions} total questions
               </Badge>
               <Badge variant="outline" className="text-sm">
                 {certificateCode}
               </Badge>
+              {pagination && (
+                <Badge variant="outline" className="text-xs">
+                  Page {pagination.currentPage} of {pagination.totalPages}
+                </Badge>
+              )}
             </div>
           )}
         </div>
@@ -196,12 +220,79 @@ const CertificateQuestionsPage = () => {
           </div>
         )}
 
+        {/* Pagination Controls */}
+        {pagination && pagination.totalPages > 1 && (
+          <div className="mt-8 flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              Showing {((pagination.currentPage - 1) * pagination.questionsPerPage) + 1} to{' '}
+              {Math.min(pagination.currentPage * pagination.questionsPerPage, pagination.totalQuestions)} of{' '}
+              {pagination.totalQuestions} questions
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(pagination.currentPage - 1)}
+                disabled={!pagination.hasPrevPage || loading}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              
+              <div className="flex items-center gap-1">
+                {/* Show page numbers */}
+                {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (pagination.totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (pagination.currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (pagination.currentPage >= pagination.totalPages - 2) {
+                    pageNum = pagination.totalPages - 4 + i;
+                  } else {
+                    pageNum = pagination.currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === pagination.currentPage ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      disabled={loading}
+                      className="w-10"
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(pagination.currentPage + 1)}
+                disabled={!pagination.hasNextPage || loading}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Summary Footer */}
         {questions.length > 0 && (
           <Card className="mt-8">
             <CardContent className="text-center py-6">
               <div className="flex items-center justify-center gap-4 text-sm text-gray-600">
-                <span>Total Questions: <strong>{questions.length}</strong></span>
+                <span>
+                  {pagination 
+                    ? `Page ${pagination.currentPage} of ${pagination.totalPages} • Total: ${pagination.totalQuestions} questions`
+                    : `Total Questions: ${questions.length}`
+                  }
+                </span>
                 <span>•</span>
                 <span>Certificate: <strong>{certificateCode}</strong></span>
                 <span>•</span>
