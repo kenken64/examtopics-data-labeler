@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+
 // Helper function to retry database operations with exponential backoff
 export async function retryDatabaseOperation<T>(
   operation: () => Promise<T>,
@@ -32,8 +34,6 @@ export async function retryDatabaseOperation<T>(
 // Helper function to test database connectivity
 export async function testDatabaseConnection(): Promise<boolean> {
   try {
-    const mongoose = require('mongoose');
-    
     // Check if already connected
     if (mongoose.connection.readyState === 1) {
       console.log('✅ Database already connected');

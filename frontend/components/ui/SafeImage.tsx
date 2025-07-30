@@ -110,7 +110,7 @@ export default function SafeImage({
             style={{ width, height }}
           />
         )}
-        <img
+        <Image
           src={imageSrc}
           alt={alt}
           width={width}
@@ -122,6 +122,7 @@ export default function SafeImage({
             objectFit: 'cover',
             display: isLoading ? 'none' : 'block'
           }}
+          unoptimized={!imageSrc.includes('cloudinary.com') && !imageSrc.startsWith('/')}
         />
       </>
     );
