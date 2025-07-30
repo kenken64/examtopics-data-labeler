@@ -60,9 +60,17 @@ async function dbConnect() {
   // Create new connection promise if none exists
   // This prevents multiple simultaneous connection attempts
   if (!cached.promise) {
-    // Mongoose connection options optimized for serverless
+    // Mongoose connection options optimized for serverless with timeout handling
     const opts = {
-      bufferCommands: false,  // Disable command buffering for immediate error feedback
+      bufferCommands: false,     // Disable command buffering for immediate error feedback
+      connectTimeoutMS: 5000,    // 5 seconds to establish connection
+      socketTimeoutMS: 5000,     // 5 seconds for socket operations
+      serverSelectionTimeoutMS: 5000, // 5 seconds to select a server
+      maxPoolSize: 10,           // Maximum number of connections in the pool
+      minPoolSize: 1,            // Minimum number of connections in the pool
+      maxIdleTimeMS: 30000,      // Close connections after 30 seconds of inactivity
+      retryWrites: true,         // Retry write operations on failure
+      retryReads: true,          // Retry read operations on failure
     };
 
     // Create and cache the connection promise
