@@ -2,6 +2,7 @@
 
 // Test the actual navigation flow with the correct certificate
 const { MongoClient } = require('mongodb');
+require('dotenv').config({ path: '../.env.local' });
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 

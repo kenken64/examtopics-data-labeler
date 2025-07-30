@@ -2,6 +2,7 @@
 
 // Test script to verify question navigation URLs are working correctly
 const { MongoClient } = require('mongodb');
+require('dotenv').config({ path: '../.env.local' });
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/awscert';
 

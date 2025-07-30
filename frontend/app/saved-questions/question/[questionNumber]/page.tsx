@@ -86,12 +86,16 @@ const QuestionDetailPageContent = () => {
       
       let url = '';
       if (fromPage === 'search' && accessCode) {
-        url = `/api/saved-questions?accessCode=${encodeURIComponent(accessCode)}`;
+        // Load ALL questions without pagination to find the specific question
+        url = `/api/saved-questions?accessCode=${encodeURIComponent(accessCode)}&limit=1000`;
       } else if (fromPage === 'certificate' && certificateCode) {
-        url = `/api/saved-questions?certificateCode=${encodeURIComponent(certificateCode)}`;
+        // Load ALL questions without pagination to find the specific question
+        url = `/api/saved-questions?certificateCode=${encodeURIComponent(certificateCode)}&limit=1000`;
       } else {
         throw new Error('Invalid navigation parameters');
       }
+      
+      console.log(`Loading question ${questionNumber} from URL: ${url}`);
       
       const response = await fetch(url);
       
@@ -101,10 +105,68 @@ const QuestionDetailPageContent = () => {
       }
       
       const data = await response.json();
+      console.log(`API returned ${data.questions?.length || 0} questions`);
+      console.log(`Looking for question number: ${questionNumber}`);
+      console.log(`Available question numbers: ${data.questions?.map((q: Question) => q.question_no).sort((a: number, b: number) => a - b).join(', ') || 'none'}`);
+      
       const foundQuestion = data.questions?.find((q: Question) => q.question_no === questionNumber);
       
       if (!foundQuestion) {
-        throw new Error('Question not found');
+        // Question not found - provide helpful error message and suggest alternatives
+        const availableQuestions = data.questions?.map((q: Question) => q.question_no).sort((a: number, b: number) => a - b) || [];
+        const totalQuestions = availableQuestions.length;
+        
+        console.error(`Question ${questionNumber} not found. Available questions:`, availableQuestions);
+        
+        let errorMessage = `Question ${questionNumber} not found`;
+        if (fromPage === 'certificate' && certificateCode) {
+          errorMessage += ` for certificate ${certificateCode}`;
+          if (totalQuestions > 0) {
+            errorMessage += `. Available questions: ${availableQuestions[0]}-${availableQuestions[availableQuestions.length - 1]} (${totalQuestions} total)`;
+          }
+        } else if (fromPage === 'search' && accessCode) {
+          errorMessage += ` for access code ${accessCode}`;
+          if (totalQuestions > 0) {
+            errorMessage += `. Available questions: ${availableQuestions[0]}-${availableQuestions[availableQuestions.length - 1]} (${totalQuestions} total)`;
+          }
+        }
+        
+        // If we have questions available, suggest redirecting to the first one
+        if (totalQuestions > 0) {
+          toast({
+            title: "Question Not Found",
+            description: `${errorMessage}. Redirecting to question ${availableQuestions[0]}...`,
+            variant: "destructive",
+          });
+          
+          // Redirect to the first available question after a short delay
+          setTimeout(() => {
+            let redirectUrl = '';
+            if (fromPage === 'certificate' && certificateCode) {
+              redirectUrl = `/saved-questions/question/${availableQuestions[0]}?from=certificate&certificateCode=${encodeURIComponent(certificateCode)}`;
+            } else if (fromPage === 'search' && accessCode) {
+              redirectUrl = `/saved-questions/question/${availableQuestions[0]}?from=search&accessCode=${encodeURIComponent(accessCode)}`;
+            } else {
+              // Fallback to certificate page
+              handleBackClick();
+              return;
+            }
+            router.push(redirectUrl);
+          }, 2000);
+        } else {
+          toast({
+            title: "No Questions Available",
+            description: `No questions found for ${fromPage === 'certificate' ? `certificate ${certificateCode}` : `access code ${accessCode}`}.`,
+            variant: "destructive",
+          });
+          
+          // Redirect back to previous page
+          setTimeout(() => {
+            handleBackClick();
+          }, 2000);
+        }
+        
+        throw new Error(errorMessage);
       }
       
       setQuestion(foundQuestion);
@@ -430,7 +492,20 @@ const QuestionDetailPageContent = () => {
             <CardContent className="text-center py-12">
               <XCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">Question Not Found</h3>
-              <p className="text-gray-600 mb-4">The requested question could not be loaded.</p>
+              <p className="text-gray-600 mb-4">
+                Question {questionNumber} could not be found
+                {fromPage === 'certificate' && certificateCode && ` for certificate ${certificateCode}`}
+                {fromPage === 'search' && accessCode && ` for access code ${accessCode}`}.
+              </p>
+              <div className="text-sm text-gray-500 mb-6 space-y-1">
+                <p><strong>Navigation:</strong> {fromPage}</p>
+                {certificateCode && <p><strong>Certificate:</strong> {certificateCode}</p>}
+                {accessCode && <p><strong>Access Code:</strong> {accessCode}</p>}
+                <p><strong>Requested Question:</strong> {questionNumber}</p>
+                <p className="text-xs mt-3">
+                  💡 This usually happens when trying to access a question number that doesn't exist for this certificate or access code.
+                </p>
+              </div>
               <Button onClick={handleBackClick}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Go Back
