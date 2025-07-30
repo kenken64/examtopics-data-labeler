@@ -182,9 +182,56 @@ export default function PdfViewer({
             >
               Previous
             </button>
-            <span>
-              Page {currentPage} of {numPages}
-            </span>
+            
+            {/* Page number input with validation */}
+            <div className="flex items-center space-x-1">
+              <span className="text-sm text-gray-600">Page</span>
+              <input
+                type="number"
+                min="1"
+                max={numPages}
+                value={currentPage}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  const pageNum = parseInt(e.target.value, 10);
+                  if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= numPages) {
+                    setCurrentPage(pageNum);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') {
+                    const pageNum = parseInt(e.currentTarget.value, 10);
+                    if (!isNaN(pageNum)) {
+                      if (pageNum < 1) {
+                        setCurrentPage(1);
+                        e.currentTarget.value = '1';
+                      } else if (pageNum > numPages) {
+                        setCurrentPage(numPages);
+                        e.currentTarget.value = numPages.toString();
+                      } else {
+                        setCurrentPage(pageNum);
+                      }
+                    }
+                  }
+                }}
+                onBlur={(e) => {
+                  e.stopPropagation();
+                  const pageNum = parseInt(e.target.value, 10);
+                  if (isNaN(pageNum) || pageNum < 1) {
+                    setCurrentPage(1);
+                    e.target.value = '1';
+                  } else if (pageNum > numPages) {
+                    setCurrentPage(numPages);
+                    e.target.value = numPages.toString();
+                  }
+                }}
+                className="w-16 px-2 py-1 text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                style={{ fontSize: '14px' }}
+              />
+              <span className="text-sm text-gray-600">of {numPages}</span>
+            </div>
+            
             <button
               onClick={(e) => {
                 e.stopPropagation();
