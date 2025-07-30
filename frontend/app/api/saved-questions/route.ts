@@ -20,6 +20,9 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
     const accessCode = searchParams.get('accessCode');
     const certificateCode = searchParams.get('certificateCode');
     const listAccessCodes = searchParams.get('listAccessCodes') === 'true';
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const skip = (page - 1) * limit;
 
     const db = await connectToDatabase();
 
@@ -173,34 +176,93 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
         ];
 
         const assignedQuestions = await db.collection('access-code-questions').aggregate(pipeline).toArray();
-        questions = assignedQuestions;
+        
+        // Get total count for pagination
+        const totalCountPipeline = [
+          { 
+            $match: { 
+              generatedAccessCode: accessCode,
+              isEnabled: true 
+            } 
+          },
+          { $count: "total" }
+        ];
+        const totalCountResult = await db.collection('access-code-questions').aggregate(totalCountPipeline).toArray();
+        const totalQuestions = totalCountResult.length > 0 ? totalCountResult[0].total : 0;
+        
+        // Apply pagination to the main pipeline
+        const paginatedPipeline = [
+          ...pipeline,
+          { $skip: skip },
+          { $limit: limit }
+        ];
+        
+        const paginatedQuestions = await db.collection('access-code-questions').aggregate(paginatedPipeline).toArray();
+        questions = paginatedQuestions;
+        
+        return NextResponse.json({
+          success: true,
+          payee: {
+            _id: payee._id,
+            payeeName: payee.payeeName,
+            accessCode: payee.accessCode,
+            generatedAccessCode: payee.generatedAccessCode,
+            isGeneratedCode: payee.generatedAccessCode === accessCode
+          },
+          certificate: {
+            _id: certificate._id,
+            name: certificate.name,
+            code: certificate.code
+          },
+          questions: transformQuestionsForFrontend(questions),
+          pagination: {
+            currentPage: page,
+            totalPages: Math.ceil(totalQuestions / limit),
+            totalQuestions,
+            questionsPerPage: limit,
+            hasNextPage: skip + limit < totalQuestions,
+            hasPrevPage: page > 1
+          }
+        });
       } else {
         // Use original method for original access codes
+        const totalQuestions = await db.collection('quizzes')
+          .countDocuments({ certificateId: payee.certificateId.toString() });
+        
         const allQuestions = await db.collection('quizzes')
           .find({ certificateId: payee.certificateId.toString() })
           .sort({ question_no: 1 })
+          .skip(skip)
+          .limit(limit)
           .toArray();
         
         questions = allQuestions;
+        
+        return NextResponse.json({
+          success: true,
+          payee: {
+            _id: payee._id,
+            payeeName: payee.payeeName,
+            accessCode: payee.accessCode,
+            generatedAccessCode: payee.generatedAccessCode,
+            isGeneratedCode: payee.generatedAccessCode === accessCode
+          },
+          certificate: {
+            _id: certificate._id,
+            name: certificate.name,
+            code: certificate.code
+          },
+          questions: transformQuestionsForFrontend(questions),
+          pagination: {
+            currentPage: page,
+            totalPages: Math.ceil(totalQuestions / limit),
+            totalQuestions,
+            questionsPerPage: limit,
+            hasNextPage: skip + limit < totalQuestions,
+            hasPrevPage: page > 1
+          }
+        });
       }
-
-      return NextResponse.json({
-        success: true,
-        payee: {
-          _id: payee._id,
-          payeeName: payee.payeeName,
-          accessCode: payee.accessCode,
-          generatedAccessCode: payee.generatedAccessCode,
-          isGeneratedCode: payee.generatedAccessCode === accessCode
-        },
-        certificate: {
-          _id: certificate._id,
-          name: certificate.name,
-          code: certificate.code
-        },
-        questions: transformQuestionsForFrontend(questions),
-        totalQuestions: questions.length
-      });
     }
 
     // If searching by certificate code

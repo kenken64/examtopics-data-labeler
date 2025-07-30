@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, BookOpen, Users, ChevronRight, Loader2, Link, ExternalLink } from 'lucide-react';
+import { Search, BookOpen, Users, ChevronRight, Loader2, Link, ExternalLink, ChevronLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +32,15 @@ interface Question {
   [key: string]: unknown; // Allow additional properties for Record compatibility
 }
 
+interface PaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalQuestions: number;
+  questionsPerPage: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
+
 interface UserInfo {
   email: string;
   role: string;
@@ -47,6 +56,8 @@ const SavedQuestionsPage = () => {
   const [loading, setLoading] = useState(false);
   const [loadingAccessCodes, setLoadingAccessCodes] = useState(true);
   const [searchMode, setSearchMode] = useState<'browse' | 'search'>('browse');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -84,7 +95,7 @@ const SavedQuestionsPage = () => {
     }
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async (page: number = 1) => {
     if (!searchTerm.trim()) {
       toast({
         title: "Error",
@@ -97,8 +108,10 @@ const SavedQuestionsPage = () => {
     try {
       setLoading(true);
       setSearchMode('search');
+      setCurrentPage(page);
       
-      const response = await fetch(`/api/saved-questions?accessCode=${encodeURIComponent(searchTerm.trim())}`);
+      const url = `/api/saved-questions?accessCode=${encodeURIComponent(searchTerm.trim())}&page=${page}&limit=50`;
+      const response = await fetch(url);
       
       if (!response.ok) {
         const errorData = await response.json();
@@ -107,6 +120,7 @@ const SavedQuestionsPage = () => {
       
       const data = await response.json();
       setSearchResults(data.questions || []);
+      setPagination(data.pagination || null);
       
       if (data.questions?.length === 0) {
         toast({
@@ -116,7 +130,7 @@ const SavedQuestionsPage = () => {
       } else {
         toast({
           title: "Success",
-          description: `Found ${data.questions?.length} questions.`,
+          description: `Found ${data.pagination?.totalQuestions || data.questions?.length} questions.`,
         });
       }
     } catch (error) {
@@ -127,6 +141,7 @@ const SavedQuestionsPage = () => {
         variant: "destructive",
       });
       setSearchResults([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
@@ -178,6 +193,20 @@ const SavedQuestionsPage = () => {
         description: error.message,
         variant: "destructive",
       });
+    }
+  };
+
+  // Reset to page 1 when search term changes
+  const resetSearch = () => {
+    setCurrentPage(1);
+    setPagination(null);
+    setSearchResults([]);
+    setSearchMode('browse');
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && pagination && newPage <= pagination.totalPages) {
+      handleSearch(newPage);
     }
   };
 
@@ -243,7 +272,7 @@ const SavedQuestionsPage = () => {
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 className="flex-1 min-h-[44px]"
               />
-              <Button onClick={handleSearch} disabled={loading} className="min-h-[44px]">
+              <Button onClick={() => handleSearch()} disabled={loading} className="min-h-[44px]">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                 Search
               </Button>
@@ -354,7 +383,14 @@ const SavedQuestionsPage = () => {
             <div className="flex items-center gap-2 mb-6">
               <BookOpen className="h-5 w-5" />
               <h2 className="text-xl font-semibold">Search Results</h2>
-              <Badge variant="secondary">{searchResults.length} questions</Badge>
+              <Badge variant="secondary">
+                {pagination ? `${pagination.totalQuestions} total` : `${searchResults.length} questions`}
+              </Badge>
+              {pagination && (
+                <Badge variant="outline" className="text-xs">
+                  Page {pagination.currentPage} of {pagination.totalPages}
+                </Badge>
+              )}
             </div>
 
             {searchResults.length === 0 ? (
@@ -396,6 +432,68 @@ const SavedQuestionsPage = () => {
                     </CardContent>
                   </Card>
                 ))}
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {pagination && pagination.totalPages > 1 && (
+              <div className="mt-8 flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  Showing {((pagination.currentPage - 1) * pagination.questionsPerPage) + 1} to{' '}
+                  {Math.min(pagination.currentPage * pagination.questionsPerPage, pagination.totalQuestions)} of{' '}
+                  {pagination.totalQuestions} questions
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    disabled={!pagination.hasPrevPage || loading}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  
+                  <div className="flex items-center gap-1">
+                    {/* Show page numbers */}
+                    {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (pagination.totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (pagination.currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (pagination.currentPage >= pagination.totalPages - 2) {
+                        pageNum = pagination.totalPages - 4 + i;
+                      } else {
+                        pageNum = pagination.currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === pagination.currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePageChange(pageNum)}
+                          disabled={loading}
+                          className="w-10"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    disabled={!pagination.hasNextPage || loading}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             )}
           </div>
