@@ -23,6 +23,12 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
     const skip = (page - 1) * limit;
+    
+    // Question range filtering parameters
+    const questionFrom = searchParams.get('questionFrom');
+    const questionTo = searchParams.get('questionTo');
+    const questionFromNum = questionFrom ? parseInt(questionFrom) : null;
+    const questionToNum = questionTo ? parseInt(questionTo) : null;
 
     const db = await connectToDatabase();
 
@@ -139,13 +145,25 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
       let questions;
       if (payee.generatedAccessCode === accessCode) {
         // Use the new access-code-questions collection for generated codes
+        let baseMatchCondition: any = {
+          generatedAccessCode: accessCode,
+          isEnabled: true 
+        };
+        
+        // Add question range filtering if specified
+        if (questionFromNum !== null || questionToNum !== null) {
+          const questionRangeCondition: any = {};
+          if (questionFromNum !== null) {
+            questionRangeCondition.$gte = questionFromNum;
+          }
+          if (questionToNum !== null) {
+            questionRangeCondition.$lte = questionToNum;
+          }
+          baseMatchCondition.assignedQuestionNo = questionRangeCondition;
+        }
+        
         const pipeline = [
-          { 
-            $match: { 
-              generatedAccessCode: accessCode,
-              isEnabled: true 
-            } 
-          },
+          { $match: baseMatchCondition },
           // Lookup question details
           {
             $lookup: {
@@ -179,12 +197,7 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
         
         // Get total count for pagination
         const totalCountPipeline = [
-          { 
-            $match: { 
-              generatedAccessCode: accessCode,
-              isEnabled: true 
-            } 
-          },
+          { $match: baseMatchCondition },
           { $count: "total" }
         ];
         const totalCountResult = await db.collection('access-code-questions').aggregate(totalCountPipeline).toArray();
@@ -226,11 +239,25 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
         });
       } else {
         // Use original method for original access codes
+        let queryCondition: any = { certificateId: payee.certificateId.toString() };
+        
+        // Add question range filtering if specified
+        if (questionFromNum !== null || questionToNum !== null) {
+          const questionRangeCondition: any = {};
+          if (questionFromNum !== null) {
+            questionRangeCondition.$gte = questionFromNum;
+          }
+          if (questionToNum !== null) {
+            questionRangeCondition.$lte = questionToNum;
+          }
+          queryCondition.question_no = questionRangeCondition;
+        }
+        
         const totalQuestions = await db.collection('quizzes')
-          .countDocuments({ certificateId: payee.certificateId.toString() });
+          .countDocuments(queryCondition);
         
         const allQuestions = await db.collection('quizzes')
-          .find({ certificateId: payee.certificateId.toString() })
+          .find(queryCondition)
           .sort({ question_no: 1 })
           .skip(skip)
           .limit(limit)
@@ -279,11 +306,22 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
         }, { status: 404 });
       }
 
-      // Find all questions for this certificate
+      // Count total questions for this certificate
+      const totalQuestions = await db.collection('quizzes')
+        .countDocuments({ certificateId: certificate._id.toString() });
+
+      // Find paginated questions for this certificate
       const questions = await db.collection('quizzes')
         .find({ certificateId: certificate._id.toString() })
         .sort({ question_no: 1 })
+        .skip(skip)
+        .limit(limit)
         .toArray();
+
+      // Calculate pagination info
+      const totalPages = Math.ceil(totalQuestions / limit);
+      const hasNextPage = page < totalPages;
+      const hasPrevPage = page > 1;
 
       return NextResponse.json({
         success: true,
@@ -293,7 +331,14 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
           code: certificate.code
         },
         questions: transformQuestionsForFrontend(questions),
-        totalQuestions: questions.length
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalQuestions,
+          questionsPerPage: limit,
+          hasNextPage,
+          hasPrevPage
+        }
       });
     }
 

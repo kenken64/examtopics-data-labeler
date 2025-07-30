@@ -20,6 +20,15 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
     const { searchParams } = new URL(request.url);
     const generatedAccessCode = searchParams.get('generatedAccessCode');
     const includeDisabled = searchParams.get('includeDisabled') === 'true';
+    
+    // Pagination parameters
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')));
+    const skip = (page - 1) * limit;
+    
+    // Question number range parameters
+    const fromQuestionNo = searchParams.get('fromQuestionNo');
+    const toQuestionNo = searchParams.get('toQuestionNo');
 
     if (!generatedAccessCode) {
       return NextResponse.json({
@@ -44,6 +53,23 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
     const matchConditions: any = { generatedAccessCode };
     if (!includeDisabled) {
       matchConditions.isEnabled = true;
+    }
+    
+    // Add question number range filtering
+    if (fromQuestionNo || toQuestionNo) {
+      matchConditions.assignedQuestionNo = {};
+      if (fromQuestionNo) {
+        const from = parseInt(fromQuestionNo);
+        if (!isNaN(from)) {
+          matchConditions.assignedQuestionNo.$gte = from;
+        }
+      }
+      if (toQuestionNo) {
+        const to = parseInt(toQuestionNo);
+        if (!isNaN(to)) {
+          matchConditions.assignedQuestionNo.$lte = to;
+        }
+      }
     }
 
     console.log('🔒 Access code questions - User:', request.user.email);
@@ -107,6 +133,9 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
       { $unwind: { path: '$questionLinker', preserveNullAndEmptyArrays: true } },
       // Sort by assigned question number/sort order
       { $sort: { sortOrder: 1, assignedQuestionNo: 1 } },
+      // Add pagination
+      { $skip: skip },
+      { $limit: limit },
       // Project final structure with collaborative info
       {
         $project: {
@@ -160,11 +189,66 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
 
     const assignedQuestions = await db.collection('access-code-questions').aggregate(pipeline).toArray();
 
-    if (assignedQuestions.length === 0) {
+    // Get total count for pagination (using the same match conditions)
+    const totalCount = await db.collection('access-code-questions').countDocuments(matchConditions);
+
+    if (assignedQuestions.length === 0 && page === 1) {
       return NextResponse.json({
         success: false,
         message: 'No questions found for this generated access code'
       }, { status: 404 });
+    }
+
+    // Get payee and certificate information separately to ensure we have it even if current page has no results
+    let payeeInfo = null;
+    let certificateInfo = null;
+
+    if (assignedQuestions.length === 0) {
+      // If no questions on current page, get payee/certificate info from any question with this access code
+      const infoQuery = await db.collection('access-code-questions').aggregate([
+        { $match: { generatedAccessCode } },
+        { $limit: 1 },
+        {
+          $lookup: {
+            from: 'payees',
+            localField: 'payeeId',
+            foreignField: '_id',
+            as: 'payeeDetails'
+          }
+        },
+        { $unwind: '$payeeDetails' },
+        {
+          $lookup: {
+            from: 'certificates',
+            localField: 'certificateId',
+            foreignField: '_id',
+            as: 'certificateDetails'
+          }
+        },
+        { $unwind: '$certificateDetails' },
+        {
+          $project: {
+            payee: {
+              _id: '$payeeDetails._id',
+              payeeName: '$payeeDetails.payeeName',
+              originalAccessCode: '$payeeDetails.accessCode'
+            },
+            certificate: {
+              _id: '$certificateDetails._id',
+              name: '$certificateDetails.name',
+              code: '$certificateDetails.code'
+            }
+          }
+        }
+      ]).toArray();
+
+      if (infoQuery.length > 0) {
+        payeeInfo = infoQuery[0].payee;
+        certificateInfo = infoQuery[0].certificate;
+      }
+    } else {
+      payeeInfo = assignedQuestions[0]?.payee;
+      certificateInfo = assignedQuestions[0]?.certificate;
     }
 
     // Get enhanced summary stats with collaborative information
@@ -217,12 +301,20 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
           }))
         }
       },
-      payee: assignedQuestions[0]?.payee,
-      certificate: assignedQuestions[0]?.certificate,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalItems: totalCount,
+        itemsPerPage: limit,
+        hasNextPage: page < Math.ceil(totalCount / limit),
+        hasPreviousPage: page > 1
+      },
+      payee: payeeInfo,
+      certificate: certificateInfo,
       permissions,
       collaborativeInfo: {
         payeeOwner: assignedQuestions[0]?.ownership?.payeeOwner,
-        hasCollaborativeQuestions: assignedQuestions.some(q => q.ownership?.isCollaborative)
+        hasCollaborativeQuestions: assignedQuestions.some((q: any) => q.ownership?.isCollaborative)
       }
     });
 

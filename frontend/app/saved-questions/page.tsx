@@ -58,6 +58,9 @@ const SavedQuestionsPage = () => {
   const [searchMode, setSearchMode] = useState<'browse' | 'search'>('browse');
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const [questionRangeFrom, setQuestionRangeFrom] = useState('');
+  const [questionRangeTo, setQuestionRangeTo] = useState('');
+  const [useQuestionRange, setUseQuestionRange] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -105,12 +108,56 @@ const SavedQuestionsPage = () => {
       return;
     }
 
+    // Validate question range if enabled
+    if (useQuestionRange) {
+      const fromNum = parseInt(questionRangeFrom);
+      const toNum = parseInt(questionRangeTo);
+      
+      if (questionRangeFrom && isNaN(fromNum)) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid 'from' question number.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (questionRangeTo && isNaN(toNum)) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid 'to' question number.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (questionRangeFrom && questionRangeTo && fromNum > toNum) {
+        toast({
+          title: "Error",
+          description: "The 'from' question number must be less than or equal to the 'to' question number.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       setSearchMode('search');
       setCurrentPage(page);
       
-      const url = `/api/saved-questions?accessCode=${encodeURIComponent(searchTerm.trim())}&page=${page}&limit=50`;
+      let url = `/api/saved-questions?accessCode=${encodeURIComponent(searchTerm.trim())}&page=${page}&limit=50`;
+      
+      // Add question range parameters if enabled
+      if (useQuestionRange) {
+        if (questionRangeFrom) {
+          url += `&questionFrom=${questionRangeFrom}`;
+        }
+        if (questionRangeTo) {
+          url += `&questionTo=${questionRangeTo}`;
+        }
+      }
+      
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -123,14 +170,20 @@ const SavedQuestionsPage = () => {
       setPagination(data.pagination || null);
       
       if (data.questions?.length === 0) {
+        const rangeText = useQuestionRange && (questionRangeFrom || questionRangeTo) 
+          ? ` in range ${questionRangeFrom || '1'} to ${questionRangeTo || 'end'}`
+          : '';
         toast({
           title: "No Results",
-          description: "No questions found for this access code.",
+          description: `No questions found for this access code${rangeText}.`,
         });
       } else {
+        const rangeText = useQuestionRange && (questionRangeFrom || questionRangeTo) 
+          ? ` (filtered by range ${questionRangeFrom || '1'}-${questionRangeTo || 'end'})`
+          : '';
         toast({
           title: "Success",
-          description: `Found ${data.pagination?.totalQuestions || data.questions?.length} questions.`,
+          description: `Found ${data.pagination?.totalQuestions || data.questions?.length} questions${rangeText}.`,
         });
       }
     } catch (error) {
@@ -202,6 +255,9 @@ const SavedQuestionsPage = () => {
     setPagination(null);
     setSearchResults([]);
     setSearchMode('browse');
+    setQuestionRangeFrom('');
+    setQuestionRangeTo('');
+    setUseQuestionRange(false);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -264,23 +320,68 @@ const SavedQuestionsPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Input
-                placeholder="Enter original or generated access code..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="flex-1 min-h-[44px]"
-              />
-              <Button onClick={() => handleSearch()} disabled={loading} className="min-h-[44px]">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Search
-              </Button>
-              {searchMode === 'search' && (
-                <Button variant="outline" onClick={handleBackToBrowse} className="min-h-[44px]">
-                  Back to Browse
+            <div className="space-y-4">
+              {/* Access Code Search */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  placeholder="Enter original or generated access code..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  className="flex-1 min-h-[44px]"
+                />
+                <Button onClick={() => handleSearch()} disabled={loading} className="min-h-[44px]">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  Search
                 </Button>
-              )}
+                {searchMode === 'search' && (
+                  <Button variant="outline" onClick={handleBackToBrowse} className="min-h-[44px]">
+                    Back to Browse
+                  </Button>
+                )}
+              </div>
+
+              {/* Question Range Filter */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="useQuestionRange"
+                    checked={useQuestionRange}
+                    onChange={(e) => setUseQuestionRange(e.target.checked)}
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                  />
+                  <label htmlFor="useQuestionRange" className="text-sm font-medium">
+                    Filter by question number range
+                  </label>
+                </div>
+                
+                {useQuestionRange && (
+                  <div className="flex items-center gap-2 pl-6">
+                    <span className="text-sm text-gray-600">From:</span>
+                    <Input
+                      type="number"
+                      placeholder="2"
+                      value={questionRangeFrom}
+                      onChange={(e) => setQuestionRangeFrom(e.target.value)}
+                      className="w-20"
+                      min="1"
+                    />
+                    <span className="text-sm text-gray-600">To:</span>
+                    <Input
+                      type="number"
+                      placeholder="10"
+                      value={questionRangeTo}
+                      onChange={(e) => setQuestionRangeTo(e.target.value)}
+                      className="w-20"
+                      min="1"
+                    />
+                    <span className="text-xs text-gray-500 ml-2">
+                      (e.g., questions 2 to 10)
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

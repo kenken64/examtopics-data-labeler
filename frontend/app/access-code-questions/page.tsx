@@ -13,7 +13,9 @@ import {
   Save,
   Search,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { getQuestionOptions, getCorrectAnswer } from '../utils/questionTransform';
 
@@ -44,6 +46,14 @@ interface QuestionAssignment {
     enabledQuestions: number;
     disabledQuestions: number;
   };
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    itemsPerPage: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
   payee: {
     _id: string;
     payeeName: string;
@@ -65,6 +75,15 @@ export default function AccessCodeQuestionsManagement() {
   const [success, setSuccess] = useState('');
   const [pendingUpdates, setPendingUpdates] = useState<{ _id: string; isEnabled?: boolean; sortOrder?: number; assignedQuestionNo?: number }[]>([]);
   const [includeDisabled, setIncludeDisabled] = useState(true);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50);
+  
+  // Question range search state
+  const [enableRangeSearch, setEnableRangeSearch] = useState(false);
+  const [fromQuestionNo, setFromQuestionNo] = useState('');
+  const [toQuestionNo, setToQuestionNo] = useState('');
 
   const loadAssignment = useCallback(async () => {
     if (!generatedAccessCode.trim()) {
@@ -76,7 +95,24 @@ export default function AccessCodeQuestionsManagement() {
     setError('');
     
     try {
-      const response = await fetch(`/api/access-code-questions?generatedAccessCode=${encodeURIComponent(generatedAccessCode)}&includeDisabled=${includeDisabled}`);
+      const params = new URLSearchParams({
+        generatedAccessCode,
+        includeDisabled: includeDisabled.toString(),
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString()
+      });
+
+      // Add question range parameters if enabled
+      if (enableRangeSearch) {
+        if (fromQuestionNo.trim()) {
+          params.append('fromQuestionNo', fromQuestionNo.trim());
+        }
+        if (toQuestionNo.trim()) {
+          params.append('toQuestionNo', toQuestionNo.trim());
+        }
+      }
+
+      const response = await fetch(`/api/access-code-questions?${params}`);
       const data = await response.json();
 
       if (data.success) {
@@ -92,7 +128,7 @@ export default function AccessCodeQuestionsManagement() {
     } finally {
       setLoading(false);
     }
-  }, [generatedAccessCode, includeDisabled]);
+  }, [generatedAccessCode, includeDisabled, currentPage, itemsPerPage, enableRangeSearch, fromQuestionNo, toQuestionNo]);
 
   const toggleQuestionStatus = (questionId: string) => {
     if (!assignment) return;
@@ -199,7 +235,7 @@ export default function AccessCodeQuestionsManagement() {
       if (data.success) {
         setSuccess(`Updated ${data.modifiedCount} question assignments`);
         setPendingUpdates([]);
-        // Reload to get fresh data
+        // Reload to get fresh data while maintaining current page
         await loadAssignment();
       } else {
         setError(data.message || 'Failed to save changes');
@@ -216,11 +252,29 @@ export default function AccessCodeQuestionsManagement() {
     loadAssignment();
   };
 
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+
+  const handleSearch = () => {
+    setCurrentPage(1); // Reset to first page when searching
+    loadAssignment();
+  };
+
+  const handleRangeToggle = (enabled: boolean) => {
+    setEnableRangeSearch(enabled);
+    if (!enabled) {
+      setFromQuestionNo('');
+      setToQuestionNo('');
+      setCurrentPage(1);
+    }
+  };
+
   useEffect(() => {
     if (generatedAccessCode) {
       loadAssignment();
     }
-  }, [includeDisabled, generatedAccessCode, loadAssignment]);
+  }, [loadAssignment]);
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8 pl-16 sm:pl-20 lg:pl-24">
@@ -250,7 +304,7 @@ export default function AccessCodeQuestionsManagement() {
                 placeholder="Enter generated access code (e.g., AC-9K363CQ4)"
                 value={generatedAccessCode}
                 onChange={(e) => setGeneratedAccessCode(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && loadAssignment()}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 className="min-h-[44px]"
               />
             </div>
@@ -265,9 +319,60 @@ export default function AccessCodeQuestionsManagement() {
                 Include disabled
               </label>
             </div>
-            <Button onClick={loadAssignment} disabled={loading} className="min-h-[44px] w-full sm:w-auto">
+            <Button onClick={handleSearch} disabled={loading} className="min-h-[44px] w-full sm:w-auto">
               {loading ? 'Loading...' : 'Load Assignment'}
             </Button>
+          </div>
+
+          {/* Question Range Search */}
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center gap-3 mb-3">
+              <input
+                type="checkbox"
+                id="enableRangeSearch"
+                checked={enableRangeSearch}
+                onChange={(e) => handleRangeToggle(e.target.checked)}
+                className="min-h-[20px] min-w-[20px]"
+              />
+              <label htmlFor="enableRangeSearch" className="text-sm font-medium">
+                Search by question number range
+              </label>
+            </div>
+            
+            {enableRangeSearch && (
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 min-w-[40px]">From:</label>
+                  <Input
+                    type="number"
+                    placeholder="1"
+                    value={fromQuestionNo}
+                    onChange={(e) => setFromQuestionNo(e.target.value)}
+                    className="w-20"
+                    min="1"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 min-w-[25px]">To:</label>
+                  <Input
+                    type="number"
+                    placeholder="10"
+                    value={toQuestionNo}
+                    onChange={(e) => setToQuestionNo(e.target.value)}
+                    className="w-20"
+                    min="1"
+                  />
+                </div>
+                <Button 
+                  onClick={handleSearch} 
+                  disabled={loading}
+                  size="sm"
+                  className="w-full sm:w-auto"
+                >
+                  Apply Range
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -336,6 +441,11 @@ export default function AccessCodeQuestionsManagement() {
                     <Badge variant="outline">
                       {assignment.stats.totalQuestions} Total
                     </Badge>
+                    {assignment.pagination && (
+                      <Badge variant="outline">
+                        Page {assignment.pagination.currentPage} of {assignment.pagination.totalPages}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </div>
@@ -345,11 +455,69 @@ export default function AccessCodeQuestionsManagement() {
           {/* Questions List */}
           <Card>
             <CardHeader>
-              <CardTitle>Question Assignments</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Question Assignments</span>
+                {assignment.pagination && (
+                  <div className="text-sm text-muted-foreground">
+                    Showing {((assignment.pagination.currentPage - 1) * assignment.pagination.itemsPerPage) + 1} - {Math.min(assignment.pagination.currentPage * assignment.pagination.itemsPerPage, assignment.pagination.totalItems)} of {assignment.pagination.totalItems} questions
+                  </div>
+                )}
+              </CardTitle>
               <CardDescription>
                 Reorder questions and toggle their enabled status. Changes are tracked and saved when you click &ldquo;Save Changes&rdquo;.
               </CardDescription>
             </CardHeader>
+            
+            {/* Pagination Controls - Top */}
+            {assignment.pagination && assignment.pagination.totalPages > 1 && (
+              <div className="px-6 pb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(assignment.pagination.currentPage - 1)}
+                      disabled={!assignment.pagination.hasPreviousPage || loading}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(assignment.pagination.currentPage + 1)}
+                      disabled={!assignment.pagination.hasNextPage || loading}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, assignment.pagination.totalPages) }, (_, i) => {
+                      const pageNum = assignment.pagination.currentPage <= 3 
+                        ? i + 1 
+                        : assignment.pagination.currentPage >= assignment.pagination.totalPages - 2
+                        ? assignment.pagination.totalPages - 4 + i
+                        : assignment.pagination.currentPage - 2 + i;
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === assignment.pagination.currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handlePageChange(pageNum)}
+                          disabled={loading}
+                          className="w-8 h-8 p-0"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <CardContent>
               <div className="space-y-4">
                 {assignment.questions.map((question, index) => (
@@ -420,6 +588,59 @@ export default function AccessCodeQuestionsManagement() {
                   </div>
                 ))}
               </div>
+              
+              {/* Pagination Controls - Bottom */}
+              {assignment.pagination && assignment.pagination.totalPages > 1 && (
+                <div className="mt-6 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(assignment.pagination.currentPage - 1)}
+                        disabled={!assignment.pagination.hasPreviousPage || loading}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(assignment.pagination.currentPage + 1)}
+                        disabled={!assignment.pagination.hasNextPage || loading}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Page {assignment.pagination.currentPage} of {assignment.pagination.totalPages}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, assignment.pagination.totalPages) }, (_, i) => {
+                        const pageNum = assignment.pagination.currentPage <= 3 
+                          ? i + 1 
+                          : assignment.pagination.currentPage >= assignment.pagination.totalPages - 2
+                          ? assignment.pagination.totalPages - 4 + i
+                          : assignment.pagination.currentPage - 2 + i;
+                        
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={pageNum === assignment.pagination.currentPage ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handlePageChange(pageNum)}
+                            disabled={loading}
+                            className="w-8 h-8 p-0"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>
