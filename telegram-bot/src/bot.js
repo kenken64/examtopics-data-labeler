@@ -205,6 +205,11 @@ class CertificationBot {
       await this.callbackHandlers.handleNextQuestion(ctx, this.userSessions, this.userSelections);
     });
 
+    // Handle feedback callbacks
+    this.bot.callbackQuery(/^feedback_(.+)$/, async (ctx) => {
+      await this.callbackHandlers.handleFeedbackCallback(ctx, ctx.match[0], this.userSessions, this.userSelections);
+    });
+
     // QuizBlitz Commands
     this.bot.command('join', async (ctx) => {
       await this.handleJoinQuiz(ctx);
@@ -249,9 +254,27 @@ class CertificationBot {
         return;
       }
 
+      // Check if user is providing text feedback
+      if (session && session.awaitingTextFeedback) {
+        if (text.toLowerCase() === '/skip') {
+          session.awaitingTextFeedback = false;
+          session.textFeedbackQuestionIndex = null;
+          await this.callbackHandlers.saveFeedbackAndContinue(ctx, this.userSessions, this.userSelections);
+        } else {
+          await this.callbackHandlers.handleTextFeedback(ctx, this.userSessions, this.userSelections, text);
+        }
+        return;
+      }
+
       // Check if it's a 6-digit quiz code
       if (/^\d{6}$/.test(text)) {
         await this.handleJoinQuizByCode(ctx, text);
+        return;
+      }
+
+      // Handle "next" command during quiz sessions
+      if ((text.toLowerCase() === 'next' || text.toLowerCase() === '/next') && session && session.questions) {
+        await this.callbackHandlers.handleNextQuestion(ctx, this.userSessions, this.userSelections);
         return;
       }
 
