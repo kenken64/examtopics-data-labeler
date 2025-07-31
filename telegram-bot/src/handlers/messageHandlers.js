@@ -1,10 +1,12 @@
 const { InlineKeyboard } = require('grammy');
 const { ObjectId } = require('mongodb');
+const FeedbackService = require('../services/FeedbackService');
 
 class MessageHandlers {
   constructor(databaseService, quizService) {
     this.databaseService = databaseService;
     this.quizService = quizService;
+    this.feedbackService = new FeedbackService(databaseService);
   }
 
   async handleStart(ctx, userSessions) {
@@ -424,37 +426,100 @@ class MessageHandlers {
       const userId = ctx.from.id;
       const session = userSessions.get(userId);
 
-      if (!session) {
+      // Get wrong answers from both session and database
+      let sessionWrongAnswers = [];
+      let accessCode = null;
+
+      if (session) {
+        sessionWrongAnswers = session.wrongAnswers || [];
+        accessCode = session.accessCode;
+      }
+
+      // If no session, ask user for access code
+      if (!accessCode) {
         await ctx.reply(
-          '📖 No active quiz session found.\n\n' +
-          'Please start a quiz first using /start to review wrong answers.'
+          '📖 <b>Revision - Wrong Answers</b>\n\n' +
+          'To view your wrong answers, please start a quiz session first using /start.\n\n' +
+          'This will load your previous wrong answers for that access code.'
         );
         return;
       }
 
-      if (!session.wrongAnswers || session.wrongAnswers.length === 0) {
-        await ctx.reply(
-          '🎉 Great job! No wrong answers to review.\n\n' +
-          'You haven\'t answered any questions incorrectly in your current quiz session. Keep up the excellent work!'
-        );
-        return;
-      }
+      // Get wrong answers from database for this access code
+      const databaseWrongAnswers = await this.feedbackService.getUserWrongAnswers(userId.toString(), accessCode);
 
-      let message = `📖 <b>Revision: Wrong Answers (${session.wrongAnswers.length})</b>\n\n`;
-      message += 'Here are the questions you answered incorrectly:\n\n';
+      // Combine session and database wrong answers (avoid duplicates)
+      const allWrongAnswers = new Map();
 
-      session.wrongAnswers.forEach((wrongAnswer, _index) => {
-        message += `❌ <b>Question ${wrongAnswer.questionNumber}</b>\n`;
-        message += `   Your answer: <code>${wrongAnswer.userAnswer}</code>\n`;
-        message += `   Correct answer: <code>${wrongAnswer.correctAnswer}</code>\n\n`;
+      // Add session wrong answers
+      sessionWrongAnswers.forEach(wa => {
+        const key = `${wa.questionId}_${wa.questionNumber}`;
+        allWrongAnswers.set(key, {
+          questionNumber: wa.questionNumber,
+          userAnswer: wa.userAnswer,
+          correctAnswer: wa.correctAnswer,
+          source: 'session'
+        });
       });
 
-      message += '💡 <b>Tips for improvement:</b>\n';
+      // Add database wrong answers (these will override session if same question)
+      databaseWrongAnswers.forEach(wa => {
+        const key = `${wa.questionId}_${wa.questionNumber}`;
+        allWrongAnswers.set(key, {
+          questionNumber: wa.questionNumber,
+          userAnswer: Array.isArray(wa.userAnswer) ? wa.userAnswer.join('') : wa.userAnswer,
+          correctAnswer: wa.correctAnswer,
+          attemptCount: wa.attemptCount || 1,
+          lastAttemptAt: wa.lastAttemptAt,
+          questionText: wa.questionText,
+          source: 'database'
+        });
+      });
+
+      const wrongAnswersArray = Array.from(allWrongAnswers.values());
+
+      if (wrongAnswersArray.length === 0) {
+        await ctx.reply(
+          '🎉 <b>Excellent!</b> No wrong answers to review.\n\n' +
+          `Access Code: <code>${accessCode}</code>\n\n` +
+          'You haven\'t answered any questions incorrectly for this access code. Keep up the great work! 🏆\n\n' +
+          '💡 <i>Wrong answers are automatically tracked across all your quiz sessions for each access code.</i>'
+        );
+        return;
+      }
+
+      // Sort by question number
+      wrongAnswersArray.sort((a, b) => a.questionNumber - b.questionNumber);
+
+      let message = `📖 <b>Wrong Answers Review</b>\n`;
+      message += `📚 Access Code: <code>${accessCode}</code>\n`;
+      message += `❌ Total Wrong: ${wrongAnswersArray.length} question${wrongAnswersArray.length > 1 ? 's' : ''}\n\n`;
+
+      wrongAnswersArray.forEach((wrongAnswer, index) => {
+        message += `${index + 1}. <b>Question ${wrongAnswer.questionNumber}</b>\n`;
+        message += `   Your answer: <code>${wrongAnswer.userAnswer}</code>\n`;
+        message += `   Correct answer: <code>${wrongAnswer.correctAnswer}</code>\n`;
+        
+        if (wrongAnswer.attemptCount && wrongAnswer.attemptCount > 1) {
+          message += `   Attempts: ${wrongAnswer.attemptCount}\n`;
+        }
+        
+        if (wrongAnswer.questionText && wrongAnswer.questionText.length > 0) {
+          const preview = wrongAnswer.questionText.length > 80 
+            ? wrongAnswer.questionText.substring(0, 80) + '...' 
+            : wrongAnswer.questionText;
+          message += `   Preview: <i>${preview}</i>\n`;
+        }
+        
+        message += '\n';
+      });
+
+      message += '💡 <b>Study Tips:</b>\n';
       message += '• Review the explanation for each wrong answer\n';
       message += '• Take your time reading questions carefully\n';
-      message += '• Consider the context of each question\n';
-      message += '• Practice more questions in similar topics\n\n';
-      message += '📚 Continue your quiz to practice more questions!';
+      message += '• Practice similar questions to reinforce learning\n';
+      message += '• Consider taking notes on difficult topics\n\n';
+      message += '� Continue practicing with /start to improve your score!';
 
       await ctx.reply(message, { parse_mode: 'HTML' });
     } catch (error) {
