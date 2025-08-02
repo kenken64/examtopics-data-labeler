@@ -26,8 +26,8 @@ def extract_questions_from_markdown(file_path: str) -> List[Dict]:
     
     questions = []
     
-    # Split content by question headers (handle both single and double hash)
-    question_pattern = r'#{1,2} Question #(\d+)'
+    # Split content by question headers (handle any number of hashes)
+    question_pattern = r'#+\s+Question #(\d+)'
     question_splits = re.split(question_pattern, content)
     
     # Skip the first split (content before first question)
@@ -94,6 +94,13 @@ def extract_correct_answer_from_votes(content: str) -> Optional[str]:
         
         # Pattern 2: **Correct Answer:** with colon inside
         correct_answer_match = re.search(r'\*\*Correct Answer:\s*([A-Z]+(?:,\s*[A-Z]+)*)\*\*', content)
+        if correct_answer_match:
+            # Clean up the answer (remove spaces and commas, normalize to single string)
+            answer = correct_answer_match.group(1).replace(',', '').replace(' ', '')
+            return answer
+            
+        # Pattern 3: **Correct Answer: B** (with space instead of colon)
+        correct_answer_match = re.search(r'\*\*Correct Answer:\s+([A-Z]+(?:,?\s*[A-Z]+)*)\*\*', content)
         if correct_answer_match:
             # Clean up the answer (remove spaces and commas, normalize to single string)
             answer = correct_answer_match.group(1).replace(',', '').replace(' ', '')
@@ -193,27 +200,23 @@ def parse_question_content(question_number: str, content: str) -> Optional[Dict]
     try:
         # Extract question text (everything after question number until first answer option)
         # Handle both formats: with Topic line and without Topic line
-        question_text_match = re.search(r'^\n+(?:\*\*Topic \d+\*\*\n\n)?(.*?)(?=\n[A-D]\.)', content, re.DOTALL)
+        # Support both "A." and "- A." answer formats, including bold formatting
+        question_text_match = re.search(r'^\n+(?:\*\*Topic \d+\*\*\n\n)?(.*?)(?=\n-?\s*\*?\*?[A-D]\.)', content, re.DOTALL)
         
         if not question_text_match:
             return None
         
         question_text = question_text_match.group(1).strip()
         
-        # Extract answer options - more precise pattern to avoid community content
-        answers = {}
+        # Extract answer options - retain raw format as specified
+        answers = ""
         
-        # Find the section with answer options (before "**Correct Answer:")
-        answer_section_match = re.search(r'((?:[A-D]\.\s+.*?\n)+)(?=\*\*Correct Answer:)', content, re.DOTALL)
+        # Find the section with answer options (before "**Correct Answer:" or "**Correct Answer:")
+        # Support both "A." and "- A." formats, and handle various correct answer formats
+        answer_section_match = re.search(r'((?:-?\s*\*?\*?[A-D]\.\*?\*?\s+.*?\n)+)(?=\*\*Correct Answer[:\s])', content, re.DOTALL)
         if answer_section_match:
-            answer_text = answer_section_match.group(1)
-            
-            # Split into individual options
-            answer_pattern = r'([A-D])\.\s+(.*?)(?=\n[A-D]\.|$)'
-            answer_matches = re.findall(answer_pattern, answer_text, re.DOTALL)
-            
-            for option, text in answer_matches:
-                answers[option] = text.strip()
+            # Keep the raw answer text with formatting intact
+            answers = answer_section_match.group(1).strip()
         
         # Extract correct answer from community vote distribution
         correct_answer = extract_correct_answer_from_votes(content)

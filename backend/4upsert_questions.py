@@ -51,6 +51,67 @@ def load_questions_from_file(json_file_path):
         print(f"Error loading questions: {e}")
         return None
 
+def parse_answers_from_string(answers_string):
+    """Parse answers from markdown-style string format to dictionary"""
+    if isinstance(answers_string, dict):
+        return answers_string
+    
+    if not isinstance(answers_string, str):
+        return {}
+    
+    answers = {}
+    lines = answers_string.strip().split('\n')
+    current_option = None
+    current_text = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Look for pattern like "- A. answer text" or "A. answer text"
+        if line.startswith('- '):
+            line = line[2:]
+        
+        # Find the option letter (A, B, C, D) - handle multiple formats
+        option_key = None
+        option_text = None
+        
+        # Check for **A.** format
+        if line.startswith('**') and len(line) > 5 and line[3:6] == '.**':
+            option_key = line[2].upper()
+            option_text = line[6:].strip()
+        # Check for A. format
+        elif len(line) > 1 and line[1] == '.' and line[0].upper() in 'ABCDEF':
+            option_key = line[0].upper()
+            if len(line) > 2:
+                option_text = line[2:].strip()
+            else:
+                option_text = ""  # Will be filled by subsequent lines
+        
+        # If we found a new option, save the previous one and start collecting the new one
+        if option_key:
+            # Save previous option if exists
+            if current_option and current_text:
+                text_content = '\n'.join(current_text).strip()
+                text_content = text_content.replace('**Most Voted**', '').strip()
+                answers[current_option] = text_content
+            
+            # Start new option
+            current_option = option_key
+            current_text = [option_text] if option_text else []
+        elif current_option:
+            # Continue collecting text for current option
+            current_text.append(line)
+    
+    # Don't forget the last option
+    if current_option and current_text:
+        text_content = '\n'.join(current_text).strip()
+        text_content = text_content.replace('**Most Voted**', '').strip()
+        answers[current_option] = text_content
+    
+    return answers
+
 def validate_question_structure(question, index):
     """Validate question structure"""
     required_fields = ['question_number', 'question_text', 'answers', 'correct_answer', 'explanation']
@@ -60,9 +121,18 @@ def validate_question_structure(question, index):
             print(f"Warning: Question {index + 1} missing required field '{field}'")
             return False
     
+    # Parse answers if they're in string format
+    if isinstance(question['answers'], str):
+        parsed_answers = parse_answers_from_string(question['answers'])
+        question['answers'] = parsed_answers
+    
     # Validate answers structure
     if not isinstance(question['answers'], dict):
         print(f"Warning: Question {index + 1} 'answers' field should be an object")
+        return False
+    
+    if not question['answers']:
+        print(f"Warning: Question {index + 1} has no valid answer options")
         return False
     
     # Check if correct_answer exists in answers (warn but don't fail)
@@ -74,11 +144,28 @@ def validate_question_structure(question, index):
 
 def transform_question_for_db(question, certificate_id):
     """Transform question from JSON format to database format"""
+    # Convert answers to string format
+    answers_dict = question['answers']
+    answers_string = ""
+    
+    if isinstance(answers_dict, dict):
+        # Convert dictionary to string format
+        answer_lines = []
+        for key, value in answers_dict.items():
+            answer_lines.append(f"{key}. {str(value)}")
+        answers_string = "\n".join(answer_lines)
+    elif isinstance(answers_dict, str):
+        # Already a string
+        answers_string = answers_dict
+    else:
+        # Convert other types to string
+        answers_string = str(answers_dict)
+    
     return {
         "certificateId": certificate_id,
         "question_no": question['question_number'],
         "question": question['question_text'],
-        "options": question['answers'],
+        "answers": answers_string,
         "correctAnswer": question['correct_answer'],
         "explanation": question['explanation'],
         "difficulty": question.get('difficulty', 'medium'),

@@ -97,9 +97,41 @@ def format_question_for_ai(question_data: Dict[str, Any]) -> str:
     correct_answer = question_data.get('correct_answer', '')
     
     formatted_answers = []
-    for key, value in answers.items():
-        marker = " ✓" if key == correct_answer else ""
-        formatted_answers.append(f"{key}. {value}{marker}")
+    
+    # Handle different answer formats
+    if isinstance(answers, dict):
+        # Dictionary format: {"A": "Option A", "B": "Option B"}
+        for key, value in answers.items():
+            marker = " ✓" if key == correct_answer else ""
+            formatted_answers.append(f"{key}. {value}{marker}")
+    elif isinstance(answers, str):
+        # String format: "- A. Option A\n- B. Option B"
+        lines = answers.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line.startswith('- ') or line.startswith('A.') or line.startswith('B.') or line.startswith('C.') or line.startswith('D.')):
+                # Extract option letter and text
+                if line.startswith('- '):
+                    line = line[2:]  # Remove "- " prefix
+                
+                # Find the option letter
+                option_letter = ''
+                if line and line[0].upper() in 'ABCD' and len(line) > 1 and line[1] == '.':
+                    option_letter = line[0].upper()
+                    option_text = line[2:].strip()
+                    
+                    # Remove "**Most Voted**" if present
+                    option_text = option_text.replace('**Most Voted**', '').strip()
+                    
+                    marker = " ✓" if option_letter == correct_answer else ""
+                    formatted_answers.append(f"{option_letter}. {option_text}{marker}")
+                else:
+                    # Fallback: use the line as-is
+                    marker = " ✓" if correct_answer and correct_answer in line else ""
+                    formatted_answers.append(f"{line}{marker}")
+    else:
+        # Fallback for other formats
+        formatted_answers.append(f"Answers: {str(answers)}")
     
     return f"""Question: {question_text}
 
@@ -114,7 +146,14 @@ Please provide a clear, concise explanation for why option {correct_answer} is c
 def get_ai_explanation(client: OpenAI, question_data: Dict[str, Any]) -> str:
     """Get explanation from OpenAI API."""
     try:
+        # Validate question_data structure
+        if not isinstance(question_data, dict):
+            raise ValueError(f"question_data must be a dictionary, got {type(question_data)}")
+        
         prompt = format_question_for_ai(question_data)
+        
+        if not prompt or len(prompt.strip()) == 0:
+            raise ValueError("Generated prompt is empty")
         
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -132,10 +171,26 @@ def get_ai_explanation(client: OpenAI, question_data: Dict[str, Any]) -> str:
             temperature=0.3
         )
         
-        return response.choices[0].message.content.strip()
+        if not response or not response.choices or len(response.choices) == 0:
+            raise ValueError("Empty response from OpenAI API")
+        
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError("Empty content in OpenAI response")
+            
+        return content.strip()
     
+    except openai.RateLimitError as e:
+        print(f"Rate limit error: {e}")
+        return f"Rate limit exceeded. Please try again later."
+    except openai.APIError as e:
+        print(f"OpenAI API error: {e}")
+        return f"API error: {str(e)}"
     except Exception as e:
         print(f"Error getting AI explanation: {e}")
+        print(f"Question data type: {type(question_data)}")
+        if isinstance(question_data, dict):
+            print(f"Question data keys: {list(question_data.keys())}")
         return f"Error generating explanation: {str(e)}"
 
 
