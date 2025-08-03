@@ -61,15 +61,23 @@ def save_explanations_structured(questions: List[Dict[str, Any]], explanations: 
         
         for question in questions:
             question_num = str(question.get('question_number', ''))
-            if question_num in explanations:
-                structured_question = {
-                    "question_number": question.get('question_number'),
-                    "question_text": question.get('question_text', ''),
-                    "answers": question.get('answers', {}),
-                    "correct_answer": question.get('correct_answer', ''),
-                    "explanation": explanations[question_num]
-                }
-                structured_output.append(structured_question)
+            
+            # Use explanation from explanations dict if available, otherwise use the one from question
+            explanation = explanations.get(question_num, question.get('explanation', ''))
+            
+            structured_question = {
+                "question_number": question.get('question_number'),
+                "question_text": question.get('question_text', ''),
+                "answers": question.get('answers', {}),
+                "correct_answer": question.get('correct_answer', ''),
+                "explanation": explanation
+            }
+            
+            # Include type field if it exists
+            if 'type' in question:
+                structured_question['type'] = question['type']
+                
+            structured_output.append(structured_question)
         
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(structured_output, f, indent=2, ensure_ascii=False)
@@ -97,9 +105,41 @@ def format_question_for_ai(question_data: Dict[str, Any]) -> str:
     correct_answer = question_data.get('correct_answer', '')
     
     formatted_answers = []
-    for key, value in answers.items():
-        marker = " ✓" if key == correct_answer else ""
-        formatted_answers.append(f"{key}. {value}{marker}")
+    
+    # Handle different answer formats
+    if isinstance(answers, dict):
+        # Dictionary format: {"A": "Option A", "B": "Option B"}
+        for key, value in answers.items():
+            marker = " ✓" if key == correct_answer else ""
+            formatted_answers.append(f"{key}. {value}{marker}")
+    elif isinstance(answers, str):
+        # String format: "- A. Option A\n- B. Option B"
+        lines = answers.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line.startswith('- ') or line.startswith('A.') or line.startswith('B.') or line.startswith('C.') or line.startswith('D.')):
+                # Extract option letter and text
+                if line.startswith('- '):
+                    line = line[2:]  # Remove "- " prefix
+                
+                # Find the option letter
+                option_letter = ''
+                if line and line[0].upper() in 'ABCD' and len(line) > 1 and line[1] == '.':
+                    option_letter = line[0].upper()
+                    option_text = line[2:].strip()
+                    
+                    # Remove "**Most Voted**" if present
+                    option_text = option_text.replace('**Most Voted**', '').strip()
+                    
+                    marker = " ✓" if option_letter == correct_answer else ""
+                    formatted_answers.append(f"{option_letter}. {option_text}{marker}")
+                else:
+                    # Fallback: use the line as-is
+                    marker = " ✓" if correct_answer and correct_answer in line else ""
+                    formatted_answers.append(f"{line}{marker}")
+    else:
+        # Fallback for other formats
+        formatted_answers.append(f"Answers: {str(answers)}")
     
     return f"""Question: {question_text}
 
@@ -114,7 +154,14 @@ Please provide a clear, concise explanation for why option {correct_answer} is c
 def get_ai_explanation(client: OpenAI, question_data: Dict[str, Any]) -> str:
     """Get explanation from OpenAI API."""
     try:
+        # Validate question_data structure
+        if not isinstance(question_data, dict):
+            raise ValueError(f"question_data must be a dictionary, got {type(question_data)}")
+        
         prompt = format_question_for_ai(question_data)
+        
+        if not prompt or len(prompt.strip()) == 0:
+            raise ValueError("Generated prompt is empty")
         
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -132,10 +179,26 @@ def get_ai_explanation(client: OpenAI, question_data: Dict[str, Any]) -> str:
             temperature=0.3
         )
         
-        return response.choices[0].message.content.strip()
+        if not response or not response.choices or len(response.choices) == 0:
+            raise ValueError("Empty response from OpenAI API")
+        
+        content = response.choices[0].message.content
+        if not content:
+            raise ValueError("Empty content in OpenAI response")
+            
+        return content.strip()
     
+    except openai.RateLimitError as e:
+        print(f"Rate limit error: {e}")
+        return f"Rate limit exceeded. Please try again later."
+    except openai.APIError as e:
+        print(f"OpenAI API error: {e}")
+        return f"API error: {str(e)}"
     except Exception as e:
         print(f"Error getting AI explanation: {e}")
+        print(f"Question data type: {type(question_data)}")
+        if isinstance(question_data, dict):
+            print(f"Question data keys: {list(question_data.keys())}")
         return f"Error generating explanation: {str(e)}"
 
 
@@ -157,17 +220,52 @@ def process_questions(file_path: str, api_key: str, force_overwrite: bool = Fals
     existing_explanations = load_existing_explanations(explanations_file)
     print(f"Loaded {len(existing_explanations)} existing explanations from {explanations_file}")
     
-    # Process each question
+    # Also populate explanations from the questions themselves
+    for question in questions:
+        question_num = str(question.get('question_number', ''))
+        current_explanation = question.get('explanation', '')
+        
+        # If question has explanation and it's not in existing_explanations, add it
+        if current_explanation and current_explanation.strip() != '':
+            if question_num not in existing_explanations or existing_explanations[question_num].strip() == '':
+                existing_explanations[question_num] = current_explanation
+    
+    # Identify questions that need explanations
+    questions_to_process = []
+    skipped_count = 0
+    for question in questions:
+        question_num = str(question.get('question_number', ''))
+        current_explanation = question.get('explanation', '')
+        existing_explanation = existing_explanations.get(question_num, '')
+        
+        # Skip if explanation already has value (not empty)
+        has_current_explanation = current_explanation and current_explanation.strip() != ''
+        has_existing_explanation = existing_explanation and existing_explanation.strip() != ''
+        
+        # Only process if no explanation exists or force overwrite is enabled
+        if force_overwrite or (not has_current_explanation and not has_existing_explanation):
+            questions_to_process.append(question)
+        else:
+            skipped_count += 1
+            print(f"Skipping question {question_num} - already has explanation")
+    
+    print(f"Skipped {skipped_count} questions with existing explanations")
+    print(f"Found {len(questions_to_process)} questions that need explanations")
+    
+    if len(questions_to_process) == 0:
+        print("No questions need explanations. All questions already have explanations.")
+        return
+    
+    # Process each question that needs explanation
     new_explanations_count = 0
     overwritten_count = 0
     
-    for i, question in enumerate(questions, 1):
-        question_num = str(question.get('question_number', i))
+    for i, question in enumerate(questions_to_process, 1):
+        question_num = str(question.get('question_number', ''))
         
-        # Always generate explanation (no skipping)
-        has_existing = question_num in existing_explanations
+        has_existing = question_num in existing_explanations and existing_explanations[question_num] != ''
         
-        print(f"Processing question {question_num} ({i}/{len(questions)})...")
+        print(f"Processing question {question_num} ({i}/{len(questions_to_process)})...")
         
         # Get AI explanation
         explanation = get_ai_explanation(client, question)

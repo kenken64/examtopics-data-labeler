@@ -51,6 +51,93 @@ def load_questions_from_file(json_file_path):
         print(f"Error loading questions: {e}")
         return None
 
+def parse_answers_from_string(answers_string):
+    """Parse answers from markdown-style string format to dictionary or handle JSON format"""
+    if isinstance(answers_string, dict):
+        return answers_string
+    
+    if not isinstance(answers_string, str):
+        return {}
+    
+    # Check if it's a JSON string (for HOTSPOT questions)
+    if answers_string.strip().startswith('{'):
+        try:
+            json_data = json.loads(answers_string)
+            # For HOTSPOT questions with step-based structure, convert to simple format
+            if isinstance(json_data, dict) and 'step1' in json_data:
+                # Extract unique options from all steps
+                all_options = set()
+                for step_key, options in json_data.items():
+                    if isinstance(options, list):
+                        all_options.update(options)
+                
+                # Convert to simple A, B, C, D format
+                answers = {}
+                for i, option in enumerate(sorted(all_options), 1):
+                    if i <= 4:  # Limit to A, B, C, D
+                        letter = chr(ord('A') + i - 1)
+                        answers[letter] = option
+                
+                return answers
+            else:
+                return json_data
+        except json.JSONDecodeError:
+            # If JSON parsing fails, treat as regular string
+            pass
+    
+    answers = {}
+    lines = answers_string.strip().split('\n')
+    current_option = None
+    current_text = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Look for pattern like "- A. answer text" or "A. answer text"
+        if line.startswith('- '):
+            line = line[2:]
+        
+        # Find the option letter (A, B, C, D) - handle multiple formats
+        option_key = None
+        option_text = None
+        
+        # Check for **A.** format
+        if line.startswith('**') and len(line) > 5 and line[3:6] == '.**':
+            option_key = line[2].upper()
+            option_text = line[6:].strip()
+        # Check for A. format
+        elif len(line) > 1 and line[1] == '.' and line[0].upper() in 'ABCDEF':
+            option_key = line[0].upper()
+            if len(line) > 2:
+                option_text = line[2:].strip()
+            else:
+                option_text = ""  # Will be filled by subsequent lines
+        
+        # If we found a new option, save the previous one and start collecting the new one
+        if option_key:
+            # Save previous option if exists
+            if current_option and current_text:
+                text_content = '\n'.join(current_text).strip()
+                text_content = text_content.replace('**Most Voted**', '').strip()
+                answers[current_option] = text_content
+            
+            # Start new option
+            current_option = option_key
+            current_text = [option_text] if option_text else []
+        elif current_option:
+            # Continue collecting text for current option
+            current_text.append(line)
+    
+    # Don't forget the last option
+    if current_option and current_text:
+        text_content = '\n'.join(current_text).strip()
+        text_content = text_content.replace('**Most Voted**', '').strip()
+        answers[current_option] = text_content
+    
+    return answers
+
 def validate_question_structure(question, index):
     """Validate question structure"""
     required_fields = ['question_number', 'question_text', 'answers', 'correct_answer', 'explanation']
@@ -60,32 +147,99 @@ def validate_question_structure(question, index):
             print(f"Warning: Question {index + 1} missing required field '{field}'")
             return False
     
-    # Validate answers structure
-    if not isinstance(question['answers'], dict):
-        print(f"Warning: Question {index + 1} 'answers' field should be an object")
+    # For HOTSPOT questions, allow special formats
+    is_hotspot = question.get('type') == 'steps' or 'HOTSPOT' in question.get('question_text', '')
+    
+    # Validate answers structure without modifying original
+    answers = question['answers']
+    if isinstance(answers, str):
+        # Try to parse for validation but don't modify original
+        if answers.strip().startswith('{'):
+            # JSON format - validate it's valid JSON
+            try:
+                json.loads(answers)
+                parsed_answers = {"A": "Step-based question", "B": "Step-based question"}  # Dummy for validation
+            except json.JSONDecodeError:
+                print(f"Warning: Question {index + 1} answers field contains invalid JSON")
+                return False
+        else:
+            # Regular string format
+            parsed_answers = parse_answers_from_string(answers)
+    elif isinstance(answers, dict):
+        parsed_answers = answers
+    else:
+        print(f"Warning: Question {index + 1} 'answers' field should be a string or object")
         return False
     
-    # Check if correct_answer exists in answers (warn but don't fail)
-    if question['correct_answer'] not in question['answers']:
-        print(f"Warning: Question {index + 1} correct_answer '{question['correct_answer']}' not found in answers")
+    # For non-HOTSPOT questions, ensure we have valid answer options
+    if not is_hotspot and not parsed_answers:
+        print(f"Warning: Question {index + 1} has no valid answer options")
+        return False
+    
+    # Check correct_answer format
+    correct_answer = question['correct_answer']
+    
+    # Handle JSON format correct answers (for HOTSPOT questions)
+    if isinstance(correct_answer, str) and correct_answer.strip().startswith('{'):
+        # For JSON format correct answers, just validate it's valid JSON
+        try:
+            json.loads(correct_answer)
+            # Don't validate against answers for JSON format
+        except json.JSONDecodeError:
+            print(f"Warning: Question {index + 1} correct_answer is invalid JSON format")
+            return False
+    elif not is_hotspot and isinstance(parsed_answers, dict) and correct_answer not in parsed_answers:
+        print(f"Warning: Question {index + 1} correct_answer '{correct_answer}' not found in answers")
         # Don't return False - allow insertion with warning
     
     return True
 
 def transform_question_for_db(question, certificate_id):
     """Transform question from JSON format to database format"""
-    return {
+    # Convert answers to string format - always store as string
+    answers_dict = question['answers']
+    answers_string = ""
+    
+    if isinstance(answers_dict, dict):
+        # Convert dictionary to string format
+        answer_lines = []
+        for key, value in answers_dict.items():
+            answer_lines.append(f"{key}. {str(value)}")
+        answers_string = "\n".join(answer_lines)
+    elif isinstance(answers_dict, str):
+        # Already a string - preserve as is
+        answers_string = answers_dict
+    else:
+        # Convert other types to string
+        answers_string = str(answers_dict)
+    
+    # Convert correct_answer to string format - always store as string
+    correct_answer = question['correct_answer']
+    if isinstance(correct_answer, str):
+        correct_answer_string = correct_answer
+    else:
+        # Convert other types (dict, list, etc.) to JSON string
+        correct_answer_string = json.dumps(correct_answer) if correct_answer is not None else ""
+    
+    # Base question structure
+    db_question = {
         "certificateId": certificate_id,
         "question_no": question['question_number'],
         "question": question['question_text'],
-        "options": question['answers'],
-        "correctAnswer": question['correct_answer'],
+        "answers": answers_string,  # Always string
+        "correctAnswer": correct_answer_string,  # Always string
         "explanation": question['explanation'],
         "difficulty": question.get('difficulty', 'medium'),
         "tags": question.get('tags', []),
         "createdAt": datetime.now(timezone.utc),
         "updatedAt": datetime.now(timezone.utc)
     }
+    
+    # Always preserve type field if it exists (especially for HOTSPOT questions)
+    if 'type' in question:
+        db_question['type'] = question['type']
+    
+    return db_question
 
 def upsert_questions(db, certificate_id, questions):
     """Upsert questions into the database"""
