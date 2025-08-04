@@ -248,12 +248,29 @@ class QuizService {
     }
   }
 
-  formatAnswerExplanation(isCorrect, correctAnswer, explanation) {
+  formatAnswerExplanation(isCorrect, correctAnswer, explanation, question = null) {
     const correctDisplay = isMultipleAnswerQuestion(correctAnswer)
       ? formatAnswerForDisplay(correctAnswer)
       : correctAnswer;
 
     let message = isCorrect ? '✅ Correct!' : '❌ Incorrect';
+    
+    // Include the question content if provided
+    if (question) {
+      message += `\n\n📝 Question:\n${question.question}`;
+      
+      // Add the options
+      if (question.options) {
+        message += '\n\n📋 Options:';
+        if (question.options.A) message += `\nA. ${question.options.A}`;
+        if (question.options.B) message += `\nB. ${question.options.B}`;
+        if (question.options.C) message += `\nC. ${question.options.C}`;
+        if (question.options.D) message += `\nD. ${question.options.D}`;
+        if (question.options.E) message += `\nE. ${question.options.E}`;
+        if (question.options.F) message += `\nF. ${question.options.F}`;
+      }
+    }
+    
     message += `\n\n🔍 Correct Answer: ${correctDisplay}`;
 
     if (explanation) {

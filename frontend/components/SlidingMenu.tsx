@@ -27,7 +27,8 @@ import {
   KeySquare,
   Zap,
   Trophy,
-  Building
+  Building,
+  Bot
 } from "lucide-react";
 
 const SlidingMenu = () => {
@@ -239,6 +240,15 @@ const SlidingMenu = () => {
             >
               <CreditCard className="mr-3 h-5 w-5" />
               Payees
+            </Button>
+
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start h-12 px-4 text-left font-normal hover:bg-accent hover:text-accent-foreground"
+              onClick={() => handleNavigation('/ai-agents')}
+            >
+              <Bot className="mr-3 h-5 w-5" />
+              AI Agents
             </Button>
 
             <Separator className="my-4" />

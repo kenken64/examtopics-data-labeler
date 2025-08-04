@@ -2,17 +2,19 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, BookOpen, Loader2, CheckCircle, XCircle, Info, Brain, Edit, Save, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2, CheckCircle, XCircle, Info, Brain, Edit, Save, X, Settings } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { getQuestionOptions, getCorrectAnswer, getAllCorrectAnswers } from '../../../utils/questionTransform';
 import { isMultipleAnswerQuestion, validateMultipleAnswers, formatAnswerForDisplay, getAnswerInfo, answerToArray } from '../../../utils/multipleAnswerUtils';
 import ReactMarkdown from 'react-markdown';
+import StepQuizAnswering from '../../components/StepQuizAnswering';
 
 interface Question {
   _id: string;
@@ -23,6 +25,18 @@ interface Question {
   isMultipleAnswer?: boolean;
   correctAnswers?: number[];
   explanation?: string;
+  type?: string; // Add type field for step-based questions
+  steps?: Array<{
+    stepNumber: number;
+    title: string;
+    description?: string;
+    options: Array<{
+      id: string;
+      label: string;
+      value: string;
+    }>;
+    correctAnswer: string;
+  }>; // Add steps field for step-based questions
   [key: string]: string | number | string[] | number[] | boolean | undefined | unknown;
 }
 
@@ -35,6 +49,163 @@ const QuestionDetailPageContent = () => {
   const fromPage = searchParams.get('from'); // 'search' or 'certificate'
   const accessCode = searchParams.get('accessCode');
   const certificateCode = searchParams.get('certificateCode');
+  
+  // Helper function to convert old step format to new format
+  const convertAnswersToSteps = (question: Question) => {
+    console.log('🔧 convertAnswersToSteps called with:', {
+      hasAnswers: !!question.answers,
+      answersType: typeof question.answers,
+      answersKeys: question.answers ? Object.keys(question.answers) : [],
+      fullQuestion: question,
+      questionKeys: Object.keys(question),
+      step1: question.step1,
+      step2: question.step2,
+      step3: question.step3,
+      questionAnswers: question.answers,
+      actualAnswers: (question as any).answers
+    });
+    
+    // Log the complete question object to see its structure
+    console.log('📋 Complete question object:', JSON.stringify(question, null, 2));
+    
+    // Check if step data is in answers field as a JSON string
+    let stepData: any = null;
+    
+    if (question.answers && typeof question.answers === 'string') {
+      try {
+        // Parse the JSON string in the answers field
+        const parsedAnswers = JSON.parse(question.answers);
+        console.log('📋 Parsed answers from JSON string:', parsedAnswers);
+        if (parsedAnswers && typeof parsedAnswers === 'object') {
+          stepData = parsedAnswers;
+          console.log('📋 Using parsed JSON answers for step data');
+        }
+      } catch (error) {
+        console.log('❌ Failed to parse answers JSON string:', error);
+      }
+    } else if (question.answers && typeof question.answers === 'object') {
+      stepData = question.answers;
+      console.log('📋 Using answers object for step data');
+    } else {
+      // Check if step data is directly on question object
+      const directStepKeys = Object.keys(question).filter(key => key.startsWith('step'));
+      if (directStepKeys.length > 0) {
+        stepData = question;
+        console.log('📋 Using question object directly for step data, found keys:', directStepKeys);
+      } else {
+        // Try to access step data with different possible field names
+        const possibleStepData = (question as any);
+        if (possibleStepData.step1 || possibleStepData.answers?.step1) {
+          stepData = possibleStepData.answers || possibleStepData;
+          console.log('📋 Found step data in alternative location');
+        }
+      }
+    }
+    
+    if (!stepData) {
+      console.log('❌ No step data found in answers or question object');
+      return null;
+    }
+    
+    const steps = [];
+    
+    // Extract step keys and sort them
+    const stepKeys = Object.keys(stepData).filter(key => key.startsWith('step')).sort();
+    console.log('📋 Step keys found:', stepKeys);
+    
+    for (const stepKey of stepKeys) {
+      const stepDataArray = stepData[stepKey];
+      const stepNumber = parseInt(stepKey.replace('step', ''));
+      
+      console.log(`🔍 Processing ${stepKey}:`, {
+        stepNumber,
+        isArray: Array.isArray(stepDataArray),
+        length: stepDataArray?.length
+      });
+      
+      if (stepDataArray && Array.isArray(stepDataArray) && stepDataArray.length > 0) {
+        // Get correct answer key
+        const stepKey = `step${stepNumber}`;
+        
+        // All items in the array are the available options for this step
+        const options = stepDataArray.map((optionText: string, index: number) => ({
+          id: String.fromCharCode(65 + index), // A, B, C, D, E...
+          label: `${String.fromCharCode(65 + index)}. ${optionText}`,
+          value: optionText
+        }));
+        
+        console.log(`📋 Options created for ${stepKey}:`, {
+          optionsCount: options.length,
+          firstOption: options[0]?.value.substring(0, 50) + '...',
+          allOptionValues: options.map(opt => opt.value.substring(0, 30) + '...')
+        });
+        
+        // Get correct answer from correctAnswer field
+        let correctAnswer = stepDataArray[0]; // Default to first option
+        
+        // Try to parse correctAnswer as JSON string first
+        if (question.correctAnswer && typeof question.correctAnswer === 'string') {
+          try {
+            const parsedCorrectAnswers = JSON.parse(question.correctAnswer);
+            console.log(`🎯 Parsed correctAnswer JSON for ${stepKey}:`, parsedCorrectAnswers);
+            console.log(`🔍 Available keys in correctAnswer:`, Object.keys(parsedCorrectAnswers));
+            
+            if (parsedCorrectAnswers[stepKey]) {
+              correctAnswer = parsedCorrectAnswers[stepKey];
+              console.log(`✅ Found correct answer for ${stepKey}:`, {
+                text: correctAnswer.substring(0, 50) + '...',
+                fullText: correctAnswer,
+                length: correctAnswer.length,
+                charCodes: correctAnswer.split('').slice(0, 10).map((c: string) => c.charCodeAt(0)),
+                rawBytes: Array.from(new TextEncoder().encode(correctAnswer.substring(0, 20)))
+              });
+            } else {
+              console.log(`❌ Key ${stepKey} not found in parsed correctAnswer. Available keys:`, Object.keys(parsedCorrectAnswers));
+            }
+          } catch (error) {
+            console.log(`❌ Failed to parse correctAnswer JSON:`, error);
+          }
+        }
+        // Fallback: try object format with Step keys
+        else if (question.correctAnswer && typeof question.correctAnswer === 'object') {
+          const correctAnswerKey = `Step ${stepNumber}`;
+          const correctAnswerLetter = (question.correctAnswer as any)[correctAnswerKey];
+          if (correctAnswerLetter) {
+            // Find the corresponding option text based on the letter
+            const correctIndex = correctAnswerLetter.charCodeAt(0) - 65; // A=0, B=1, C=2, etc.
+            if (correctIndex >= 0 && correctIndex < stepDataArray.length) {
+              correctAnswer = stepDataArray[correctIndex];
+            }
+          }
+        }
+        
+        const stepObj = {
+          stepNumber,
+          title: `Step ${stepNumber}`,
+          description: `Select the appropriate action for step ${stepNumber}:`,
+          options,
+          correctAnswer
+        };
+        
+        console.log(`✅ Created step ${stepNumber}:`, {
+          optionsCount: options.length,
+          correctAnswer: correctAnswer.substring(0, 50) + '...',
+          correctAnswerFull: correctAnswer,
+          correctAnswerLength: correctAnswer.length,
+          firstOptionValue: options[0]?.value.substring(0, 50) + '...',
+          optionsThatMatch: options.filter(opt => opt.value === correctAnswer).length,
+          normalizedMatch: options.filter(opt => 
+            opt.value.trim().normalize('NFKC') === correctAnswer.trim().normalize('NFKC')
+          ).length
+        });
+        
+        steps.push(stepObj);
+      }
+    }
+    
+    console.log(`🎯 Conversion result: ${steps.length} steps created`);
+    return steps.length > 0 ? steps : null;
+  };
   
   const [question, setQuestion] = useState<Question | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]); // Changed to array for multiple selection
@@ -52,6 +223,71 @@ const QuestionDetailPageContent = () => {
   const [saving, setSaving] = useState(false);
   
   const { toast } = useToast();
+
+  // Step quiz handler
+  const handleStepQuizSubmit = async (answers: Record<number, string>, isCorrect: boolean) => {
+    if (!question) return;
+    
+    try {
+      const response = await fetch(`/api/saved-questions/${question._id}/step-quiz`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          answers,
+          timeSpent: 0 // You can add time tracking if needed
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit step quiz');
+      }
+
+      const result = await response.json();
+      
+      toast({
+        title: isCorrect ? "Perfect!" : "Good Attempt!",
+        description: result.results.message,
+        variant: isCorrect ? "default" : "destructive",
+      });
+      
+      console.log('Step quiz results:', result.results);
+    } catch (error) {
+      console.error('Error submitting step quiz:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit step quiz. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleNextQuestion = () => {
+    // Navigate to next question
+    const nextQuestionNumber = questionNumber + 1;
+    const searchParamsString = new URLSearchParams({
+      from: fromPage || 'search',
+      ...(accessCode && { accessCode }),
+      ...(certificateCode && { certificateCode })
+    }).toString();
+    
+    router.push(`/saved-questions/question/${nextQuestionNumber}?${searchParamsString}`);
+  };
+
+  const handlePreviousQuestion = () => {
+    // Navigate to previous question
+    const prevQuestionNumber = questionNumber - 1;
+    if (prevQuestionNumber < 1) return;
+    
+    const searchParamsString = new URLSearchParams({
+      from: fromPage || 'search',
+      ...(accessCode && { accessCode }),
+      ...(certificateCode && { certificateCode })
+    }).toString();
+    
+    router.push(`/saved-questions/question/${prevQuestionNumber}?${searchParamsString}`);
+  };
 
   useEffect(() => {
     if (questionNumber) {
@@ -559,43 +795,90 @@ const QuestionDetailPageContent = () => {
           </div>
         </div>
 
-        {/* Question Card */}
+        {/* Question Content */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-xl">Question</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-lg text-gray-800 leading-relaxed whitespace-pre-wrap">
-              {question.question}
-            </p>
+            <div className="prose max-w-none">
+              <div 
+                className="text-gray-800 leading-relaxed whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: question.question }}
+              />
+            </div>
           </CardContent>
         </Card>
 
-        {/* Options Card */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="text-xl">Answer Options</CardTitle>
-            <CardDescription>
-              {!showAnswer ? (
-                <>
-                  {question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string) ? (
-                    <span className="text-blue-600 font-medium">
-                      {getAnswerInfo(getQuestionOptions(question), question.correctAnswer as string).hint} - You can select multiple options
-                    </span>
+        {/* Step-based Quiz Interface */}
+        {(() => {
+          console.log('🔍 DEBUG: Question check for step quiz', {
+            questionType: question.type,
+            typeEqual: question.type === 'steps',
+            hasSteps: !!question.steps,
+            hasAnswers: !!question.answers,
+            answerKeys: question.answers ? Object.keys(question.answers) : [],
+            convertedSteps: convertAnswersToSteps(question)
+          });
+          
+          const convertedSteps = convertAnswersToSteps(question);
+          console.log('📋 Converted steps result:', convertedSteps);
+          
+          const typeCheck = question.type === 'steps';
+          const dataCheck = question.steps || convertedSteps;
+          const isStepQuiz = typeCheck && dataCheck;
+          
+          console.log('🎯 Step quiz condition breakdown:', {
+            typeCheck,
+            dataCheck: !!dataCheck,
+            isStepQuiz,
+            questionSteps: question.steps,
+            convertedStepsLength: convertedSteps?.length
+          });
+          
+          return isStepQuiz;
+        })() ? (
+          <StepQuizAnswering
+            question={{
+              _id: question._id,
+              question: question.question,
+              type: 'steps',
+              steps: question.steps || convertAnswersToSteps(question) || [],
+              explanation: question.explanation
+            }}
+            onSubmit={handleStepQuizSubmit}
+            onNext={handleNextQuestion}
+            onPrevious={handlePreviousQuestion}
+            isFirstQuestion={questionNumber === 1}
+            isLastQuestion={false} // You might want to add logic to determine this
+          />
+        ) : (
+          <>
+            {/* Options Card */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-xl">Answer Options</CardTitle>
+                <CardDescription>
+                  {!showAnswer ? (
+                    <>
+                      {question.isMultipleAnswer || isMultipleAnswerQuestion(question.correctAnswer as string) ? (
+                        <span className="text-blue-600 font-medium">
+                          {getAnswerInfo(getQuestionOptions(question), question.correctAnswer as string).hint} - You can select multiple options
+                        </span>
+                      ) : (
+                        'Select an answer to see if you\'re correct'
+                      )}
+                    </>
                   ) : (
-                    'Select an answer to see if you\'re correct'
+                    'Correct answer highlighted'
                   )}
-                </>
-              ) : (
-                'Correct answer highlighted'
-              )}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {getQuestionOptions(question).map((option, index) => {
-              const optionLabel = getOptionLabel(index);
-              const isCorrect = isCorrectAnswer(option);
-              const isSelected = isSelectedAnswer(option, index);
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {getQuestionOptions(question).map((option, index) => {
+                  const optionLabel = getOptionLabel(index);
+                  const isCorrect = isCorrectAnswer(option);
+                  const isSelected = isSelectedAnswer(option, index);
               
               let buttonVariant: "default" | "outline" | "secondary" = "outline";
               let iconElement = null;
@@ -961,21 +1244,114 @@ const QuestionDetailPageContent = () => {
           </Card>
         )}
 
+        {/* Question Management Section */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Question Management
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Question Number</Label>
+                <p className="text-lg font-semibold">{question.question_no}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Question Type</Label>
+                <Badge variant={question.type === 'steps' ? 'default' : 'secondary'}>
+                  {question.type || 'multiple-choice'}
+                </Badge>
+              </div>
+            </div>
+            
+            <div>
+              <Label className="text-sm font-medium text-gray-700">Correct Answer(s)</Label>
+              {question.type === 'steps' && question.correctAnswer && typeof question.correctAnswer === 'object' ? (
+                <div className="mt-2 space-y-2">
+                  {Object.entries(question.correctAnswer as Record<string, string>).map(([step, answer]) => (
+                    <div key={step} className="flex items-center justify-between p-2 bg-green-50 rounded border border-green-200">
+                      <span className="font-medium text-green-800">{step}:</span>
+                      <Badge variant="outline" className="bg-white border-green-300 text-green-700">
+                        {answer}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2">
+                  <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
+                    {getCorrectAnswerDisplayText()}
+                  </Badge>
+                </div>
+              )}
+            </div>
 
+            {question.explanation && (
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Explanation</Label>
+                <div className="mt-2 p-3 bg-blue-50 rounded border border-blue-200">
+                  <p className="text-sm text-blue-900">{question.explanation}</p>
+                </div>
+              </div>
+            )}
 
-        {/* Edit Toggle Button */}
-        <div className="text-center">
-          {!isEditing && (
-            <Button 
-              onClick={handleEditToggle}
-              variant="outline"
-              className="mb-6"
-            >
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Question
-            </Button>
-          )}
-        </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <Label className="text-xs font-medium text-gray-500">Created</Label>
+                <p className="text-gray-700">
+                  {question.createdAt ? new Date(question.createdAt as string).toLocaleDateString() : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-gray-500">Updated</Label>
+                <p className="text-gray-700">
+                  {question.updatedAt ? new Date(question.updatedAt as string).toLocaleDateString() : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-gray-500">Difficulty</Label>
+                <p className="text-gray-700">{(question as any).difficulty || 'Medium'}</p>
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-gray-500">Multiple Answer</Label>
+                <p className="text-gray-700">
+                  {question.isMultipleAnswer ? 'Yes' : 'No'}
+                </p>
+              </div>
+            </div>
+
+            {(question as any).tags && Array.isArray((question as any).tags) && (question as any).tags.length > 0 && (
+              <div>
+                <Label className="text-sm font-medium text-gray-700">Tags</Label>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {((question as any).tags as string[]).map((tag: string, index: number) => (
+                    <Badge key={index} variant="secondary" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+            {/* Edit Toggle Button */}
+            <div className="text-center">
+              {!isEditing && (
+                <Button 
+                  onClick={handleEditToggle}
+                  variant="outline"
+                  className="mb-6"
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Question
+                </Button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

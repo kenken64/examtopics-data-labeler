@@ -161,7 +161,8 @@ class CallbackHandlers {
     const resultMessage = this.quizService.formatAnswerExplanation(
       isCorrect,
       currentQuestion.correctAnswer,
-      explanation
+      explanation,
+      currentQuestion
     );
 
     // Store answer details in session for feedback collection

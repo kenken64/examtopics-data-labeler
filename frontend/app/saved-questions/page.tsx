@@ -69,6 +69,25 @@ const SavedQuestionsPage = () => {
     loadAccessCodes();
   }, []);
 
+  // Function to remove duplicate questions
+  const removeDuplicateQuestions = (questions: Question[]): Question[] => {
+    const seen = new Map<string, Question>();
+    
+    questions.forEach(question => {
+      // Create a unique key based on question content (normalize whitespace and case)
+      const normalizedQuestion = question.question.trim().toLowerCase().replace(/\s+/g, ' ');
+      const key = normalizedQuestion;
+      
+      // If we haven't seen this question before, or if this has a lower question number, keep it
+      if (!seen.has(key) || question.question_no < seen.get(key)!.question_no) {
+        seen.set(key, question);
+      }
+    });
+    
+    // Return deduplicated questions sorted by question number
+    return Array.from(seen.values()).sort((a, b) => a.question_no - b.question_no);
+  };
+
   const loadAccessCodes = async () => {
     try {
       setLoadingAccessCodes(true);
@@ -166,10 +185,28 @@ const SavedQuestionsPage = () => {
       }
       
       const data = await response.json();
-      setSearchResults(data.questions || []);
-      setPagination(data.pagination || null);
       
-      if (data.questions?.length === 0) {
+      // Remove duplicates from the results
+      const deduplicatedQuestions = removeDuplicateQuestions(data.questions || []);
+      setSearchResults(deduplicatedQuestions);
+      
+      // Update pagination info if duplicates were removed
+      const originalCount = data.questions?.length || 0;
+      const deduplicatedCount = deduplicatedQuestions.length;
+      
+      if (data.pagination && originalCount !== deduplicatedCount) {
+        // Adjust pagination info to reflect deduplicated results
+        setPagination({
+          ...data.pagination,
+          totalQuestions: deduplicatedCount,
+          // Note: This is a simplified approach. In a real scenario, 
+          // you might want to handle pagination differently when deduplicating
+        });
+      } else {
+        setPagination(data.pagination || null);
+      }
+      
+      if (deduplicatedQuestions.length === 0) {
         const rangeText = useQuestionRange && (questionRangeFrom || questionRangeTo) 
           ? ` in range ${questionRangeFrom || '1'} to ${questionRangeTo || 'end'}`
           : '';
@@ -181,9 +218,14 @@ const SavedQuestionsPage = () => {
         const rangeText = useQuestionRange && (questionRangeFrom || questionRangeTo) 
           ? ` (filtered by range ${questionRangeFrom || '1'}-${questionRangeTo || 'end'})`
           : '';
+        
+        const duplicatesRemovedText = originalCount !== deduplicatedCount 
+          ? ` (${originalCount - deduplicatedCount} duplicates removed)`
+          : '';
+        
         toast({
           title: "Success",
-          description: `Found ${data.pagination?.totalQuestions || data.questions?.length} questions${rangeText}.`,
+          description: `Found ${deduplicatedCount} unique questions${duplicatesRemovedText}${rangeText}.`,
         });
       }
     } catch (error) {
