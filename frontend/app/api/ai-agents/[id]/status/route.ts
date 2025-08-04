@@ -18,7 +18,7 @@ export const PATCH = withAuth(async (request: AuthenticatedRequest, { params }: 
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     
     if (!ObjectId.isValid(id)) {
       return NextResponse.json(

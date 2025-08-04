@@ -566,10 +566,11 @@ class CertificationBot {
       // Edit the message to show answer was submitted
       await ctx.editMessageText(
         '📝 Question answered!\n\n' +
-      `✅ Your answer: ${selectedAnswer}\n` +
-      `${isCorrect ? '🎉 Correct!' : '❌ Incorrect'}\n` +
-      `${isCorrect ? `📈 Points earned: ${score}` : `💡 Correct answer: ${currentQuestion.correctAnswer}`}\n\n` +
-      '⏳ Waiting for other players...'
+        `📋 Question: ${currentQuestion.question}\n\n` +
+        `✅ Your answer: ${selectedAnswer}\n` +
+        `${isCorrect ? '🎉 Correct!' : '❌ Incorrect'}\n` +
+        `${isCorrect ? `📈 Points earned: ${score}` : `💡 Correct answer: ${currentQuestion.correctAnswer}`}\n\n` +
+        '⏳ Waiting for other players...'
       );
 
       console.log(

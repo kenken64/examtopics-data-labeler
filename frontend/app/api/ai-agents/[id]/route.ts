@@ -10,7 +10,7 @@ interface RouteParams {
 
 export const GET = withAuth(async (request: AuthenticatedRequest, { params }: RouteParams) => {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!ObjectId.isValid(id)) {
       return NextResponse.json(
@@ -52,7 +52,7 @@ export const PUT = withAuth(async (request: AuthenticatedRequest, { params }: Ro
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     
     if (!ObjectId.isValid(id)) {
       return NextResponse.json(
@@ -157,7 +157,7 @@ export const DELETE = withAuth(async (request: AuthenticatedRequest, { params }:
       );
     }
 
-    const { id } = params;
+    const { id } = await params;
     
     if (!ObjectId.isValid(id)) {
       return NextResponse.json(
