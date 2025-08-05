@@ -29,7 +29,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest, { params }: R
     }
 
     const db = await connectToDatabase();
-    const questionsCollection = db.collection('saved_questions');
+    const questionsCollection = db.collection('quizzes');
 
     // Get the question
     const question = await questionsCollection.findOne({
@@ -44,9 +44,10 @@ export const POST = withAuth(async (request: AuthenticatedRequest, { params }: R
     }
 
     // Check if question has step data (either in answers field or step1, step2, etc. fields)
+    // Use more precise pattern matching for step fields
     const hasStepData = question.answers || 
                        question.step1 || 
-                       Object.keys(question).some(key => key.startsWith('step'));
+                       Object.keys(question).some(key => /^step\d+$/.test(key));
 
     if (!hasStepData) {
       return NextResponse.json(
@@ -70,16 +71,35 @@ export const POST = withAuth(async (request: AuthenticatedRequest, { params }: R
     if (question.answers && typeof question.answers === 'string') {
       try {
         stepData = JSON.parse(question.answers);
-        stepKeys = Object.keys(stepData).filter(key => key.startsWith('step')).sort();
+        // Check for both exact steps and scenario-based steps
+        const exactStepKeys = Object.keys(stepData).filter(key => /^step\d+$/.test(key));
+        const scenarioKeys = Object.keys(stepData).filter(key => 
+          typeof key === 'string' && 
+          key.length > 10 && 
+          !key.match(/^[A-E][\.\)]/) && 
+          Array.isArray(stepData[key]) && 
+          stepData[key].length >= 2 &&
+          stepData[key].every((opt: any) => typeof opt === 'string')
+        );
+        stepKeys = exactStepKeys.length > 0 ? exactStepKeys.sort() : scenarioKeys.sort();
       } catch (error) {
         console.error('Failed to parse question.answers:', error);
       }
     } else if (question.answers && typeof question.answers === 'object') {
       stepData = question.answers;
-      stepKeys = Object.keys(stepData).filter(key => key.startsWith('step')).sort();
+      const exactStepKeys = Object.keys(stepData).filter(key => /^step\d+$/.test(key));
+      const scenarioKeys = Object.keys(stepData).filter(key => 
+        typeof key === 'string' && 
+        key.length > 10 && 
+        !key.match(/^[A-E][\.\)]/) && 
+        Array.isArray(stepData[key]) && 
+        stepData[key].length >= 2 &&
+        stepData[key].every((opt: any) => typeof opt === 'string')
+      );
+      stepKeys = exactStepKeys.length > 0 ? exactStepKeys.sort() : scenarioKeys.sort();
     } else {
-      // Check for direct step fields on question object
-      stepKeys = Object.keys(question).filter(key => key.startsWith('step')).sort();
+      // Check for direct step fields on question object - use exact pattern matching
+      stepKeys = Object.keys(question).filter(key => /^step\d+$/.test(key)).sort();
       stepData = question;
     }
 
@@ -116,9 +136,15 @@ export const POST = withAuth(async (request: AuthenticatedRequest, { params }: R
       );
     }
 
+    // Determine if we're using exact steps or scenario-based steps
+    const exactStepKeys = Object.keys(stepData).filter(key => /^step\d+$/.test(key));
+    const isExactSteps = exactStepKeys.length > 0;
+    
     // Validate all steps are answered
-    const allStepsAnswered = stepKeys.every(stepKey => {
-      const stepNumber = parseInt(stepKey.replace('step', ''));
+    const allStepsAnswered = stepKeys.every((stepKey, index) => {
+      const stepNumber = isExactSteps 
+        ? parseInt(stepKey.replace('step', ''))
+        : index + 1;
       return answers[stepNumber] !== undefined;
     });
 
@@ -130,10 +156,15 @@ export const POST = withAuth(async (request: AuthenticatedRequest, { params }: R
     }
 
     // Check if all answers are correct
-    const stepResults = stepKeys.map(stepKey => {
-      const stepNumber = parseInt(stepKey.replace('step', ''));
+    const stepResults = stepKeys.map((stepKey, index) => {
+      const stepNumber = isExactSteps 
+        ? parseInt(stepKey.replace('step', ''))
+        : index + 1;
       const userAnswer = answers[stepNumber];
-      const correctAnswer = correctAnswers[stepKey];
+      
+      // For exact steps, look for step1, step2, etc. For scenarios, use the full key
+      const correctAnswerKey = isExactSteps ? `step${stepNumber}` : stepKey;
+      const correctAnswer = correctAnswers[correctAnswerKey];
       
       // Normalize both strings for comparison
       const normalizeString = (str: string) => str?.trim().normalize('NFKC') || '';
@@ -142,6 +173,7 @@ export const POST = withAuth(async (request: AuthenticatedRequest, { params }: R
       console.log(`📊 Step ${stepNumber} validation:`, {
         userAnswer: userAnswer?.substring(0, 50) + '...',
         correctAnswer: correctAnswer?.substring(0, 50) + '...',
+        correctAnswerKey: correctAnswerKey.substring(0, 50) + (correctAnswerKey.length > 50 ? '...' : ''),
         isCorrect
       });
       

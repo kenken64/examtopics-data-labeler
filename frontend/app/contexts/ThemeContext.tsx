@@ -15,6 +15,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('system');
   const [actualTheme, setActualTheme] = useState<'light' | 'dark'>('light');
+  const [isHydrated, setIsHydrated] = useState(false);
 
   // Function to get system theme preference
   const getSystemTheme = (): 'light' | 'dark' => {
@@ -44,17 +45,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize theme from localStorage or system preference
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('theme') as Theme;
-      if (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) {
-        setTheme(savedTheme);
-        applyTheme(resolveTheme(savedTheme));
-      } else {
-        const systemTheme = getSystemTheme();
-        setTheme('system');
-        applyTheme(systemTheme);
+    setIsHydrated(true);
+    
+    // Defer initialization to prevent hydration mismatch
+    const timeoutId = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        const savedTheme = localStorage.getItem('theme') as Theme;
+        if (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) {
+          setTheme(savedTheme);
+          applyTheme(resolveTheme(savedTheme));
+        } else {
+          const systemTheme = getSystemTheme();
+          setTheme('system');
+          applyTheme(systemTheme);
+        }
       }
-    }
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   // Listen for system theme changes when theme is set to 'system'

@@ -83,10 +83,13 @@ export const GET = withAuth(async (
     // Build user-specific filter based on role permissions
     const userFilter = buildUserFilter(request);
     
+    // Convert filter for mongoose (handle ObjectId conversion)
+    const mongooseFilter = userFilter.userId ? { userId: new mongoose.Types.ObjectId(userFilter.userId) } : {};
+    
     // Find certificate with role-based filtering
     const certificate = await Certificate.findOne({
       _id: id,
-      ...userFilter  // Apply role-based filtering to ensure user can only access their own certificates (or admin sees all)
+      ...mongooseFilter  // Apply role-based filtering to ensure user can only access their own certificates (or admin sees all)
     });
     
     if (!certificate) {
@@ -152,11 +155,14 @@ export const PUT = withAuth(async (
     // Build user-specific filter based on role permissions
     const userFilter = buildUserFilter(request);
     
+    // Convert filter for mongoose (handle ObjectId conversion)
+    const mongooseFilter = userFilter.userId ? { userId: new mongoose.Types.ObjectId(userFilter.userId) } : {};
+    
     // Find and update only certificates the user has permission to modify
     const certificate = await Certificate.findOneAndUpdate(
       {
         _id: id,
-        ...userFilter  // Apply role-based filtering to ensure user can only update their own certificates (or admin sees all)
+        ...mongooseFilter  // Apply role-based filtering to ensure user can only update their own certificates (or admin sees all)
       },
       {
         name: name.trim(),                    // Sanitize certificate name
@@ -211,10 +217,13 @@ export const DELETE = withAuth(async (
     // Build user-specific filter based on role permissions
     const userFilter = buildUserFilter(request);
     
+    // Convert filter for mongoose (handle ObjectId conversion)
+    const mongooseFilter = userFilter.userId ? { userId: new mongoose.Types.ObjectId(userFilter.userId) } : {};
+    
     // Find and delete only certificates the user has permission to remove
     const certificate = await Certificate.findOneAndDelete({
       _id: id,
-      ...userFilter  // Apply role-based filtering to ensure user can only delete their own certificates (or admin sees all)
+      ...mongooseFilter  // Apply role-based filtering to ensure user can only delete their own certificates (or admin sees all)
     });
 
     // Handle case where certificate not found or user lacks permission

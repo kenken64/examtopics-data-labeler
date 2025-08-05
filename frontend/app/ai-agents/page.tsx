@@ -781,4 +781,3 @@ export default function AIAgentsPage() {
     </div>
   );
 }
-"{"step1": "Use AWS Glue crawlers to infer the schemas and available columns.", "step2": "Use AWS Glue DataBrew for data cleaning and feature engineering.", "step3": "Store the resulting data back in Amazon S3."}"
