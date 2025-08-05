@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import SlidingMenu from "../components/SlidingMenu";
+import ClientOnly from "../components/ClientOnly";
 import { ThemeProvider } from '@/app/contexts/ThemeContext';
 import { LanguageProvider } from '@/app/contexts/LanguageContext';
 
@@ -16,7 +17,9 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        {showSlidingMenu && <SlidingMenu />}
+        <ClientOnly>
+          {showSlidingMenu && <SlidingMenu />}
+        </ClientOnly>
         {children}
       </LanguageProvider>
     </ThemeProvider>

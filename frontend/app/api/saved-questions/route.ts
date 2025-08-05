@@ -182,13 +182,17 @@ export const GET = withAuth(async (request: AuthenticatedRequest) => {
               _id: '$questionDetails._id',
               question_no: '$assignedQuestionNo', // Use assigned question number
               question: '$questionDetails.question',
+              answers: '$questionDetails.answers', // Include answers field for step questions
               options: '$questionDetails.options',
               correctAnswer: '$questionDetails.correctAnswer',
               explanation: '$questionDetails.explanation',
               createdAt: '$questionDetails.createdAt',
               originalQuestionNo: '$questionDetails.question_no',
               isEnabled: 1,
-              sortOrder: 1
+              sortOrder: 1,
+              type: '$questionDetails.type', // Include type field
+              difficulty: '$questionDetails.difficulty', // Include difficulty field
+              tags: '$questionDetails.tags' // Include tags field
             }
           }
         ];

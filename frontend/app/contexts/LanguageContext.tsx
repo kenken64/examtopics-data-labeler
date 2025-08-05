@@ -102,23 +102,31 @@ const translations = {
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguage] = useState<Language>('en');
+  const [isHydrated, setIsHydrated] = useState(false);
 
   // Initialize language from localStorage or browser preference
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedLanguage = localStorage.getItem('language') as Language;
-      if (savedLanguage && ['en', 'zh'].includes(savedLanguage)) {
-        setLanguage(savedLanguage);
-      } else {
-        // Try to detect browser language
-        const browserLanguage = navigator.language.toLowerCase();
-        if (browserLanguage.startsWith('zh')) {
-          setLanguage('zh');
+    setIsHydrated(true);
+    
+    // Defer initialization to prevent hydration mismatch
+    const timeoutId = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        const savedLanguage = localStorage.getItem('language') as Language;
+        if (savedLanguage && ['en', 'zh'].includes(savedLanguage)) {
+          setLanguage(savedLanguage);
         } else {
-          setLanguage('en');
+          // Try to detect browser language
+          const browserLanguage = navigator.language.toLowerCase();
+          if (browserLanguage.startsWith('zh')) {
+            setLanguage('zh');
+          } else {
+            setLanguage('en');
+          }
         }
       }
-    }
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   // Update language and persist to localStorage

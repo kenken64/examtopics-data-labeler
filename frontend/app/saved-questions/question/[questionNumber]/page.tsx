@@ -55,14 +55,8 @@ const QuestionDetailPageContent = () => {
     console.log('🔧 convertAnswersToSteps called with:', {
       hasAnswers: !!question.answers,
       answersType: typeof question.answers,
-      answersKeys: question.answers ? Object.keys(question.answers) : [],
-      fullQuestion: question,
-      questionKeys: Object.keys(question),
-      step1: question.step1,
-      step2: question.step2,
-      step3: question.step3,
-      questionAnswers: question.answers,
-      actualAnswers: (question as any).answers
+      answersKeys: question.answers && typeof question.answers === 'object' ? Object.keys(question.answers) : 'not-object',
+      questionKeys: Object.keys(question)
     });
     
     // Log the complete question object to see its structure
@@ -77,18 +71,40 @@ const QuestionDetailPageContent = () => {
         const parsedAnswers = JSON.parse(question.answers);
         console.log('📋 Parsed answers from JSON string:', parsedAnswers);
         if (parsedAnswers && typeof parsedAnswers === 'object') {
-          stepData = parsedAnswers;
-          console.log('📋 Using parsed JSON answers for step data');
+          // Check if this contains step data - both exact steps and scenario-based steps
+          const exactStepKeys = Object.keys(parsedAnswers).filter(key => /^step\d+$/.test(key));
+          const scenarioKeys = Object.keys(parsedAnswers).filter(key => 
+            typeof key === 'string' && 
+            key.length > 10 && 
+            !key.match(/^[A-E][\.\)]/) && 
+            Array.isArray(parsedAnswers[key]) && 
+            parsedAnswers[key].length >= 2 &&
+            parsedAnswers[key].every((opt: any) => typeof opt === 'string')
+          );
+          
+          if (exactStepKeys.length > 0 || scenarioKeys.length > 0) {
+            stepData = parsedAnswers;
+            console.log('📋 Using parsed JSON answers for step data', {
+              exactSteps: exactStepKeys.length,
+              scenarios: scenarioKeys.length,
+              type: exactStepKeys.length > 0 ? 'exact-steps' : 'scenario-steps'
+            });
+          } else {
+            console.log('📋 JSON answers does not contain step data, skipping');
+          }
         }
       } catch (error) {
         console.log('❌ Failed to parse answers JSON string:', error);
+        console.log('📋 This is likely a traditional text-based question, not a step question');
+        // For non-JSON answers (traditional format), this is not a step question
+        return null;
       }
     } else if (question.answers && typeof question.answers === 'object') {
       stepData = question.answers;
       console.log('📋 Using answers object for step data');
     } else {
-      // Check if step data is directly on question object
-      const directStepKeys = Object.keys(question).filter(key => key.startsWith('step'));
+      // Check if step data is directly on question object - use exact pattern matching
+      const directStepKeys = Object.keys(question).filter(key => /^step\d+$/.test(key));
       if (directStepKeys.length > 0) {
         stepData = question;
         console.log('📋 Using question object directly for step data, found keys:', directStepKeys);
@@ -109,24 +125,42 @@ const QuestionDetailPageContent = () => {
     
     const steps = [];
     
-    // Extract step keys and sort them
-    const stepKeys = Object.keys(stepData).filter(key => key.startsWith('step')).sort();
-    console.log('📋 Step keys found:', stepKeys);
+    // Extract step keys - handle both exact steps and scenario-based steps
+    const exactStepKeys = Object.keys(stepData).filter(key => /^step\d+$/.test(key)).sort();
+    const scenarioKeys = Object.keys(stepData).filter(key => 
+      typeof key === 'string' && 
+      key.length > 10 && 
+      !key.match(/^[A-E][\.\)]/) && 
+      Array.isArray(stepData[key]) && 
+      stepData[key].length >= 2 &&
+      stepData[key].every((opt: any) => typeof opt === 'string')
+    ).sort();
     
-    for (const stepKey of stepKeys) {
+    const stepKeys = exactStepKeys.length > 0 ? exactStepKeys : scenarioKeys;
+    console.log('📋 Step keys found:', {
+      exactSteps: exactStepKeys,
+      scenarioSteps: scenarioKeys.map(k => k.substring(0, 50) + '...'),
+      usingType: exactStepKeys.length > 0 ? 'exact' : 'scenario',
+      finalKeys: stepKeys.length <= 3 ? stepKeys : stepKeys.slice(0, 3).map(k => typeof k === 'string' && k.length > 50 ? k.substring(0, 50) + '...' : k)
+    });
+    
+    for (let i = 0; i < stepKeys.length; i++) {
+      const stepKey = stepKeys[i];
       const stepDataArray = stepData[stepKey];
-      const stepNumber = parseInt(stepKey.replace('step', ''));
       
-      console.log(`🔍 Processing ${stepKey}:`, {
+      // For exact steps, extract number from key. For scenarios, use index + 1
+      const stepNumber = exactStepKeys.length > 0 
+        ? parseInt(stepKey.replace('step', ''))
+        : i + 1;
+      
+      console.log(`🔍 Processing ${exactStepKeys.length > 0 ? stepKey : 'scenario ' + stepNumber}:`, {
         stepNumber,
         isArray: Array.isArray(stepDataArray),
-        length: stepDataArray?.length
+        length: stepDataArray?.length,
+        keyPreview: stepKey.substring(0, 100) + (stepKey.length > 100 ? '...' : '')
       });
       
       if (stepDataArray && Array.isArray(stepDataArray) && stepDataArray.length > 0) {
-        // Get correct answer key
-        const stepKey = `step${stepNumber}`;
-        
         // All items in the array are the available options for this step
         const options = stepDataArray.map((optionText: string, index: number) => ({
           id: String.fromCharCode(65 + index), // A, B, C, D, E...
@@ -134,7 +168,7 @@ const QuestionDetailPageContent = () => {
           value: optionText
         }));
         
-        console.log(`📋 Options created for ${stepKey}:`, {
+        console.log(`📋 Options created for step ${stepNumber}:`, {
           optionsCount: options.length,
           firstOption: options[0]?.value.substring(0, 50) + '...',
           allOptionValues: options.map(opt => opt.value.substring(0, 30) + '...')
@@ -147,20 +181,22 @@ const QuestionDetailPageContent = () => {
         if (question.correctAnswer && typeof question.correctAnswer === 'string') {
           try {
             const parsedCorrectAnswers = JSON.parse(question.correctAnswer);
-            console.log(`🎯 Parsed correctAnswer JSON for ${stepKey}:`, parsedCorrectAnswers);
+            console.log(`🎯 Parsed correctAnswer JSON for step ${stepNumber}:`, parsedCorrectAnswers);
             console.log(`🔍 Available keys in correctAnswer:`, Object.keys(parsedCorrectAnswers));
             
-            if (parsedCorrectAnswers[stepKey]) {
-              correctAnswer = parsedCorrectAnswers[stepKey];
-              console.log(`✅ Found correct answer for ${stepKey}:`, {
+            // For exact steps, look for step1, step2, etc. For scenarios, use the full key
+            const correctAnswerKey = exactStepKeys.length > 0 ? `step${stepNumber}` : stepKey;
+            
+            if (parsedCorrectAnswers[correctAnswerKey]) {
+              correctAnswer = parsedCorrectAnswers[correctAnswerKey];
+              console.log(`✅ Found correct answer for step ${stepNumber}:`, {
                 text: correctAnswer.substring(0, 50) + '...',
                 fullText: correctAnswer,
                 length: correctAnswer.length,
-                charCodes: correctAnswer.split('').slice(0, 10).map((c: string) => c.charCodeAt(0)),
-                rawBytes: Array.from(new TextEncoder().encode(correctAnswer.substring(0, 20)))
+                lookupKey: correctAnswerKey.substring(0, 50) + (correctAnswerKey.length > 50 ? '...' : '')
               });
             } else {
-              console.log(`❌ Key ${stepKey} not found in parsed correctAnswer. Available keys:`, Object.keys(parsedCorrectAnswers));
+              console.log(`❌ Key ${correctAnswerKey} not found in parsed correctAnswer. Available keys:`, Object.keys(parsedCorrectAnswers).map(k => k.substring(0, 50) + (k.length > 50 ? '...' : '')));
             }
           } catch (error) {
             console.log(`❌ Failed to parse correctAnswer JSON:`, error);
@@ -181,8 +217,10 @@ const QuestionDetailPageContent = () => {
         
         const stepObj = {
           stepNumber,
-          title: `Step ${stepNumber}`,
-          description: `Select the appropriate action for step ${stepNumber}:`,
+          title: exactStepKeys.length > 0 ? `Step ${stepNumber}` : `Scenario ${stepNumber}`,
+          description: exactStepKeys.length > 0 
+            ? `Select the appropriate action for step ${stepNumber}:` 
+            : stepKey, // For scenarios, use the full scenario text as description
           options,
           correctAnswer
         };
@@ -817,15 +855,26 @@ const QuestionDetailPageContent = () => {
             typeEqual: question.type === 'steps',
             hasSteps: !!question.steps,
             hasAnswers: !!question.answers,
-            answerKeys: question.answers ? Object.keys(question.answers) : [],
-            convertedSteps: convertAnswersToSteps(question)
+            answerType: typeof question.answers,
+            answerKeys: question.answers && typeof question.answers === 'object' ? Object.keys(question.answers) : 'not-object'
           });
           
-          const convertedSteps = convertAnswersToSteps(question);
-          console.log('📋 Converted steps result:', convertedSteps);
-          
           const typeCheck = question.type === 'steps';
-          const dataCheck = question.steps || convertedSteps;
+          
+          // Only try to convert answers to steps if the type is already 'steps'
+          // This prevents trying to parse traditional answers as JSON
+          let convertedSteps = null;
+          let dataCheck = !!question.steps;
+          
+          if (typeCheck) {
+            console.log('🔧 About to call convertAnswersToSteps...');
+            convertedSteps = convertAnswersToSteps(question);
+            console.log('📋 Converted steps result:', convertedSteps);
+            console.log('📋 Converted steps length:', convertedSteps?.length);
+            dataCheck = question.steps || convertedSteps;
+            console.log('📋 Data check result:', !!dataCheck);
+          }
+          
           const isStepQuiz = typeCheck && dataCheck;
           
           console.log('🎯 Step quiz condition breakdown:', {
@@ -833,26 +882,31 @@ const QuestionDetailPageContent = () => {
             dataCheck: !!dataCheck,
             isStepQuiz,
             questionSteps: question.steps,
-            convertedStepsLength: convertedSteps?.length
+            convertedStepsLength: convertedSteps?.length,
+            willRenderStepQuiz: isStepQuiz
           });
           
-          return isStepQuiz;
-        })() ? (
-          <StepQuizAnswering
-            question={{
-              _id: question._id,
-              question: question.question,
-              type: 'steps',
-              steps: question.steps || convertAnswersToSteps(question) || [],
-              explanation: question.explanation
-            }}
-            onSubmit={handleStepQuizSubmit}
-            onNext={handleNextQuestion}
-            onPrevious={handlePreviousQuestion}
-            isFirstQuestion={questionNumber === 1}
-            isLastQuestion={false} // You might want to add logic to determine this
-          />
-        ) : (
+          if (isStepQuiz) {
+            return (
+              <StepQuizAnswering
+                question={{
+                  _id: question._id,
+                  question: question.question,
+                  type: 'steps',
+                  steps: question.steps || convertedSteps || [],
+                  explanation: question.explanation
+                }}
+                onSubmit={handleStepQuizSubmit}
+                onNext={handleNextQuestion}
+                onPrevious={handlePreviousQuestion}
+                isFirstQuestion={questionNumber === 1}
+                isLastQuestion={false} // You might want to add logic to determine this
+              />
+            );
+          }
+          
+          return null;
+        })() || (
           <>
             {/* Options Card */}
             <Card className="mb-6">
