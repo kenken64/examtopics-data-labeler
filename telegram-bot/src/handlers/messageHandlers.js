@@ -3,9 +3,10 @@ const { ObjectId } = require('mongodb');
 const FeedbackService = require('../services/FeedbackService');
 
 class MessageHandlers {
-  constructor(databaseService, quizService) {
+  constructor(databaseService, quizService, botInstance = null) {
     this.databaseService = databaseService;
     this.quizService = quizService;
+    this.botInstance = botInstance;
     this.feedbackService = new FeedbackService(databaseService);
   }
 
@@ -24,7 +25,9 @@ class MessageHandlers {
     '• /menu - Show interactive command menu\n' +
     '• /bookmark [number] - Save a question for later\n' +
     '• /bookmarks - View your saved bookmarks\n' +
-    '• /revision - Review questions you answered incorrectly for current access code\n\n' +
+    '• /revision - Review questions you answered incorrectly for current access code\n' +
+    '• /steptest - Try the new step-based quiz feature\n' +
+    '• /ordertest - Try the ordering/drag-and-drop interface\n\n' +
     '💡 Type /menu for an interactive command menu or /help for detailed instructions!\n\n' +
     'Let\'s get started by selecting a company:'
     );
@@ -70,12 +73,27 @@ class MessageHandlers {
     '   • Enter 6-digit quiz code from host\'s screen\n' +
     '   • Compete with other players in real-time\n' +
     '   • Usage: Simply type /quizblitz\n\n' +
+    '🧪 <b>/steptest</b>\n' +
+    '   • Test the new step-based quiz feature\n' +
+    '   • Experience multi-step sequential questions\n' +
+    '   • Similar to ML certification exam format\n' +
+    '   • Usage: Simply type /steptest\n\n' +
+    '🔄 <b>/ordertest</b>\n' +
+    '   • Test the ordering/drag-and-drop interface\n' +
+    '   • Reorder options using ⬆️ and ⬇️ buttons\n' +
+    '   • Similar to the web interface drag-and-drop\n' +
+    '   • Usage: Simply type /ordertest\n\n' +
     '🎯 <b>Quiz Features:</b>\n\n' +
     '✅ <b>Question Navigation:</b>\n' +
     '   • Answer questions using the A, B, C, D buttons\n' +
     '   • Get immediate feedback on correct/incorrect answers\n' +
     '   • See detailed explanations for each question\n' +
     '   • Use "Next Question" button to continue\n\n' +
+    '📋 <b>Step-Based Quizzes:</b>\n' +
+    '   • Complete multi-step sequential questions\n' +
+    '   • Progress through steps in order\n' +
+    '   • Visual progress tracking\n' +
+    '   • Comprehensive results review\n\n' +
     '🔐 <b>Access Code System:</b>\n' +
     '   • Enter your generated access code when prompted\n' +
     '   • Access codes link you to specific question sets\n' +
@@ -307,9 +325,173 @@ class MessageHandlers {
     const totalQuestions = session.questions.length;
 
     // Debug logging
-    console.log('Current question:', JSON.stringify(currentQuestion, null, 2));
+    console.log('🔍 DEBUG - Current question type:', currentQuestion.type);
+    console.log('🔍 DEBUG - Has steps array:', !!currentQuestion.steps);
+    console.log('🔍 DEBUG - Question ID:', currentQuestion._id);
+    console.log('🔍 DEBUG - Question structure keys:', Object.keys(currentQuestion));
+    console.log('🔍 DEBUG - Has answers field:', !!currentQuestion.answers);
+    console.log('🔍 DEBUG - Answers type:', typeof currentQuestion.answers);
+    
+    // Only log first 500 chars of large objects to avoid console spam
+    const debugQuestion = { ...currentQuestion };
+    if (debugQuestion.answers && typeof debugQuestion.answers === 'string' && debugQuestion.answers.length > 500) {
+      debugQuestion.answers = debugQuestion.answers.substring(0, 500) + '... (truncated)';
+    }
+    console.log('Current question (truncated):', JSON.stringify(debugQuestion, null, 2));
 
-    // Check if options exist
+    // Check if this is a step-based question (multiple ways to detect)
+    const hasStepsArray = currentQuestion.steps && Array.isArray(currentQuestion.steps) && currentQuestion.steps.length > 0;
+    const hasStepsType = currentQuestion.type === 'steps';
+    const hasHotspotMarker = currentQuestion.question && 
+      (currentQuestion.question.includes('**HOTSPOT**') || 
+       currentQuestion.question.includes('HOTSPOT') ||
+       currentQuestion.question.includes('hotspot'));
+    const hasMultipleSteps = currentQuestion.answers && 
+      (currentQuestion.answers.includes('step1') || 
+       currentQuestion.answers.includes('Step 1') ||
+       currentQuestion.answers.includes('"step1"') ||
+       currentQuestion.answers.includes('"Step 1"'));
+    
+    // ENHANCED: More aggressive step detection for HOTSPOT questions
+    const hasStepData = currentQuestion.answers && 
+      typeof currentQuestion.answers === 'string' && 
+      (currentQuestion.answers.includes('{') || currentQuestion.answers.includes('['));
+    
+    // FORCE STEP MODE: For testing, force step mode for any HOTSPOT question
+    const isStepQuestion = hasStepsArray || hasStepsType || hasHotspotMarker || (hasHotspotMarker && (hasMultipleSteps || hasStepData));
+    
+    console.log('🔍 DEBUG - Step question detection:', {
+      questionNumber: session.currentQuestionIndex + 1,
+      questionId: currentQuestion._id,
+      hasStepsArray,
+      hasStepsType,
+      hasHotspotMarker,
+      hasMultipleSteps,
+      hasStepData,
+      isStepQuestion,
+      questionPreview: currentQuestion.question?.substring(0, 100) + '...'
+    });
+    
+    if (isStepQuestion) {
+      console.log('🔄 Detected step-based question, switching to step quiz mode');
+      
+      // Transform database format to expected step format if needed
+      let stepQuestionData = currentQuestion;
+      
+      if (!currentQuestion.steps && (hasStepsType || (hasHotspotMarker && hasMultipleSteps))) {
+        console.log('📄 Transforming database step question format...');
+        try {
+          stepQuestionData = this.transformDatabaseStepQuestion(currentQuestion);
+          console.log("✅ Transformation successful! Created steps:", stepQuestionData?.steps?.length || 0);
+          
+          // Validate transformation result
+          if (!stepQuestionData || !stepQuestionData.steps || stepQuestionData.steps.length === 0) {
+            console.error('❌ Transformation produced no valid steps');
+            stepQuestionData = null;
+          } else {
+            console.log("Transformed step question data (summary):", {
+              id: stepQuestionData._id,
+              topic: stepQuestionData.topic,
+              stepsCount: stepQuestionData.steps.length,
+              firstStepPreview: stepQuestionData.steps[0]?.question?.substring(0, 50) + '...'
+            });
+          }
+        } catch (error) {
+          console.error('❌ Error transforming step question:', error);
+          console.error('❌ Error stack:', error.stack);
+          // Fall back to regular quiz mode
+          console.log('⚠️ Falling back to regular quiz mode due to transformation error');
+          stepQuestionData = null;
+        }
+      }
+      
+      // Only proceed with step quiz if we have valid step data
+      if (stepQuestionData && stepQuestionData.steps && stepQuestionData.steps.length > 0) {
+        if (this.botInstance) {
+          console.log('🚀 Calling botInstance.handleStepQuiz with transformed data');
+          await this.botInstance.handleStepQuiz(ctx, stepQuestionData);
+          console.log('✅ Step quiz handling completed, returning early');
+          return;
+        } else {
+          console.warn('⚠️ Bot instance not available for step quiz, falling back to regular quiz');
+        }
+      } else {
+        console.warn('⚠️ No valid step data found, falling back to regular quiz mode');
+      }
+    }
+
+    console.log('📝 Continuing with regular quiz flow (not a step question)');
+
+    // Safeguard: Double-check this isn't a step question that was missed
+    if (currentQuestion.type === 'steps' || hasHotspotMarker) {
+      console.error('🚨 CRITICAL: Step question was not handled properly!');
+      console.log('📋 Question details:', {
+        type: currentQuestion.type,
+        hasHotspot: hasHotspotMarker,
+        hasAnswers: !!currentQuestion.answers,
+        answersPreview: typeof currentQuestion.answers === 'string' ? 
+          currentQuestion.answers.substring(0, 100) + '...' : 
+          'Not a string'
+      });
+      
+      // Try to create a simple fallback interface for step questions
+      try {
+        let answersData = {};
+        if (typeof currentQuestion.answers === 'string') {
+          answersData = JSON.parse(currentQuestion.answers);
+        } else if (typeof currentQuestion.answers === 'object') {
+          answersData = currentQuestion.answers;
+        }
+        
+        const stepKeys = Object.keys(answersData).filter(key => 
+          key.startsWith('step') || (Array.isArray(answersData[key]) && answersData[key].length > 0)
+        );
+        
+        if (stepKeys.length > 0) {
+          let message = `⚠️ **Step-based Question** (Fallback Mode)\n\n`;
+          message += `**Question ${questionNumber} of ${totalQuestions}**\n\n`;
+          message += `${currentQuestion.question || 'Step-based question'}\n\n`;
+          
+          stepKeys.forEach((stepKey, index) => {
+            const options = answersData[stepKey];
+            if (Array.isArray(options)) {
+              message += `**Step ${index + 1}:**\n`;
+              if (stepKey.startsWith('step')) {
+                message += `Select the appropriate action:\n`;
+              } else {
+                message += `${stepKey}\n`;
+              }
+              options.forEach((option, optIndex) => {
+                const letter = String.fromCharCode(65 + optIndex);
+                message += `${letter}. ${option}\n`;
+              });
+              message += '\n';
+            }
+          });
+          
+          message += '💡 This is a step-based question that requires the step quiz interface.\n';
+          message += 'Please try again or contact support if this persists.';
+          
+          const keyboard = new InlineKeyboard()
+            .text('⏭️ Next Question', `next_question_${userId}`)
+            .row()
+            .text('🏠 Main Menu', 'back_to_companies');
+          
+          await ctx.reply(message, {
+            reply_markup: keyboard,
+            parse_mode: 'Markdown'
+          });
+          return;
+        }
+      } catch (fallbackError) {
+        console.error('❌ Error in step question fallback:', fallbackError);
+      }
+      
+      await ctx.reply('❌ Error: Step question detected but not processed correctly. Please contact support.');
+      return;
+    }
+
+    // Check if options exist for regular questions
     if (!currentQuestion.options) {
       console.error('No options found for current question');
       await ctx.reply('❌ Error loading question options. Please try again.');
@@ -529,19 +711,224 @@ class MessageHandlers {
   }
 
   async handleMessage(ctx, _userSessions, _userSelections) {
-  // Handle regular text messages that aren't commands
+    // Handle regular text messages that aren't commands
     const text = ctx.message.text;
+
+    // Special test command for HOTSPOT questions
+    if (text === '/hotspottest' || text === '/testhotspot') {
+      await this.testHotspotQuestion(ctx);
+      return;
+    }
 
     // For now, just provide helpful guidance
     await ctx.reply(
       `🤖 I received your message: "${text}"\n\n` +
-    '💡 Here\'s what you can do:\n' +
-    '• Use /start to begin a quiz\n' +
-    '• Use /help for detailed instructions\n' +
-    '• Use /join to join a QuizBlitz game\n' +
-    '• Send a 6-digit code to join a QuizBlitz quiz\n\n' +
-    'If you\'re trying to join a quiz, make sure to send just the 6-digit code (e.g., 123456)'
+      '💡 Here\'s what you can do:\n' +
+      '• Use /start to begin a quiz\n' +
+      '• Use /help for detailed instructions\n' +
+      '• Use /hotspottest to test step quiz directly\n' +
+      '• Use /steptest to try the step quiz feature\n' +
+      '• Send a 6-digit code to join a QuizBlitz quiz\n\n' +
+      'If you\'re trying to join a quiz, make sure to send just the 6-digit code (e.g., 123456)'
     );
+  }
+
+  // Direct test for HOTSPOT questions bypassing navigation
+  async testHotspotQuestion(ctx) {
+    try {
+      console.log('🧪 Testing HOTSPOT question directly...');
+      
+      // Directly fetch the HOTSPOT question from database
+      const db = await this.databaseService.connectToDatabase();
+      const hotspotQuestion = await db.collection('questions').findOne({
+        question: { $regex: /HOTSPOT/i }
+      });
+      
+      if (!hotspotQuestion) {
+        await ctx.reply('❌ No HOTSPOT question found in database for testing.');
+        return;
+      }
+      
+      console.log('🎯 Found HOTSPOT question:', hotspotQuestion._id);
+      console.log('📋 Question text preview:', hotspotQuestion.question?.substring(0, 100) + '...');
+      
+      // Test step detection on this question
+      const hasHotspotMarker = hotspotQuestion.question && 
+        (hotspotQuestion.question.includes('**HOTSPOT**') || 
+         hotspotQuestion.question.includes('HOTSPOT') ||
+         hotspotQuestion.question.includes('hotspot'));
+      
+      const hasStepData = hotspotQuestion.answers && 
+        typeof hotspotQuestion.answers === 'string' && 
+        (hotspotQuestion.answers.includes('{') || hotspotQuestion.answers.includes('['));
+      
+      console.log('🔍 HOTSPOT Test Detection:', {
+        hasHotspotMarker,
+        hasStepData,
+        answersType: typeof hotspotQuestion.answers,
+        answersLength: hotspotQuestion.answers?.length || 0
+      });
+      
+      if (hasHotspotMarker) {
+        console.log('✅ HOTSPOT marker detected, attempting transformation...');
+        
+        try {
+          const transformedData = this.transformDatabaseStepQuestion(hotspotQuestion);
+          console.log('🎯 Transformation successful!', {
+            stepsCount: transformedData?.steps?.length || 0,
+            topic: transformedData?.topic
+          });
+          
+          if (this.botInstance && transformedData?.steps?.length > 0) {
+            await ctx.reply('🧪 **HOTSPOT Test Mode**\n\nAttempting to show step quiz interface...');
+            await this.botInstance.handleStepQuiz(ctx, transformedData);
+            console.log('✅ Step quiz test completed');
+          } else {
+            await ctx.reply('❌ Bot instance not available or no steps created during transformation.');
+          }
+        } catch (transformError) {
+          console.error('❌ Transformation failed:', transformError);
+          await ctx.reply(`❌ Transformation error: ${transformError.message}`);
+        }
+      } else {
+        await ctx.reply('❌ Question found but HOTSPOT marker not detected.');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error in testHotspotQuestion:', error);
+      await ctx.reply(`❌ Test failed: ${error.message}`);
+    }
+  }
+
+  // Transform MongoDB step question format to bot expected format
+  transformDatabaseStepQuestion(dbQuestion) {
+    try {
+      console.log('🔄 Starting transformation of database step question');
+      console.log('📋 Original question structure:', {
+        _id: dbQuestion._id,
+        type: dbQuestion.type,
+        hasAnswers: !!dbQuestion.answers,
+        hasCorrectAnswer: !!dbQuestion.correctAnswer,
+        answersType: typeof dbQuestion.answers
+      });
+
+      // Parse JSON strings from database
+      let answersData = {};
+      let correctAnswersData = {};
+
+      if (typeof dbQuestion.answers === 'string') {
+        answersData = JSON.parse(dbQuestion.answers);
+      } else if (typeof dbQuestion.answers === 'object') {
+        answersData = dbQuestion.answers;
+      }
+
+      if (typeof dbQuestion.correctAnswer === 'string') {
+        correctAnswersData = JSON.parse(dbQuestion.correctAnswer);
+      } else if (typeof dbQuestion.correctAnswer === 'object') {
+        correctAnswersData = dbQuestion.correctAnswer;
+      }
+      
+      console.log('📋 Parsed answers data:', Object.keys(answersData).length, 'scenarios');
+      console.log('✅ Parsed correct answers data:', Object.keys(correctAnswersData).length, 'answers');
+      
+      // Extract topic from question (look for **Topic X**)
+      const topicMatch = dbQuestion.question?.match(/\*\*Topic\s+(\d+)\*\*/);
+      const topic = topicMatch ? `Topic ${topicMatch[1]}` : 'Step Quiz';
+      
+      // Extract main question (remove topic and HOTSPOT markers)
+      let description = dbQuestion.question || '';
+      description = description.replace(/\*\*Topic\s+\d+\*\*\s*\n*/g, '');
+      description = description.replace(/\*\*HOTSPOT\*\*\s*\n*/g, '**HOTSPOT** - ');
+      description = description.trim();
+      
+      // Convert each scenario to a step - handle both step1, step2 format and scenario keys
+      const steps = [];
+      const stepKeys = Object.keys(answersData).filter(key => 
+        key.startsWith('step') || (Array.isArray(answersData[key]) && answersData[key].length > 0)
+      ).sort();
+      
+      console.log('🔍 Found step keys:', stepKeys);
+      
+      stepKeys.forEach((stepKey, index) => {
+        const options = answersData[stepKey];
+        if (Array.isArray(options) && options.length > 0) {
+          const stepNumber = index + 1;
+          
+          // Find correct answer for this step
+          let correctAnswerLetter = 'A'; // Default
+          
+          // Try different keys for correct answer
+          const possibleKeys = [
+            stepKey, // exact match
+            `Step ${stepNumber}`, // "Step 1", "Step 2" format
+            stepNumber.toString() // just the number
+          ];
+          
+          for (const key of possibleKeys) {
+            if (correctAnswersData[key]) {
+              const correctOption = correctAnswersData[key];
+              
+              // If it's already a letter (A, B, C, D), use it directly
+              if (typeof correctOption === 'string' && correctOption.match(/^[A-Z]$/)) {
+                correctAnswerLetter = correctOption;
+                break;
+              }
+              
+              // Otherwise, find the index of the correct option text
+              const optionIndex = options.findIndex(opt => opt === correctOption);
+              if (optionIndex >= 0) {
+                correctAnswerLetter = String.fromCharCode(65 + optionIndex); // A, B, C, D
+                break;
+              }
+            }
+          }
+          
+          // FIXED: Create step question text based on actual data structure
+          let stepQuestion = '';
+          if (stepKey.startsWith('step')) {
+            // Generic numbered steps
+            stepQuestion = `Select the appropriate action for step ${stepNumber}:`;
+          } else {
+            // Scenario-based questions - use the actual scenario as the question
+            stepQuestion = stepKey;
+          }
+          
+          const step = {
+            question: stepQuestion,
+            options: options,
+            correctAnswer: correctAnswerLetter
+          };
+          
+          console.log(`🎯 Created step ${stepNumber}:`, {
+            question: step.question.substring(0, 50) + '...',
+            optionsCount: step.options.length,
+            correctAnswer: step.correctAnswer
+          });
+          
+          steps.push(step);
+        }
+      });
+      
+      console.log(`🔄 Created ${steps.length} steps from database question`);
+      
+      // Return transformed question data in the format expected by step quiz handler
+      const transformed = {
+        _id: dbQuestion._id,
+        topic: topic,
+        description: description,
+        steps: steps,
+        originalQuestion: dbQuestion, // Keep original for reference
+        orderingMode: false, // Default to selection mode, not ordering
+        type: 'steps'
+      };
+      
+      console.log('✅ Transformation completed successfully');
+      return transformed;
+      
+    } catch (error) {
+      console.error('❌ Error in transformDatabaseStepQuestion:', error);
+      throw new Error(`Failed to transform step question: ${error.message}`);
+    }
   }
 }
 
