@@ -48,7 +48,8 @@ class QuizService {
             question: '$questionDetails.question',
             answers: '$questionDetails.answers',
             correctAnswer: '$questionDetails.correctAnswer',
-            explanation: '$questionDetails.explanation'
+            explanation: '$questionDetails.explanation',
+            type: '$questionDetails.type'  // Include the type field for step question detection
           }
         }
       ];
@@ -58,11 +59,19 @@ class QuizService {
       // Process questions to parse answers into options format
       const processedQuestions = questions.map((q) => {
         const options = this.parseAnswersToOptions(q.answers);
+        
+        // Debug logging for step questions
+        if (q.type === 'steps') {
+          console.log(`🔄 Found step question in access code: ID=${q._id}, Question=${q.assignedQuestionNo}`);
+        }
+        
         return {
           ...q,
           options: options
         };
       });
+
+      console.log(`📊 Access code ${accessCode}: Retrieved ${processedQuestions.length} questions, ${processedQuestions.filter(q => q.type === 'steps').length} are step-type`);
 
       return processedQuestions;
     } catch (error) {
