@@ -243,38 +243,12 @@ class CallbackHandlers {
       return;
     }
 
-    const currentQuestion = session.questions[session.currentQuestionIndex];
-    const questionNumber = session.currentQuestionIndex + 1;
-    const totalQuestions = session.questions.length;
-
     // Clear selections for new question
     userSelections[userId] = [];
 
-    const questionText = this.quizService.formatQuestionText(
-      currentQuestion,
-      questionNumber,
-      totalQuestions,
-      session.correctAnswers,
-      session.currentQuestionIndex,
-      []
-    );
-
-    const keyboard = this.quizService.createQuestionKeyboard(currentQuestion, []);
-
-    // Try to edit message first, if it fails, send a new message
-    try {
-      await ctx.editMessageText(questionText, {
-        reply_markup: keyboard,
-        parse_mode: 'HTML'
-      });
-    } catch (error) {
-      // If editing fails (message too old or can't be edited), send a new message
-      console.log('Failed to edit message, sending new message instead:', error.message);
-      await ctx.reply(questionText, {
-        reply_markup: keyboard,
-        parse_mode: 'HTML'
-      });
-    }
+    // FIX: Use messageHandlers.showCurrentQuestion to ensure step detection works during navigation
+    console.log('🔄 Navigation: Calling messageHandlers.showCurrentQuestion for proper step detection');
+    await this.messageHandlers.showCurrentQuestion(ctx, userSessions, userSelections);
   }
 
   async handleFeedbackCallback(ctx, callbackData, userSessions, userSelections) {

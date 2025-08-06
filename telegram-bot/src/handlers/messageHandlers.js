@@ -883,12 +883,13 @@ class MessageHandlers {
             }
           }
           
-          // Create step question text
+          // FIXED: Create step question text based on actual data structure
           let stepQuestion = '';
           if (stepKey.startsWith('step')) {
+            // Generic numbered steps
             stepQuestion = `Select the appropriate action for step ${stepNumber}:`;
           } else {
-            // Use the scenario key as the question
+            // Scenario-based questions - use the actual scenario as the question
             stepQuestion = stepKey;
           }
           

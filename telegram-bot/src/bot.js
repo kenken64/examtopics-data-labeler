@@ -202,6 +202,13 @@ class CertificationBot {
         console.log('📱 Telegram API works but polling may be restricted');
         console.log('🎮 QuizBlitz backend functionality ACTIVE');
         console.log('💡 Bot can send messages but may not receive updates');
+        console.log('');
+        console.log('🔧 POSSIBLE SOLUTIONS:');
+        console.log('   1. Check firewall/network restrictions for api.telegram.org');
+        console.log('   2. Try running from a different network');
+        console.log('   3. Set up webhook mode with WEBHOOK_URL environment variable');
+        console.log('   4. Contact your network administrator about Telegram API access');
+        console.log('   5. Try /hotspottest command to test step quiz directly');
         this.isReady = true; // Partially ready - can send messages
       } else {
         console.log('✅ Bot initialization completed successfully');
@@ -281,6 +288,11 @@ class CertificationBot {
     // Test ordering step quiz command
     this.bot.command('ordertest', async (ctx) => {
       await this.handleTestOrderingStepQuiz(ctx);
+    });
+
+    // Test HOTSPOT question directly (bypasses navigation)
+    this.bot.command('hotspottest', async (ctx) => {
+      await this.messageHandlers.testHotspotQuestion(ctx);
     });
 
     // Handle company selection
@@ -1017,8 +1029,8 @@ class CertificationBot {
     const results = session.checkAnswers();
     const steps = session.getAllSteps();
     
-    let resultText = `🏁 **Quiz Complete!**\n\n`;
-    resultText += `📊 **Final Results:**\n`;
+    let resultText = `🏁 **Step Quiz Complete!**\n\n`;
+    resultText += `📊 **Results:**\n`;
     resultText += `✅ Correct: ${results.correct}/${results.total}\n`;
     resultText += `📈 Score: ${results.percentage.toFixed(1)}%\n\n`;
     
@@ -1038,7 +1050,7 @@ class CertificationBot {
       resultText += `\n`;
     }
     
-    // Save results to database (if needed)
+    // Save results to database
     try {
       const db = await this.databaseService.connectToDatabase();
       
@@ -1057,10 +1069,71 @@ class CertificationBot {
     } catch (error) {
       console.error('Error saving step quiz results:', error);
     }
+
+    // FIX: Check if this is part of a regular quiz session
+    const regularSession = this.userSessions.get(parseInt(userId));
     
-    // Cleanup session
+    if (regularSession && regularSession.questions) {
+      // This step quiz is part of a regular quiz - continue the flow
+      console.log('🔄 Step quiz completed as part of regular quiz flow');
+      
+      // Update the regular session with step quiz results
+      const isCorrect = results.percentage === 100;
+      if (isCorrect) {
+        regularSession.correctAnswers++;
+      }
+      
+      // Store step quiz answer data for feedback
+      regularSession.currentAnswerData = {
+        selectedAnswer: `Step Quiz (${results.correct}/${results.total})`,
+        selectedAnswers: [`Step Quiz (${results.correct}/${results.total})`], // For compatibility
+        isCorrect: isCorrect,
+        explanation: session.questionData.originalQuestion?.explanation || 'Step-by-step explanation provided above.',
+        questionNumber: regularSession.currentQuestionIndex + 1,
+        question: {
+          // Create a question object structure that saveFeedbackAndContinue expects
+          correctAnswer: `All ${results.total} steps correct`,
+          question: session.questionData.description || 'Step Quiz Question',
+          _id: session.questionData._id,
+          explanation: session.questionData.originalQuestion?.explanation || 'Step-by-step explanation provided above.'
+        }
+      };
+      
+      // Cleanup step session
+      this.stepQuizSessions.delete(parseInt(userId));
+      
+      // Add navigation to continue with regular quiz
+      const keyboard = [
+        [
+          { text: "⭐ Give Feedback", callback_data: "feedback_step_quiz" },
+          { text: "⏭️ Next Question", callback_data: "next_question" }
+        ]
+      ];
+      
+      try {
+        await ctx.editMessageText(resultText, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: keyboard
+          }
+        });
+      } catch (error) {
+        console.error('Error sending step quiz results:', error);
+        await ctx.reply(resultText, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: keyboard
+          }
+        });
+      }
+      
+      return; // Exit early - regular quiz flow will continue
+    }
+    
+    // Cleanup session (standalone step quiz)
     this.stepQuizSessions.delete(parseInt(userId));
     
+    // Standalone step quiz - show menu options
     const keyboard = [
       [
         { text: "🔄 Try Another Quiz", callback_data: "main_menu" },
@@ -1675,34 +1748,97 @@ class CertificationBot {
     return { inline_keyboard: keyboard };
   }
 
+  async tryWebhookMode() {
+    try {
+      console.log('🔄 Attempting webhook mode as fallback...');
+      
+      // Only try webhook if we have proper environment for it
+      if (process.env.WEBHOOK_URL && process.env.PORT) {
+        const webhookUrl = process.env.WEBHOOK_URL;
+        const port = process.env.PORT;
+        
+        console.log(`🌐 Setting up webhook: ${webhookUrl}`);
+        
+        // Stop any existing polling
+        await this.bot.stop();
+        
+        // Set webhook
+        await this.bot.api.setWebhook(webhookUrl);
+        
+        // Start webhook server
+        await this.bot.start({
+          onStart: () => console.log('✅ Webhook mode started successfully'),
+          drop_pending_updates: true
+        });
+        
+        console.log('✅ Successfully switched to webhook mode');
+        this.pollingIssue = false;
+        return true;
+      } else {
+        console.log('⚠️  Webhook environment variables not configured');
+        console.log('💡 To enable webhook mode, set WEBHOOK_URL and PORT environment variables');
+        return false;
+      }
+    } catch (webhookError) {
+      console.error('❌ Webhook mode also failed:', webhookError);
+      console.log('🔄 Continuing in API-ONLY mode');
+      return false;
+    }
+  }
+
   async start() {
     try {
     // First try to get bot info to test API connectivity
       const botInfo = await this.bot.api.getMe();
       console.log(`✅ Bot API connection successful: @${botInfo.username}`);
 
-      // Try to start polling with a timeout
-      const startPromise = this.bot.start();
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Bot start timeout')), 15000);
-      });
+      // Try to start polling with increased timeout and retry logic
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          console.log(`🔄 Attempting to start polling (attempt ${retryCount + 1}/${maxRetries})...`);
+          
+          const startPromise = this.bot.start();
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Bot start timeout')), 30000); // Increased to 30 seconds
+          });
 
-      await Promise.race([startPromise, timeoutPromise]);
-      console.log('✅ Bot polling started successfully');
-    } catch (error) {
-      console.error('❌ Bot start failed:', error);
-
-      // Try to determine if it's just a polling issue
-      try {
-        const botInfo = await this.bot.api.getMe();
-        console.log(`⚠️  Bot API works but polling failed: @${botInfo.username}`);
-        this.pollingIssue = true;
-        // Don't throw - we can still send messages even if polling doesn't work
-      } catch (apiError) {
-        console.error('❌ Bot API also failed:', apiError);
-        this.offlineMode = true;
+          await Promise.race([startPromise, timeoutPromise]);
+          console.log('✅ Bot polling started successfully');
+          break; // Success, exit retry loop
+        } catch (retryError) {
+          retryCount++;
+          console.log(`❌ Polling attempt ${retryCount} failed:`, retryError.message);
+          
+          if (retryCount < maxRetries) {
+            console.log(`⏳ Waiting 5 seconds before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          } else {
+            throw retryError; // Final attempt failed
+          }
+        }
       }
-    }
+      console.log('✅ Bot polling started successfully');
+      } catch (error) {
+        console.error('❌ Bot polling failed after all retries:', error);
+
+        // Try to determine if it's just a polling issue
+        try {
+          const botInfo = await this.bot.api.getMe();
+          console.log(`⚠️  Bot API works but polling failed: @${botInfo.username}`);
+          this.pollingIssue = true;
+          
+          // Try webhook mode as fallback
+          await this.tryWebhookMode();
+          
+          // Don't throw - we can still send messages even if polling doesn't work
+        } catch (apiError) {
+          console.error('❌ Bot API also failed:', apiError);
+          this.offlineMode = true;
+        }
+      }
   }
 }
 
