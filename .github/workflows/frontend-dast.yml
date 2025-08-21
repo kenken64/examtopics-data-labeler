@@ -2,7 +2,7 @@ name: "Frontend (Next.js) DAST Security Scan"
 
 on:
   push:
-    branches: [q-labeler, master]
+    branches: [q-labeler]
   pull_request:
     branches: [master]
 

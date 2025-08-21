@@ -2,7 +2,7 @@ name: Frontend (Next.js) SAST Security Scan
 
 on:
   push:
-    branches: [ master, q-labeler ]
+    branches: [ q-labeler ]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-sast.yml'

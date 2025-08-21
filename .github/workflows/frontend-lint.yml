@@ -2,7 +2,7 @@ name: Frontend (Next.js) Lint
 
 on:
   push:
-    branches: [ master, q-labeler ]
+    branches: [ q-labeler ]
     paths:
       - 'frontend/**'
   pull_request:

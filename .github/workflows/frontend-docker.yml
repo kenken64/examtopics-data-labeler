@@ -2,7 +2,7 @@ name: Frontend Docker Build & Publish
 
 on:
   push:
-    branches: [ master, q-labeler ]
+    branches: [ q-labeler ]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-docker.yml'

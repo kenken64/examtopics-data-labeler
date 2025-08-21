@@ -2,7 +2,7 @@ name: Backend (Python Flask) SAST Security Scan
 
 on:
   push:
-    branches: [ master, q-labeler ]
+    branches: [ q-labeler ]
     paths:
       - 'backend/**'
       - '.github/workflows/backend-sast.yml'

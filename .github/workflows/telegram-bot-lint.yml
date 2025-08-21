@@ -2,7 +2,7 @@ name: Telegram Bot (Node.js) Lint
 
 on:
   push:
-    branches: [ master, q-labeler ]
+    branches: [ q-labeler ]
     paths:
       - 'telegram-bot/**'
   pull_request:

@@ -2,7 +2,7 @@ name: Telegram Bot (Node.js) SAST Security Scan
 
 on:
   push:
-    branches: [ master, q-labeler ]
+    branches: [ q-labeler ]
     paths:
       - 'telegram-bot/**'
       - '.github/workflows/telegram-bot-sast.yml'
