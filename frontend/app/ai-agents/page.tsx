@@ -96,7 +96,7 @@ export default function AIAgentsPage() {
     totalAgents: 0,
     hasNextPage: false,
     hasPreviousPage: false,
-    limit: 10
+    limit: 9
   });
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
