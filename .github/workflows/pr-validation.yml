@@ -1,0 +1,180 @@
+name: "PR Validation - Check Q-Labeler Status"
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-q-labeler-status:
+    runs-on: ubuntu-latest
+    name: "Validate Q-Labeler Branch Status"
+    
+    steps:
+      - name: Check Q-Labeler Branch Builds
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log('🔍 Checking q-labeler branch build status...');
+            
+            // Get the latest commit from q-labeler branch
+            const { data: qLabelerBranch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'q-labeler'
+            });
+            
+            const qLabelerSha = qLabelerBranch.commit.sha;
+            console.log(`Q-Labeler latest commit: ${qLabelerSha}`);
+            
+            // Get all check runs for the latest q-labeler commit
+            const { data: checkRuns } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: qLabelerSha
+            });
+            
+            console.log(`Found ${checkRuns.check_runs.length} check runs for q-labeler`);
+            
+            // Filter for our important workflows
+            const importantWorkflows = [
+              'Backend Python Tests',
+              'Frontend (Next.js) DAST Security Scan',
+              'Backend (Python Flask) SAST Security Scan',
+              'Frontend (Next.js) SAST Security Scan',
+              'Backend (Python Flask) Lint',
+              'Frontend (Next.js) Lint'
+            ];
+            
+            let allPassed = true;
+            let statusSummary = '## 🔍 Q-Labeler Branch Status Check\n\n';
+            statusSummary += `**Q-Labeler Commit:** \`${qLabelerSha.substring(0, 7)}\`\n\n`;
+            statusSummary += '### Workflow Status:\n\n';
+            
+            for (const workflowName of importantWorkflows) {
+              const workflowRuns = checkRuns.check_runs.filter(run => 
+                run.name.includes(workflowName) || run.app.name === 'GitHub Actions'
+              );
+              
+              if (workflowRuns.length === 0) {
+                statusSummary += `- ⏳ **${workflowName}**: No recent runs found\n`;
+                continue;
+              }
+              
+              const latestRun = workflowRuns[0];
+              const status = latestRun.status;
+              const conclusion = latestRun.conclusion;
+              
+              if (status === 'completed') {
+                if (conclusion === 'success') {
+                  statusSummary += `- ✅ **${workflowName}**: Passed\n`;
+                } else if (conclusion === 'failure') {
+                  statusSummary += `- ❌ **${workflowName}**: Failed\n`;
+                  allPassed = false;
+                } else if (conclusion === 'cancelled') {
+                  statusSummary += `- 🚫 **${workflowName}**: Cancelled\n`;
+                  allPassed = false;
+                } else {
+                  statusSummary += `- ⚠️ **${workflowName}**: ${conclusion}\n`;
+                }
+              } else {
+                statusSummary += `- 🔄 **${workflowName}**: ${status}\n`;
+              }
+            }
+            
+            // Get workflow runs as well (different API)
+            const { data: workflowRuns } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: 'q-labeler',
+              per_page: 50
+            });
+            
+            // Check recent workflow runs
+            const recentRuns = workflowRuns.workflow_runs
+              .filter(run => run.head_sha === qLabelerSha)
+              .slice(0, 10);
+            
+            if (recentRuns.length > 0) {
+              statusSummary += '\n### Recent Workflow Runs:\n\n';
+              for (const run of recentRuns) {
+                const status = run.status === 'completed' ? 
+                  (run.conclusion === 'success' ? '✅' : 
+                   run.conclusion === 'failure' ? '❌' : '⚠️') : '🔄';
+                statusSummary += `- ${status} **${run.name}**: ${run.conclusion || run.status}\n`;
+                
+                if (run.status === 'completed' && run.conclusion !== 'success') {
+                  allPassed = false;
+                }
+              }
+            }
+            
+            // Add overall status
+            statusSummary += '\n### Overall Status:\n\n';
+            if (allPassed) {
+              statusSummary += '🎉 **PASSED** - Q-labeler branch builds are successful. Safe to merge!\n\n';
+              statusSummary += '✅ All critical workflows are passing on the q-labeler branch.\n';
+            } else {
+              statusSummary += '🚨 **BLOCKED** - Q-labeler branch has failing builds. Please fix before merging.\n\n';
+              statusSummary += '❌ Some workflows are failing on the q-labeler branch. Review and fix issues before proceeding.\n';
+            }
+            
+            statusSummary += `\n---\n*Status checked at: ${new Date().toISOString()}*`;
+            
+            // Comment on PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            
+            // Find existing status comment
+            const existingComment = comments.find(comment => 
+              comment.body.includes('Q-Labeler Branch Status Check') && 
+              comment.user.type === 'Bot'
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: statusSummary
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: statusSummary
+              });
+            }
+            
+            // Set the job status
+            if (!allPassed) {
+              core.setFailed('Q-labeler branch has failing builds. Cannot merge until issues are resolved.');
+            } else {
+              console.log('✅ Q-labeler branch builds are passing. Safe to merge!');
+            }
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: check-q-labeler-status
+    if: always()
+    
+    steps:
+      - name: PR Status Summary
+        run: |
+          echo "## Pull Request Validation Summary"
+          echo "This PR has been validated against the q-labeler branch status."
+          echo "Check the comments above for detailed status information."
+          
+          if [ "${{ needs.check-q-labeler-status.result }}" == "success" ]; then
+            echo "✅ Q-labeler branch builds are passing - PR can be merged"
+            exit 0
+          else
+            echo "❌ Q-labeler branch has issues - Fix before merging"
+            exit 1
+          fi
