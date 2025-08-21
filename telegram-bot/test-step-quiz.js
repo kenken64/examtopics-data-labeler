@@ -50,24 +50,21 @@ class MockBot {
     checkAnswers() {
       const steps = this.getAllSteps();
       let correctAnswers = 0;
-      
       for (let i = 0; i < steps.length; i++) {
         const stepNumber = i + 1;
         const selectedAnswer = this.selectedAnswers.get(stepNumber);
         const correctAnswer = steps[i].correctAnswer;
-        
         if (selectedAnswer === correctAnswer) {
           correctAnswers++;
         }
       }
-      
       return {
         correct: correctAnswers,
         total: steps.length,
         percentage: (correctAnswers / steps.length) * 100
       };
     }
-  }
+  };
 }
 
 // Test data similar to the frontend screenshot
@@ -80,7 +77,7 @@ const testStepQuestion = {
       question: 'Select the appropriate action for step 1:',
       options: [
         'Define business goal and frame ML problem',
-        'Develop model', 
+        'Develop model',
         'Deploy model',
         'Monitor model'
       ],
@@ -91,7 +88,7 @@ const testStepQuestion = {
       options: [
         'Define business goal and frame ML problem',
         'Develop model',
-        'Deploy model', 
+        'Deploy model',
         'Monitor model'
       ],
       correctAnswer: 'B'
@@ -109,7 +106,7 @@ const testStepQuestion = {
     {
       question: 'Select the appropriate action for step 4:',
       options: [
-        'Define business goal and frame ML problem', 
+        'Define business goal and frame ML problem',
         'Develop model',
         'Deploy model',
         'Monitor model'
@@ -121,58 +118,45 @@ const testStepQuestion = {
 
 function runStepQuizTest() {
   console.log('🧪 Testing Step-Based Quiz Implementation\n');
-  
-  const bot = new MockBot();
   const userId = 12345;
   const session = new MockBot.StepQuizSession(userId, testStepQuestion);
-  
   console.log('✅ Created step quiz session');
   console.log(`📊 Total steps: ${session.getTotalSteps()}`);
   console.log(`📋 Topic: ${session.questionData.topic}`);
   console.log(`📝 Description: ${session.questionData.description}\n`);
-  
   // Test step progression
   console.log('🔄 Testing step progression:');
-  
   // Test that user can access step 1
   console.log(`Step 1 accessible: ${session.canProceedToStep(1)}`); // Should be true
   console.log(`Step 2 accessible: ${session.canProceedToStep(2)}`); // Should be false
-  
   // Answer step 1
   session.selectAnswer(1, 'A');
-  console.log(`Answered step 1 with: A`);
+  console.log('Answered step 1 with: A');
   console.log(`Step 1 completed: ${session.isStepCompleted(1)}`); // Should be true
   console.log(`Step 2 accessible: ${session.canProceedToStep(2)}`); // Should be true now
-  
   // Answer remaining steps
   session.selectAnswer(2, 'B');
   session.selectAnswer(3, 'C');
   session.selectAnswer(4, 'D');
-  
   console.log('\n📊 Final Results:');
   const results = session.checkAnswers();
   console.log(`✅ Correct answers: ${results.correct}/${results.total}`);
   console.log(`📈 Score: ${results.percentage.toFixed(1)}%`);
-  
   // Test progress indicators
   console.log('\n🎯 Progress Overview:');
   for (let i = 1; i <= session.getTotalSteps(); i++) {
     const isCompleted = session.isStepCompleted(i);
     const canAccess = session.canProceedToStep(i);
-    
-    let stepIcon = "⭕"; // Not accessible
+    let stepIcon = '⭕'; // Not accessible
     if (isCompleted) {
-      stepIcon = "✅"; // Completed
+      stepIcon = '✅'; // Completed
     } else if (canAccess) {
-      stepIcon = "⚪"; // Accessible but not started
+      stepIcon = '⚪'; // Accessible but not started
     }
-    
     console.log(`${stepIcon} Step ${i}`);
   }
-  
   console.log('\n🎉 Step quiz test completed successfully!');
   console.log('📱 The implementation is ready for use in the Telegram bot.');
-  
   return results;
 }
 
