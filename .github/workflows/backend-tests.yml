@@ -38,7 +38,25 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y poppler-utils libgl1-mesa-glx libglib2.0-0
+          
+          # Install essential packages for PDF processing and ML libraries
+          sudo apt-get install -y \
+            poppler-utils \
+            libglib2.0-0 \
+            libsm6 \
+            libxext6 \
+            libxrender1 \
+            libgomp1 \
+            ffmpeg \
+            libfontconfig1 \
+            libxrender1 || true
+            
+          # Try to install OpenGL libraries (different names in Ubuntu 24.04)
+          sudo apt-get install -y libgl1 || \
+          sudo apt-get install -y libgl1-mesa-glx || \
+          sudo apt-get install -y mesa-common-dev || true
+          
+          echo "✅ System dependencies installation completed"
 
       - name: Install Python dependencies
         working-directory: backend
@@ -77,6 +95,8 @@ jobs:
         env:
           OPENAI_API_KEY: test-key-for-testing
           FLASK_ENV: testing
+          DISPLAY: ":99"
+          QT_QPA_PLATFORM: offscreen
 
       - name: Run integration tests
         working-directory: backend
@@ -85,6 +105,8 @@ jobs:
         env:
           OPENAI_API_KEY: test-key-for-testing
           FLASK_ENV: testing
+          DISPLAY: ":99"
+          QT_QPA_PLATFORM: offscreen
 
       - name: Run performance tests
         if: matrix.python-version == '3.12'
@@ -94,6 +116,8 @@ jobs:
         env:
           OPENAI_API_KEY: test-key-for-testing
           FLASK_ENV: testing
+          DISPLAY: ":99"
+          QT_QPA_PLATFORM: offscreen
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
