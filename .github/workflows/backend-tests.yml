@@ -62,11 +62,19 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          echo "Installing requirements with updated versions..."
+          echo "Installing Python dependencies..."
           
-          # Install main requirements (now with flexible versions)
-          pip install -r requirements.txt
-          echo "✅ Main requirements installed successfully"
+          # Try core requirements first (more stable)
+          if pip install -r requirements-core.txt; then
+            echo "✅ Core requirements installed successfully"
+            # Add any missing packages that core requirements might not include
+            echo "✅ Using core requirements (minimal dependencies)"
+          else
+            echo "⚠️ Core requirements failed, trying full requirements..."
+            # Fallback to full requirements with conflict resolution
+            pip install -r requirements.txt --use-deprecated=legacy-resolver
+            echo "✅ Full requirements installed with legacy resolver"
+          fi
           
           # Install test requirements
           pip install -r requirements-test.txt

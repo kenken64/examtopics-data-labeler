@@ -1,0 +1,46 @@
+# Core requirements for ExamTopics Data Labeler Backend
+# Focused on essential functionality with compatible versions
+
+# Web Framework
+Flask>=3.0.0,<3.2.0
+flask-cors>=4.0.0,<5.0.0
+Werkzeug>=3.0.0,<3.2.0
+
+# Environment and Configuration
+python-dotenv>=1.0.0,<2.0.0
+
+# PDF Processing (Core functionality)
+pypdf>=4.0.0,<5.0.0
+pdf2image>=1.16.0,<2.0.0
+docling>=2.30.0,<3.0.0
+docling-core>=2.30.0,<3.0.0
+# poppler-utils installed as system package
+
+# Image Processing (Essential)
+Pillow>=10.0.0,<11.0.0
+
+# AI/ML (Essential)
+openai>=1.30.0,<2.0.0
+
+# Basic Scientific Computing (Compatible versions)
+numpy>=1.24.4,<2.0.0
+pandas>=2.0.0,<2.1.0
+
+# HTTP and Requests
+requests>=2.31.0,<3.0.0
+
+# Server
+gunicorn>=21.0.0,<22.0.0
+waitress>=3.0.0,<4.0.0
+
+# Optional: OCR (only if needed)
+# easyocr>=1.7.0,<2.0.0
+
+# Optional: Computer Vision (only if needed)  
+# opencv-python-headless>=4.8.0,<4.9.0
+
+# Optional: Advanced ML (only if needed)
+# torch>=2.0.0,<2.1.0
+# torchvision>=0.15.0,<0.16.0
+# transformers>=4.30.0,<4.35.0
+# scikit-image>=0.21.0,<0.22.0
