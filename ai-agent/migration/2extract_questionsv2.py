@@ -1,0 +1,640 @@
+#!/usr/bin/env python3
+"""
+Extract question data from markdown file and convert to JSON format.
+Extracts: question number, question text, answers, correct answer, and explanations.
+"""
+
+import re
+import json
+import argparse
+from pathlib import Path
+from typing import Dict, List, Optional
+
+
+def extract_questions_from_markdown(file_path: str) -> List[Dict]:
+    """
+    Extract questions from markdown file.
+    
+    Args:
+        file_path: Path to the markdown file
+        
+    Returns:
+        List of dictionaries containing question data
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    questions = []
+    
+    # Split content by question headers - handle multiple formats
+    # Patterns: ## QUESTION 1, ### QUESTION 6, **QUESTION 5**, **QUESTION 94**, QUESTION 3, ### Question #114
+    # Updated pattern to handle inline occurrences and various formatting
+    question_pattern = r'(?:^|\n)(?:#{2,3}\s+|\*\*)?(?:QUESTION\s+(\d+)|Question\s+#(\d+))(?:\*\*)?'
+    question_splits = re.split(question_pattern, content, flags=re.MULTILINE)
+    
+    # Skip the first split (content before first question)
+    for i in range(1, len(question_splits), 3):  # Now we have 2 capture groups, so step by 3
+        # Get the question number from either capture group
+        question_number = question_splits[i] or question_splits[i + 1]
+        question_content = question_splits[i + 2] if i + 2 < len(question_splits) else ""
+        
+        if question_number:  # Only process if we found a question number
+            question_data = parse_question_content(question_number, question_content)
+            if question_data:
+                questions.append(question_data)
+    
+    return questions
+
+
+def extract_explanation_after_votes(content: str) -> str:
+    """
+    Extract explanation from the new format.
+    
+    Args:
+        content: The question content
+        
+    Returns:
+        The explanation text or empty string if not found
+    """
+    try:
+        # Look for the pattern: **Explanation/Reference:**  **Explanation:**  [explanation text]
+        explanation_match = re.search(r'\*\*Explanation/Reference:\*\*\s*\*\*Explanation:\*\*(.*)', content, re.DOTALL)
+        
+        if explanation_match:
+            explanation_text = explanation_match.group(1).strip()
+        else:
+            # Fallback: look for just **Explanation:** pattern
+            explanation_match = re.search(r'\*\*Explanation:\*\*(.*)', content, re.DOTALL)
+            if explanation_match:
+                explanation_text = explanation_match.group(1).strip()
+            else:
+                return ""
+        
+        # Clean up the explanation text
+        # Remove common markdown artifacts
+        explanation_text = re.sub(r'```markdown\n?', '', explanation_text)
+        explanation_text = re.sub(r'```\n?', '', explanation_text)
+        
+        return explanation_text
+        
+    except Exception as e:
+        return ""
+
+
+def extract_correct_answer_from_votes(content: str) -> Optional[str]:
+    """
+    Extract correct answer from the new format.
+    
+    Args:
+        content: The question content
+        
+    Returns:
+        The correct answer option(s) or None if not found
+    """
+    try:
+        # Look for the pattern: **Correct Answer:** C (or AB, etc.) - updated to handle both formats
+        correct_answer_match = re.search(r'\*\*Correct Answer:\*\*\s*([A-Z]+(?:,\s*[A-Z]+)*)', content)
+        if not correct_answer_match:
+            # Try the alternative format: **Correct Answer: C**
+            correct_answer_match = re.search(r'\*\*Correct Answer:\s*([A-Z]+(?:,\s*[A-Z]+)*)\*\*', content)
+        if not correct_answer_match:
+            # Try the plain format: Correct Answer: C (without asterisks)
+            correct_answer_match = re.search(r'Correct Answer:\s*([A-Z]+(?:,\s*[A-Z]+)*)', content)
+        
+        if correct_answer_match:
+            # Clean up the answer (remove spaces and commas, normalize to single string)
+            answer = correct_answer_match.group(1).replace(',', '').replace(' ', '')
+            return answer
+        
+        # For HOTSPOT questions, look for **Correct Answer:** or ### Correct Answer: followed by steps
+        if ("**Correct Answer:**" in content or "### Correct Answer:" in content) and ("### Step" in content or "**Step" in content or "City (name)" in content):
+            # Extract the correct answer section - handle both ** and ### formats
+            correct_answer_section = re.search(r'(?:\*\*Correct Answer:\*\*|### Correct Answer:)(.*?)(?=\*\*Section:|\*\*Explanation|### Section)', content, re.DOTALL)
+            
+            if correct_answer_section:
+                correct_content = correct_answer_section.group(1).strip()
+                
+                # Look for content within ```markdown blocks first
+                markdown_block = re.search(r'```markdown(.*?)```', correct_content, re.DOTALL)
+                if markdown_block:
+                    search_content = markdown_block.group(1)
+                else:
+                    search_content = correct_content
+                
+                # Extract the selected options from each step (marked with **)
+                correct_steps = {}
+                
+                # First try to find Step-based format (Questions 5, 7)
+                step_sections = re.findall(r'### (Step \d+):(.*?)(?=### Step \d+:|---|\Z)', search_content, re.DOTALL)
+                
+                if step_sections:
+                    # Handle step-based questions
+                    for step_name, step_content in step_sections:
+                        # Find text marked with ** within this step
+                        bold_matches = re.findall(r'\*\*([^*]+)\*\*', step_content)
+                        
+                        # Filter out common markdown artifacts and find the actual selected option
+                        for bold_text in bold_matches:
+                            bold_text = bold_text.strip()
+                            # Skip if it's just formatting text like "Step 1:" or "Select..."
+                            if bold_text not in ["Step 1", "Step 2", "Step 3", "Select...", "Select", ""]:
+                                correct_steps[step_name] = bold_text
+                                break  # Take the first valid option found
+                else:
+                    # Try feature-based format (Question 9) - line by line approach
+                    lines = search_content.split('\n')
+                    current_feature = None
+                    
+                    for line in lines:
+                        line = line.strip()
+                        
+                        # Check if this is a feature header line (must have colon inside the **)
+                        feature_match = re.match(r'- \*\*([^*]+):\*\*', line)
+                        if feature_match:
+                            current_feature = feature_match.group(1).strip()
+                            continue
+                        
+                        # Check if this line has a bold answer (no colon)
+                        if current_feature and '**' in line and not line.startswith('- Select'):
+                            bold_match = re.search(r'- \*\*([^*]+)\*\*', line)
+                            if bold_match:
+                                answer = bold_match.group(1).strip()
+                                # Make sure this is not a feature header (no colon)
+                                if ':' not in answer:
+                                    if answer not in ["Select...", "Select", ""] and len(answer) > 3:
+                                        correct_steps[current_feature] = answer
+                
+                # Convert to JSON string if we found steps/features
+                if correct_steps:
+                    return json.dumps(correct_steps)
+                else:
+                    # Fallback to the old method if the new method doesn't work
+                    step_matches = re.findall(r'(?:###|^\*\*)\s*Step \d+:.*?\*\*([^*]+)\*\*', correct_content, re.DOTALL | re.MULTILINE)
+                    correct_steps_list = []
+                    for match in step_matches:
+                        step_answer = match.strip().replace('\n', ' ')
+                        if step_answer and step_answer not in correct_steps_list:
+                            correct_steps_list.append(step_answer)
+                    return ' | '.join(correct_steps_list) if correct_steps_list else None
+        
+        return None
+        
+    except Exception as e:
+        return None
+
+
+def parse_hotspot_question(question_number: str, content: str) -> Optional[Dict]:
+    """
+    Parse HOTSPOT question content (both step-based and simple formats).
+    
+    Args:
+        question_number: The question number
+        content: The content for this question
+        
+    Returns:
+        Dictionary with question data or None if parsing fails
+    """
+    try:
+        # Handle step-based HOTSPOT questions with **Step pattern
+        if "**Step" in content:
+            # Extract question text (everything from start until "**Hot Area:**")
+            question_text_match = re.search(r'^\s*(.*?)(?=\*\*Hot Area:\*\*)', content, re.DOTALL)
+            
+            if not question_text_match:
+                return None
+            
+            question_text = question_text_match.group(1).strip()
+            
+            # Extract the dropdown options (items between "Hot Area:" and "**Correct Answer:**")
+            hot_area_match = re.search(r'\*\*Hot Area:\*\*(.*?)(?=\*\*Correct Answer:\*\*)', content, re.DOTALL)
+            
+            if hot_area_match:
+                hot_area_content = hot_area_match.group(1).strip()
+                
+                # Find all steps and their options
+                step_pattern = r'\*\*Step (\d+):\*\*(.*?)(?=\*\*Step \d+:|\*\*Correct Answer:|\Z)'
+                step_matches = re.findall(step_pattern, hot_area_content, re.DOTALL)
+                
+                # Create step-based structure
+                steps_data = {}
+                unique_options = set()
+                
+                for step_num, step_content in step_matches:
+                    # Extract all options for this step
+                    option_matches = re.findall(r'-\s+([^-\n]+)', step_content)
+                    
+                    # Clean and filter options
+                    step_options = []
+                    for option in option_matches:
+                        option = option.strip()
+                        if option != "Select..." and option:
+                            step_options.append(option)
+                            unique_options.add(option)
+                    
+                    steps_data[f"step{step_num}"] = step_options
+                
+                # Convert to JSON string for the answers field
+                answers = json.dumps(steps_data, indent=2)
+            else:
+                answers = ""
+        
+        # Handle step-based HOTSPOT questions with ### Step pattern (Question 6)
+        elif "### Step" in content:
+            # Extract question text (everything from start until "**Hot Area:**")
+            question_text_match = re.search(r'^\s*(.*?)(?=\*\*Hot Area:\*\*)', content, re.DOTALL)
+            
+            if not question_text_match:
+                return None
+            
+            question_text = question_text_match.group(1).strip()
+            
+            # Extract all available options from the initial list
+            initial_options_match = re.search(r'^((?:^-\s+.*?$\n?)+)', content, re.MULTILINE)
+            available_options = []
+            if initial_options_match:
+                options_text = initial_options_match.group(1)
+                for line in options_text.split('\n'):
+                    if line.strip().startswith('-'):
+                        option = line.strip()[1:].strip()
+                        if option:
+                            available_options.append(option)
+            
+            # Create step-based structure with all available options for each step
+            steps_data = {}
+            for i in range(1, 4):  # Assuming 3 steps for step-based questions
+                steps_data[f"step{i}"] = available_options.copy()
+            
+            # Convert to JSON string for the answers field
+            answers = json.dumps(steps_data, indent=2)
+        
+        # Handle feature-mapping HOTSPOT questions (Question 9)
+        elif "### Hot Area:" in content or "**Hot Area:**" in content:
+            # Extract question text (everything from start until "### Hot Area:" or "**Hot Area:**")
+            question_text_match = re.search(r'^\s*(.*?)(?=###\s*Hot Area:|### Hot Area:|\*\*Hot Area:\*\*)', content, re.DOTALL)
+            
+            if not question_text_match:
+                return None
+            
+            question_text = question_text_match.group(1).strip()
+            
+            # Extract all available options from the initial list
+            initial_options_match = re.search(r'^((?:^-\s+.*?$\n?)+)', content, re.MULTILINE)
+            available_options = []
+            if initial_options_match:
+                options_text = initial_options_match.group(1)
+                for line in options_text.split('\n'):
+                    if line.strip().startswith('-'):
+                        option = line.strip()[1:].strip()
+                        if option:
+                            available_options.append(option)
+            
+            # Create step-based structure with all available options for each step
+            steps_data = {}
+            for i in range(1, 4):  # Assuming 3 steps for step-based questions
+                steps_data[f"step{i}"] = available_options.copy()
+            
+            # Convert to JSON string for the answers field
+            answers = json.dumps(steps_data, indent=2)
+        
+        else:
+            # Handle simple HOTSPOT questions - fallback for other formats
+            # Extract question text (everything from start until option list)
+            question_text_match = re.search(r'^\s*(.*?)(?=\n-\s+)', content, re.DOTALL)
+            
+            if not question_text_match:
+                return None
+            
+            question_text = question_text_match.group(1).strip()
+            
+            # Extract option list (everything from first "- " until "**Hot Area:**" or end)
+            if "**Hot Area:**" in content:
+                options_match = re.search(r'(-\s+.*?)(?=\*\*Hot Area:\*\*)', content, re.DOTALL)
+            else:
+                # If no Hot Area, extract all options from first dash to end
+                options_match = re.search(r'(-\s+.*)', content, re.DOTALL)
+            
+            if options_match:
+                options_text = options_match.group(1).strip()
+                # Extract individual options
+                option_lines = [line.strip() for line in options_text.split('\n') if line.strip().startswith('-')]
+                answers = '\n'.join(option_lines)
+            else:
+                answers = ""
+        
+        # Extract correct answer from the correct answer section
+        correct_answer = extract_correct_answer_from_votes(content)
+        
+        # Extract explanation
+        explanation = extract_explanation_after_votes(content)
+        
+        # Create the result dictionary
+        result = {
+            "question_number": int(question_number),
+            "question_text": question_text,
+            "answers": answers,
+            "correct_answer": correct_answer,
+            "explanation": explanation
+        }
+        
+        # Add type field if answers or correct_answer is a JSON string (step-based questions)
+        if (isinstance(answers, str) and answers.strip().startswith('{')) or \
+           (isinstance(correct_answer, str) and correct_answer and correct_answer.strip().startswith('{')):
+            result["type"] = "steps"
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error parsing hotspot question {question_number}: {e}")
+        return None
+
+
+def parse_steps_quiz_question(question_number: str, content: str) -> Optional[Dict]:
+    """
+    Parse steps quiz question content (with **Answer Area** format).
+    
+    Args:
+        question_number: The question number
+        content: The content for this question
+        
+    Returns:
+        Dictionary with question data or None if parsing fails
+    """
+    try:
+        # Extract question text and answer area content
+        if "**Answer Area**" in content:
+            # Format with **Answer Area** marker
+            question_text_match = re.search(r'^\s*(.*?)(?=\*\*Answer Area\*\*)', content, re.DOTALL)
+            
+            if not question_text_match:
+                return None
+            
+            question_text = question_text_match.group(1).strip()
+            
+            # Extract the answer area content
+            answer_area_match = re.search(r'\*\*Answer Area\*\*(.*?)(?=\*\*Correct Answer|\Z)', content, re.DOTALL)
+            
+            if not answer_area_match:
+                return None
+                
+            answer_area_content = answer_area_match.group(1).strip()
+        else:
+            # Format without **Answer Area** marker (HOTSPOT format)
+            question_text_match = re.search(r'^\s*(.*?)(?=\n-\s*\*\*|\n\d+\.)', content, re.DOTALL)
+            
+            if not question_text_match:
+                return None
+            
+            question_text = question_text_match.group(1).strip()
+            
+            # Extract from first scenario/item to end or correct answer
+            answer_area_match = re.search(r'((?:\n-\s*\*\*|\n\d+\.).*?)(?=\*\*Correct Answer|\Z)', content, re.DOTALL)
+            
+            if not answer_area_match:
+                return None
+                
+            answer_area_content = answer_area_match.group(1).strip()
+        
+        # Parse different types of steps quiz formats
+        steps_data = {}
+        
+        # Format 1: Numbered steps (Question #114)
+        if "**Step" in answer_area_content:
+            step_pattern = r'- \*\*Step (\d+):\*\*(.*?)(?=- \*\*Step \d+:|\Z)'
+            step_matches = re.findall(step_pattern, answer_area_content, re.DOTALL)
+            
+            for step_num, step_content in step_matches:
+                # Extract options for this step
+                option_matches = re.findall(r'  - ([^-\n]+)', step_content)
+                step_options = [opt.strip() for opt in option_matches if opt.strip() != "Select..."]
+                steps_data[f"step{step_num}"] = step_options
+        
+        # Format 2: Scenario-based (Questions #125, #135, #143, #144, #155)
+        else:
+            # Look for lines that start with "- " and contain description followed by options
+            scenario_pattern = r'- ([^-]+?)(?:\n  - Select\.\.\.)(.*?)(?=\n- |\Z)'
+            scenario_matches = re.findall(scenario_pattern, answer_area_content, re.DOTALL)
+            
+            scenario_counter = 1
+            for scenario_desc, options_content in scenario_matches:
+                # Extract options for this scenario
+                option_matches = re.findall(r'    - ([^-\n]+)', options_content)
+                scenario_options = [opt.strip() for opt in option_matches if opt.strip()]
+                
+                if scenario_options:
+                    steps_data[f"scenario{scenario_counter}"] = {
+                        "description": scenario_desc.strip(),
+                        "options": scenario_options
+                    }
+                    scenario_counter += 1
+            
+            # Alternative format: HOTSPOT scenario format (Questions #135, #144, #155)
+            if not steps_data:
+                hotspot_scenario_pattern = r'- \*\*([^*]+)\*\*\s*\n\s*-\s*Select\.\.\.(.*?)(?=\n-\s*\*\*|\Z)'
+                hotspot_scenario_matches = re.findall(hotspot_scenario_pattern, answer_area_content, re.DOTALL)
+                
+                scenario_counter = 1
+                for scenario_desc, options_content in hotspot_scenario_matches:
+                    # Extract options for this scenario
+                    option_matches = re.findall(r'    - ([^-\n]+)', options_content)
+                    scenario_options = [opt.strip() for opt in option_matches if opt.strip()]
+                    
+                    if scenario_options:
+                        steps_data[f"scenario{scenario_counter}"] = {
+                            "description": scenario_desc.strip(),
+                            "options": scenario_options
+                        }
+                        scenario_counter += 1
+            
+            # Alternative format: Bullet-point format (Question #144, #155)
+            if not steps_data:
+                # Pattern: - **description** followed by indented sub-options
+                bullet_pattern = r'- \*\*([^*]+)\*\*\s*\n((?:\s+- [^-\n*]+\n?)+)'
+                bullet_matches = re.findall(bullet_pattern, answer_area_content, re.DOTALL)
+                
+                scenario_counter = 1
+                for scenario_desc, options_block in bullet_matches:
+                    # Extract options from the options block (indented with spaces)
+                    option_lines = options_block.strip().split('\n')
+                    scenario_options = []
+                    
+                    for line in option_lines:
+                        line = line.strip()
+                        if line.startswith('- ') and not line.startswith('- **'):
+                            option = line[2:].strip()  # Remove "- " prefix
+                            if option:
+                                scenario_options.append(option)
+                    
+                    if scenario_options:
+                        steps_data[f"scenario{scenario_counter}"] = {
+                            "description": scenario_desc.strip(),
+                            "options": scenario_options
+                        }
+                        scenario_counter += 1
+            
+            # Alternative format: numbered items (Question #143)
+            if not steps_data:
+                numbered_pattern = r'(\d+)\.\s+"([^"]+)"\s*\n\s*-\s*Select\.\.\.(.*?)(?=\n\d+\.|\Z)'
+                numbered_matches = re.findall(numbered_pattern, answer_area_content, re.DOTALL)
+                
+                for item_num, item_desc, options_content in numbered_matches:
+                    option_matches = re.findall(r'     - ([^-\n]+)', options_content)
+                    item_options = [opt.strip() for opt in option_matches if opt.strip()]
+                    
+                    if item_options:
+                        steps_data[f"item{item_num}"] = {
+                            "description": item_desc.strip(),
+                            "options": item_options
+                        }
+        
+        # Convert to JSON string for the answers field
+        answers = json.dumps(steps_data, indent=2)
+        
+        # Extract correct answer
+        correct_answer = extract_correct_answer_from_votes(content)
+        
+        # Extract explanation
+        explanation = extract_explanation_after_votes(content)
+        
+        # Create the result dictionary
+        result = {
+            "question_number": int(question_number),
+            "question_text": question_text,
+            "answers": answers,
+            "correct_answer": correct_answer,
+            "explanation": explanation,
+            "type": "steps"
+        }
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error parsing steps quiz question {question_number}: {e}")
+        return None
+
+
+def parse_question_content(question_number: str, content: str) -> Optional[Dict]:
+    """
+    Parse individual question content to extract structured data.
+    
+    Args:
+        question_number: The question number
+        content: The content for this question
+        
+    Returns:
+        Dictionary with question data or None if parsing fails
+    """
+    try:
+        # Check if this is a steps quiz question (with **Answer Area**)
+        if "**Answer Area**" in content:
+            return parse_steps_quiz_question(question_number, content)
+        
+        # Check if this is a HOTSPOT question but with steps quiz format (scenario-based choices)
+        if ("**HOTSPOT**" in content or "HOTSPOT" in content) and ("Select..." in content):
+            # If it contains numbered items or scenario descriptions, treat as steps quiz
+            if (re.search(r'\d+\.\s+"[^"]+"\s*\n\s*-\s*Select\.\.\.', content) or 
+                re.search(r'-\s*\*\*[^*]+\*\*\s*\n\s*-\s*Select\.\.\.', content)):
+                return parse_steps_quiz_question(question_number, content)
+            else:
+                return parse_hotspot_question(question_number, content)
+        
+        # Check if this is a HOTSPOT question with bullet-point format (Question #144, #155)
+        if ("**HOTSPOT**" in content or "HOTSPOT" in content) and re.search(r'-\s*\*\*[^*]+\*\*\s*\n\s*-\s*[^*\n]', content):
+            return parse_steps_quiz_question(question_number, content)
+        
+        # Check if this is a regular HOTSPOT question
+        if "**HOTSPOT**" in content or "HOTSPOT" in content:
+            return parse_hotspot_question(question_number, content)
+        
+        # Extract question text (everything from start until first answer option)
+        # First, check if there's a **Case Study** line
+        case_study_match = re.search(r'^\s*\*\*Case Study\*\*\s*\n\n(.*?)(?=\n[A-D]\.)', content, re.DOTALL)
+        
+        if case_study_match:
+            # If there's a case study, the question text includes it
+            question_text = case_study_match.group(1).strip()
+        else:
+            # No case study, extract question text directly
+            question_text_match = re.search(r'^\s*(.*?)(?=\n[A-D]\.)', content, re.DOTALL)
+            if not question_text_match:
+                return None
+            question_text = question_text_match.group(1).strip()
+        
+        # Extract answer options - look for A. B. C. D. pattern
+        answers = ""
+        
+        # Find the section with answer options (before "**Correct Answer:")
+        answer_section_match = re.search(r'([A-D]\.\s+.*?(?=\n[A-D]\.|$)(?:\n[A-D]\.\s+.*?(?=\n[A-D]\.|$))*)', content, re.DOTALL)
+        if answer_section_match:
+            # Extract all answer options
+            answer_matches = re.findall(r'([A-D]\.\s+.*?)(?=\n[A-D]\.|$|\*\*Correct Answer)', content, re.DOTALL)
+            answers = '\n'.join([match.strip() for match in answer_matches])
+        
+        # Extract correct answer
+        correct_answer = extract_correct_answer_from_votes(content)
+        
+        # Extract explanation
+        explanation = extract_explanation_after_votes(content)
+        
+        # Create the result dictionary
+        result = {
+            "question_number": int(question_number),
+            "question_text": question_text,
+            "answers": answers,
+            "correct_answer": correct_answer,
+            "explanation": explanation
+        }
+        
+        # Add type field if answers or correct_answer is a JSON string (step-based questions)
+        if (isinstance(answers, str) and answers.strip().startswith('{')) or \
+           (isinstance(correct_answer, str) and correct_answer and correct_answer.strip().startswith('{')):
+            result["type"] = "steps"
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error parsing question {question_number}: {e}")
+        return None
+
+
+def main():
+    """Main function to handle command line arguments and process the file."""
+    parser = argparse.ArgumentParser(description='Extract questions from markdown file to JSON')
+    parser.add_argument('input_file', help='Input markdown file path')
+    parser.add_argument('-o', '--output', help='Output JSON file path (default: questions.json)', 
+                       default='questions.json')
+    
+    args = parser.parse_args()
+    
+    input_path = Path(args.input_file)
+    if not input_path.exists():
+        print(f"Error: Input file {input_path} does not exist")
+        return 1
+    
+    print(f"Extracting questions from {input_path}...")
+    questions = extract_questions_from_markdown(str(input_path))
+    
+    if not questions:
+        print("No questions were extracted")
+        return 1
+    
+    output_path = Path(args.output)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(questions, f, indent=2, ensure_ascii=False)
+    
+    print(f"Successfully extracted {len(questions)} questions to {output_path}")
+    
+    # Print summary
+    print("\nSummary:")
+    for q in questions[:3]:  # Show first 3 questions as preview
+        explanation_length = len(q['explanation']) if q['explanation'] else 0
+        print(f"Question #{q['question_number']}: {len(q['answers'])} answers, "
+              f"correct: {q['correct_answer']}, explanation: {explanation_length} chars")
+    
+    if len(questions) > 3:
+        print(f"... and {len(questions) - 3} more questions")
+    
+    return 0
+
+
+if __name__ == "__main__":
+    exit(main())

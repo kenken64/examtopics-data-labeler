@@ -27,9 +27,9 @@ def extract_questions_from_markdown(file_path: str) -> List[Dict]:
     questions = []
     
     # Split content by question headers - handle multiple formats
-    # Patterns: ## QUESTION 1, ### QUESTION 6, **QUESTION 5**, **QUESTION 94**, QUESTION 3
+    # Patterns: ## Question #1, ### Question #6, **Question #5**, **QUESTION 5**, **QUESTION 94**, QUESTION 3
     # Updated pattern to handle inline occurrences and various formatting
-    question_pattern = r'(?:^|\n)(?:#{2,3}\s+|\*\*)?QUESTION\s+(\d+)(?:\*\*)?'
+    question_pattern = r'(?:^|\n)(?:#{2,3}\s+|\*\*)?(?:QUESTION|Question)\s+#?(\d+)(?:\*\*)?'
     question_splits = re.split(question_pattern, content, flags=re.MULTILINE)
     
     # Skip the first split (content before first question)
@@ -370,40 +370,58 @@ def parse_question_content(question_number: str, content: str) -> Optional[Dict]
             # If there's a case study, the question text includes it
             question_text = case_study_match.group(1).strip()
         else:
-            # No case study, extract question text directly
-            question_text_match = re.search(r'^\s*(.*?)(?=\n[A-D]\.)', content, re.DOTALL)
+            # No case study, extract question text directly - handle various patterns
+            # Look for text until first A. B. C. or D. option at start of line
+            question_text_match = re.search(r'^\s*(.*?)(?=\n\s*[A-D]\.\s)', content, re.DOTALL)
+            if not question_text_match:
+                # Fallback: try without requiring line start
+                question_text_match = re.search(r'^\s*(.*?)(?=[A-D]\.\s)', content, re.DOTALL)
             if not question_text_match:
                 return None
             question_text = question_text_match.group(1).strip()
         
-        # Extract answer options - look for A. B. C. D. pattern
-        answers = ""
+        # Extract answer options as a list structure
+        answer_options = []
         
-        # Find the section with answer options (before "**Correct Answer:")
-        answer_section_match = re.search(r'([A-D]\.\s+.*?(?=\n[A-D]\.|$)(?:\n[A-D]\.\s+.*?(?=\n[A-D]\.|$))*)', content, re.DOTALL)
-        if answer_section_match:
-            # Extract all answer options
-            answer_matches = re.findall(r'([A-D]\.\s+.*?)(?=\n[A-D]\.|$|\*\*Correct Answer)', content, re.DOTALL)
-            answers = '\n'.join([match.strip() for match in answer_matches])
+        # Find all answer options (A. B. C. D. pattern) and end markers
+        # Look for lines that start with A. B. C. or D. followed by space
+        answer_matches = re.findall(r'\n\s*([A-D]\.\s+.*?)(?=\n\s*[A-D]\.|$|---|\*\*Correct Answer|\n\n|\Z)', content, re.DOTALL)
         
-        # Extract correct answer
+        # If no matches with newline prefix, try without it (for first option)
+        if not answer_matches:
+            answer_matches = re.findall(r'([A-D]\.\s+.*?)(?=\n\s*[A-D]\.|$|---|\*\*Correct Answer|\n\n|\Z)', content, re.DOTALL)
+        
+        for match in answer_matches:
+            option_text = match.strip()
+            # Clean up markdown artifacts
+            option_text = re.sub(r'```\w*\n?', '', option_text)
+            option_text = re.sub(r'\n```$', '', option_text)
+            option_text = option_text.strip()
+            if option_text:
+                answer_options.append(option_text)
+        
+        # Convert to structured format: both as list and as string for compatibility
+        answers_list = answer_options
+        answers_string = '\n'.join(answer_options)
+        
+        # Extract correct answer (may be None if not present)
         correct_answer = extract_correct_answer_from_votes(content)
         
-        # Extract explanation
+        # Extract explanation (may be empty if not present)
         explanation = extract_explanation_after_votes(content)
         
         # Create the result dictionary
         result = {
             "question_number": int(question_number),
             "question_text": question_text,
-            "answers": answers,
+            "answers": answers_list,  # List format for better structure
+            "answers_string": answers_string,  # String format for compatibility
             "correct_answer": correct_answer,
             "explanation": explanation
         }
         
         # Add type field if answers or correct_answer is a JSON string (step-based questions)
-        if (isinstance(answers, str) and answers.strip().startswith('{')) or \
-           (isinstance(correct_answer, str) and correct_answer and correct_answer.strip().startswith('{')):
+        if (isinstance(correct_answer, str) and correct_answer and correct_answer.strip().startswith('{')):
             result["type"] = "steps"
         
         return result
@@ -413,12 +431,40 @@ def parse_question_content(question_number: str, content: str) -> Optional[Dict]
         return None
 
 
+def extract_answers_list_from_markdown(file_path: str) -> List[str]:
+    """
+    Extract just the answer options from markdown file, returning a simple list.
+    
+    Args:
+        file_path: Path to the markdown file
+        
+    Returns:
+        List of answer options (A. text, B. text, etc.)
+    """
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    answers_list = []
+    
+    # Find all answer options using pattern A. B. C. D. format
+    answer_pattern = r'^([A-D]\.\s+.+)$'
+    
+    for line in content.split('\n'):
+        line = line.strip()
+        if re.match(answer_pattern, line):
+            answers_list.append(line)
+    
+    return answers_list
+
+
 def main():
     """Main function to handle command line arguments and process the file."""
     parser = argparse.ArgumentParser(description='Extract questions from markdown file to JSON')
     parser.add_argument('input_file', help='Input markdown file path')
     parser.add_argument('-o', '--output', help='Output JSON file path (default: questions.json)', 
                        default='questions.json')
+    parser.add_argument('--answers-only', action='store_true', 
+                       help='Extract only answer options as a simple list')
     
     args = parser.parse_args()
     
@@ -427,30 +473,56 @@ def main():
         print(f"Error: Input file {input_path} does not exist")
         return 1
     
-    print(f"Extracting questions from {input_path}...")
-    questions = extract_questions_from_markdown(str(input_path))
-    
-    if not questions:
-        print("No questions were extracted")
-        return 1
-    
-    output_path = Path(args.output)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(questions, f, indent=2, ensure_ascii=False)
-    
-    print(f"Successfully extracted {len(questions)} questions to {output_path}")
-    
-    # Print summary
-    print("\nSummary:")
-    for q in questions[:3]:  # Show first 3 questions as preview
-        explanation_length = len(q['explanation']) if q['explanation'] else 0
-        print(f"Question #{q['question_number']}: {len(q['answers'])} answers, "
-              f"correct: {q['correct_answer']}, explanation: {explanation_length} chars")
-    
-    if len(questions) > 3:
-        print(f"... and {len(questions) - 3} more questions")
-    
-    return 0
+    if args.answers_only:
+        print(f"Extracting answers list from {input_path}...")
+        answers_list = extract_answers_list_from_markdown(str(input_path))
+        
+        if not answers_list:
+            print("No answers were extracted")
+            return 1
+        
+        # Change output file extension to .txt for answers list
+        output_path = Path(args.output).with_suffix('.txt')
+        with open(output_path, 'w', encoding='utf-8') as f:
+            for answer in answers_list:
+                f.write(answer + '\n')
+        
+        print(f"Successfully extracted {len(answers_list)} answers to {output_path}")
+        
+        # Print first few answers as preview
+        print("\nFirst 5 answers:")
+        for answer in answers_list[:5]:
+            print(f"  {answer}")
+        
+        if len(answers_list) > 5:
+            print(f"... and {len(answers_list) - 5} more answers")
+        
+        return 0
+    else:
+        print(f"Extracting questions from {input_path}...")
+        questions = extract_questions_from_markdown(str(input_path))
+        
+        if not questions:
+            print("No questions were extracted")
+            return 1
+        
+        output_path = Path(args.output)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(questions, f, indent=2, ensure_ascii=False)
+        
+        print(f"Successfully extracted {len(questions)} questions to {output_path}")
+        
+        # Print summary
+        print("\nSummary:")
+        for q in questions[:3]:  # Show first 3 questions as preview
+            explanation_length = len(q['explanation']) if q['explanation'] else 0
+            print(f"Question #{q['question_number']}: {len(q['answers'])} answers, "
+                  f"correct: {q['correct_answer']}, explanation: {explanation_length} chars")
+        
+        if len(questions) > 3:
+            print(f"... and {len(questions) - 3} more questions")
+        
+        return 0
 
 
 if __name__ == "__main__":
