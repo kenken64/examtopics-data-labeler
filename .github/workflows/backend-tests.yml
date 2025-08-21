@@ -62,18 +62,19 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          echo "Attempting to install requirements..."
-          # Try original requirements first
-          if pip install -r requirements.txt; then
-            echo "✅ Original requirements installed successfully"
-          elif pip install -r requirements-flexible.txt; then
-            echo "✅ Flexible requirements installed successfully"
-          else
-            echo "⚠️ Using legacy resolver..."
-            pip install -r requirements.txt --use-deprecated=legacy-resolver
-          fi
+          echo "Installing requirements with updated versions..."
+          
+          # Install main requirements (now with flexible versions)
+          pip install -r requirements.txt
+          echo "✅ Main requirements installed successfully"
+          
+          # Install test requirements
           pip install -r requirements-test.txt
-          pip install reportlab  # For PDF generation in tests
+          echo "✅ Test requirements installed successfully"
+          
+          # Install additional test dependency
+          pip install reportlab
+          echo "✅ Additional test dependencies installed"
 
       - name: Lint with flake8
         working-directory: backend
