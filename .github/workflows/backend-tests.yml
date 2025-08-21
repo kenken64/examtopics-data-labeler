@@ -1,0 +1,197 @@
+name: "Backend Python Tests"
+
+on:
+  push:
+    branches: [q-labeler, master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+
+      - name: Install Python dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+          pip install reportlab  # For PDF generation in tests
+
+      - name: Lint with flake8
+        working-directory: backend
+        run: |
+          pip install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Type check with mypy
+        working-directory: backend
+        run: |
+          pip install mypy types-requests
+          mypy app.py --ignore-missing-imports || true
+
+      - name: Run unit tests
+        working-directory: backend
+        run: |
+          pytest tests/ -v -m "not slow and not external" --cov=app --cov-report=xml --cov-report=term-missing --junitxml=junit-unit.xml
+        env:
+          OPENAI_API_KEY: test-key-for-testing
+          FLASK_ENV: testing
+
+      - name: Run integration tests
+        working-directory: backend
+        run: |
+          pytest tests/test_integration.py -v --cov=app --cov-append --cov-report=xml --junitxml=junit-integration.xml
+        env:
+          OPENAI_API_KEY: test-key-for-testing
+          FLASK_ENV: testing
+
+      - name: Run performance tests
+        if: matrix.python-version == '3.11'
+        working-directory: backend
+        run: |
+          pytest tests/ -v -m "slow" --junitxml=junit-performance.xml || true
+        env:
+          OPENAI_API_KEY: test-key-for-testing
+          FLASK_ENV: testing
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
+
+      - name: Generate test report
+        if: always()
+        working-directory: backend
+        run: |
+          pip install pytest-html
+          pytest tests/ --html=test-report.html --self-contained-html || true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-python-${{ matrix.python-version }}
+          path: |
+            backend/test-report.html
+            backend/htmlcov/
+            backend/coverage.xml
+            backend/junit-*.xml
+          retention-days: 30
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always() && matrix.python-version == '3.11'
+        with:
+          files: |
+            backend/junit-*.xml
+          check_name: "Backend Test Results (Python ${{ matrix.python-version }})"
+
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request' && always() && matrix.python-version == '3.11'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## 🧪 Backend Test Results\n\n';
+            
+            // Check if coverage file exists
+            if (fs.existsSync('backend/coverage.xml')) {
+              comment += '✅ Tests completed with coverage report\n';
+            }
+            
+            // Check test reports
+            const testFiles = ['junit-unit.xml', 'junit-integration.xml'];
+            let hasTestResults = false;
+            
+            for (const file of testFiles) {
+              if (fs.existsSync(`backend/${file}`)) {
+                hasTestResults = true;
+                break;
+              }
+            }
+            
+            if (hasTestResults) {
+              comment += '📊 Test reports generated\n';
+            }
+            
+            comment += '\n🔍 Check the "Checks" tab above for detailed results and artifacts.';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit semgrep
+
+      - name: Security scan with Safety
+        working-directory: backend
+        run: |
+          safety check -r requirements.txt || true
+
+      - name: Security scan with Bandit
+        working-directory: backend
+        run: |
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            backend/bandit-report.json
+          retention-days: 30

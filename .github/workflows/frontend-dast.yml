@@ -19,9 +19,9 @@ jobs:
 
       - name: ZAP DAST Scan
         run: scripts/zap-script.sh
-        continue-on-error: true
         env:
           ZAP_TARGET_URL: https://frontend-production-1884.up.railway.app/
+          ZAP_SCAN_MODE: moderate
 
       - name: Archive ZAP Report
         uses: actions/upload-artifact@v4
@@ -33,6 +33,8 @@ jobs:
             ./zap_baseline_report.json
             ./zap_baseline_report.md
             ./zap_baseline_report.xml
+            ./zap_scan_summary.md
+            ./scripts/zap-rules.conf
           retention-days: 30
 
       - name: Comment PR with scan results
@@ -41,11 +43,29 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            if (fs.existsSync('./zap_baseline_report.html')) {
-              github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: '🔒 DAST security scan completed. Check the artifacts for detailed results.'
-              });
+            let comment = '## 🔒 DAST Security Scan Results\n\n';
+            
+            // Read scan summary if available
+            if (fs.existsSync('./zap_scan_summary.md')) {
+              const summary = fs.readFileSync('./zap_scan_summary.md', 'utf8');
+              comment += summary;
+            } else if (fs.existsSync('./zap_baseline_report.html')) {
+              comment += '✅ DAST security scan completed successfully.\n\n';
+              comment += '📊 Reports have been generated and are available in the workflow artifacts.\n\n';
+              comment += '**Available Reports:**\n';
+              comment += '- 📄 HTML Report (detailed findings)\n';
+              comment += '- 📊 JSON Report (machine readable)\n';
+              comment += '- 📝 Markdown Report (summary)\n';
+              comment += '- 🔍 XML Report (CI integration)\n\n';
+            } else {
+              comment += '❌ DAST scan encountered an issue. Please check the workflow logs.\n\n';
             }
+            
+            comment += '\n---\n*View detailed results in the [workflow artifacts](../../actions).*';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
