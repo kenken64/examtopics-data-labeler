@@ -231,8 +231,8 @@ def parse_hotspot_question(question_number: str, content: str) -> Optional[Dict]
                     
                     steps_data[f"step{step_num}"] = step_options
                 
-                # Convert to JSON string for the answers field
-                answers = json.dumps(steps_data, indent=2)
+                # Convert steps to string format
+                answers = json.dumps(steps_data)
             else:
                 answers = ""
         
@@ -262,8 +262,8 @@ def parse_hotspot_question(question_number: str, content: str) -> Optional[Dict]
             for i in range(1, 4):  # Assuming 3 steps for step-based questions
                 steps_data[f"step{i}"] = available_options.copy()
             
-            # Convert to JSON string for the answers field
-            answers = json.dumps(steps_data, indent=2)
+            # Convert steps to string format
+            answers = json.dumps(steps_data)
         
         # Handle feature-mapping HOTSPOT questions (Question 9)
         elif "### Hot Area:" in content or "**Hot Area:**" in content:
@@ -291,8 +291,8 @@ def parse_hotspot_question(question_number: str, content: str) -> Optional[Dict]
             for i in range(1, 4):  # Assuming 3 steps for step-based questions
                 steps_data[f"step{i}"] = available_options.copy()
             
-            # Convert to JSON string for the answers field
-            answers = json.dumps(steps_data, indent=2)
+            # Convert steps to string format
+            answers = json.dumps(steps_data)
         
         else:
             # Handle simple HOTSPOT questions - fallback for other formats
@@ -313,7 +313,7 @@ def parse_hotspot_question(question_number: str, content: str) -> Optional[Dict]
             
             if options_match:
                 options_text = options_match.group(1).strip()
-                # Extract individual options
+                # Extract individual options as string
                 option_lines = [line.strip() for line in options_text.split('\n') if line.strip().startswith('-')]
                 answers = '\n'.join(option_lines)
             else:
@@ -414,8 +414,7 @@ def parse_question_content(question_number: str, content: str) -> Optional[Dict]
         result = {
             "question_number": int(question_number),
             "question_text": question_text,
-            "answers": answers_list,  # List format for better structure
-            "answers_string": answers_string,  # String format for compatibility
+            "answers": answers_string,  # String format as requested
             "correct_answer": correct_answer,
             "explanation": explanation
         }
