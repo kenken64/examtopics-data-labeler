@@ -1,1 +1,0 @@
-{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"code":{"$numberInt":"1"}},"name":"code_1","background":true,"unique":true}],"uuid":"88970c05ec6a42eaa9f948aac672b7d5","collectionName":"certificates","type":"collection"}

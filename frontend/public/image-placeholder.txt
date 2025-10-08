@@ -1,7 +1,0 @@
-/* This is a placeholder file for the image: 78a0608e-0a39-41c6-b2f2-32cf10456eb2.jpg
-   
-   To complete the setup, please copy the provided image file to:
-   d:\Projects\examtopics-data-labeler\frontend\public\78a0608e-0a39-41c6-b2f2-32cf10456eb2.jpg
-   
-   The image should be the colorful fox/capybara in a digital landscape that was shown in the attachments.
-*/
